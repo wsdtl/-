@@ -103,7 +103,7 @@ class NpcFeature:
     def _profile(self, npc_id: str) -> NpcProfile:
         definition: dict[str, Any] = self.content.npc_definitions[npc_id]
         identity = definition["身份"]
-        minimum_level, maximum_level = definition["等级"]
+        minimum_level, maximum_level = _level_bounds(definition["等级"])
         return NpcProfile(
             npc_id=npc_id,
             title=str(identity["称号"]),
@@ -139,7 +139,15 @@ def _roll_inventory(
     return _roll_range(rng, definition["灵石"]), dict(items)
 
 
-def _roll_range(rng: random.Random, value: list[int]) -> int:
+def _level_bounds(value: int | list[int]) -> tuple[int, int]:
+    if isinstance(value, int):
+        return value, value
+    return int(value[0]), int(value[1])
+
+
+def _roll_range(rng: random.Random, value: int | list[int]) -> int:
+    if isinstance(value, int):
+        return value
     return rng.randint(int(value[0]), int(value[1]))
 
 

@@ -8,8 +8,8 @@
         "position_label": "1 / 1",
         "title": "晓楠 对阵 石门守修",
         "outcome": "晓楠取胜",
-        "started_at": "2026-07-28T20:13:09+08:00",
-        "finished_at": "2026-07-28T20:13:09+08:00",
+        "started_at": "2026-07-28T21:20:36+08:00",
+        "finished_at": "2026-07-28T21:20:36+08:00",
         "duration_label": "19 次行动",
         "system_visual": {
           "key": "system",
@@ -22,8 +22,8 @@
             "key": "player",
             "label": "晓楠",
             "team_id": "team.player",
-            "team_label": "青岚山散修",
-            "unit_kind": "character",
+            "team_label": "青岚山散修 · 修士 · Lv1",
+            "unit_kind": "修士",
             "visual": {
               "key": "player",
               "number": 1,
@@ -32,13 +32,13 @@
             }
           },
           {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "label": "石门守修",
             "team_id": "team.opponent",
-            "team_label": "石门遗址守修",
-            "unit_kind": "character",
+            "team_label": "石门遗址守修 · 修士 · Lv5",
+            "unit_kind": "修士",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -50,8 +50,8 @@
             "key": "player",
             "label": "晓楠",
             "team_id": "team.player",
-            "team_label": "青岚山散修",
-            "unit_kind": "character",
+            "team_label": "青岚山散修 · 修士 · Lv1",
+            "unit_kind": "修士",
             "visual": {
               "key": "player",
               "number": 1,
@@ -208,13 +208,13 @@
             ]
           },
           {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "label": "石门守修",
             "team_id": "team.opponent",
-            "team_label": "石门遗址守修",
-            "unit_kind": "character",
+            "team_label": "石门遗址守修 · 修士 · Lv5",
+            "unit_kind": "修士",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -351,8 +351,8 @@
             "key": "player",
             "label": "晓楠",
             "team_id": "team.player",
-            "team_label": "青岚山散修",
-            "unit_kind": "character",
+            "team_label": "青岚山散修 · 修士 · Lv1",
+            "unit_kind": "修士",
             "visual": {
               "key": "player",
               "number": 1,
@@ -509,13 +509,13 @@
             ]
           },
           {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "label": "石门守修",
             "team_id": "team.opponent",
-            "team_label": "石门遗址守修",
-            "unit_kind": "character",
+            "team_label": "石门遗址守修 · 修士 · Lv5",
+            "unit_kind": "修士",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -678,7 +678,7 @@
                   "label": "天机记录"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -720,7 +720,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -741,7 +741,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -762,7 +762,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -804,7 +804,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -823,7 +823,7 @@
             "round_label": "第 2 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -845,7 +845,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -866,7 +866,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -904,7 +904,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -912,7 +912,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -950,7 +950,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -971,7 +971,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -992,7 +992,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1032,7 +1032,7 @@
             "round_label": "第 4 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -1055,7 +1055,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1076,7 +1076,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1114,7 +1114,7 @@
                 "category": "damage",
                 "text": "基础攻击暴击，造成14点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -1122,7 +1122,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1135,15 +1135,15 @@
                 "category": "status",
                 "text": "离火灼身消散",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1181,7 +1181,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1202,7 +1202,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1223,7 +1223,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1244,7 +1244,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1265,7 +1265,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1305,7 +1305,7 @@
             "round_label": "第 6 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -1321,7 +1321,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -1329,7 +1329,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1367,7 +1367,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1388,7 +1388,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1409,7 +1409,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1451,7 +1451,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1472,7 +1472,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1512,7 +1512,7 @@
             "round_label": "第 8 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -1534,7 +1534,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1555,7 +1555,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1593,7 +1593,7 @@
                 "category": "damage",
                 "text": "基础攻击被闪避",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -1601,7 +1601,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1639,7 +1639,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1660,7 +1660,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1681,7 +1681,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1721,7 +1721,7 @@
             "round_label": "第 10 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -1744,7 +1744,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1765,7 +1765,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1803,7 +1803,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -1811,7 +1811,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1824,15 +1824,15 @@
                 "category": "status",
                 "text": "离火灼身消散",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -1870,7 +1870,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1891,7 +1891,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1912,7 +1912,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1933,7 +1933,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1954,7 +1954,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -1994,7 +1994,7 @@
             "round_label": "第 12 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -2010,7 +2010,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -2018,7 +2018,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2056,7 +2056,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2077,7 +2077,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2098,7 +2098,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2140,7 +2140,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2161,7 +2161,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2201,7 +2201,7 @@
             "round_label": "第 14 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -2223,7 +2223,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2244,7 +2244,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2282,7 +2282,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -2290,7 +2290,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2327,7 +2327,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2344,15 +2344,15 @@
                 "category": "status",
                 "text": "一息还真",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2369,7 +2369,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2386,15 +2386,15 @@
                 "category": "resource",
                 "text": "一息还真恢复25.2点血气",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2409,7 +2409,7 @@
             "round_label": "第 16 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -2432,7 +2432,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2453,7 +2453,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2491,7 +2491,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -2499,7 +2499,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2512,15 +2512,15 @@
                 "category": "status",
                 "text": "离火灼身消散",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2555,7 +2555,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2574,7 +2574,7 @@
             "round_label": "第 18 次行动",
             "tone": "damage",
             "visual": {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "number": 2,
               "color": "#008f75",
               "foreground": "#ffffff"
@@ -2590,7 +2590,7 @@
                 "category": "damage",
                 "text": "基础攻击造成10点伤害",
                 "source": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "target": {
@@ -2598,7 +2598,7 @@
                   "label": "晓楠"
                 },
                 "visual": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "number": 2,
                   "color": "#008f75",
                   "foreground": "#ffffff"
@@ -2634,7 +2634,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2655,7 +2655,7 @@
                   "label": "晓楠"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2676,7 +2676,7 @@
                   "label": "天机记录"
                 },
                 "target": {
-                  "key": "opponent:20260728",
+                  "key": "enemy:石门守修:20260728",
                   "label": "石门守修"
                 },
                 "visual": {
@@ -2770,7 +2770,7 @@
                 "label": "天机记录"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -2778,7 +2778,7 @@
                 "label": "开战"
               },
               "phase": "1",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "左方",
@@ -2863,7 +2863,7 @@
                 "label": "行动"
               },
               "phase": "2",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -2891,7 +2891,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -2899,7 +2899,7 @@
                 "label": "招式"
               },
               "phase": "3",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -2933,7 +2933,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -2941,7 +2941,7 @@
                 "label": "真火击"
               },
               "phase": "4",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -3089,7 +3089,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3097,7 +3097,7 @@
                 "label": "火里栽莲"
               },
               "phase": "5",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -3139,7 +3139,7 @@
                 "label": "火里栽莲"
               },
               "phase": "6",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -3173,7 +3173,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3181,7 +3181,7 @@
                 "label": "离火灼身"
               },
               "phase": "7",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "状态",
@@ -3221,7 +3221,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3229,7 +3229,7 @@
                 "label": "招式"
               },
               "phase": "8",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -3265,7 +3265,7 @@
                 "label": "行动"
               },
               "phase": "9",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -3296,7 +3296,7 @@
           "sequence_label": "行动 2 · 序列 2",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -3331,11 +3331,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3343,7 +3343,7 @@
                 "label": "行动"
               },
               "phase": "10",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -3354,7 +3354,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -3371,7 +3371,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3379,7 +3379,7 @@
                 "label": "离火灼身"
               },
               "phase": "11",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -3527,7 +3527,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3535,7 +3535,7 @@
                 "label": "火里栽莲"
               },
               "phase": "12",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -3577,7 +3577,7 @@
                 "label": "火里栽莲"
               },
               "phase": "13",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -3607,7 +3607,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -3619,7 +3619,7 @@
                 "label": "伤害"
               },
               "phase": "14",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -3750,7 +3750,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -3763,7 +3763,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -3775,7 +3775,7 @@
                 "label": "普攻"
               },
               "phase": "15",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -3786,7 +3786,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -3799,11 +3799,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3811,7 +3811,7 @@
                 "label": "行动"
               },
               "phase": "16",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -3822,7 +3822,7 @@
               ],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -3890,7 +3890,7 @@
                 "label": "行动"
               },
               "phase": "17",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -3918,7 +3918,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3926,7 +3926,7 @@
                 "label": "招式"
               },
               "phase": "18",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -3960,7 +3960,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -3968,7 +3968,7 @@
                 "label": "星枢术"
               },
               "phase": "19",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -4116,7 +4116,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4124,7 +4124,7 @@
                 "label": "招式"
               },
               "phase": "20",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -4152,7 +4152,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4160,7 +4160,7 @@
                 "label": "星枢回转"
               },
               "phase": "21",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -4202,7 +4202,7 @@
                 "label": "星枢回转"
               },
               "phase": "22",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -4244,7 +4244,7 @@
                 "label": "行动"
               },
               "phase": "23",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -4275,7 +4275,7 @@
           "sequence_label": "行动 4 · 序列 4",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -4311,11 +4311,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4323,7 +4323,7 @@
                 "label": "行动"
               },
               "phase": "24",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -4334,7 +4334,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -4351,7 +4351,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4359,7 +4359,7 @@
                 "label": "离火灼身"
               },
               "phase": "25",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -4507,7 +4507,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4515,7 +4515,7 @@
                 "label": "火里栽莲"
               },
               "phase": "26",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -4557,7 +4557,7 @@
                 "label": "火里栽莲"
               },
               "phase": "27",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -4587,7 +4587,7 @@
               "category": "damage",
               "text": "基础攻击暴击，造成14点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -4599,7 +4599,7 @@
                 "label": "伤害"
               },
               "phase": "28",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -4730,7 +4730,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -4743,7 +4743,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -4755,7 +4755,7 @@
                 "label": "普攻"
               },
               "phase": "29",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -4766,7 +4766,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -4779,11 +4779,11 @@
               "category": "status",
               "text": "离火灼身消散",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4791,11 +4791,11 @@
                 "label": "状态"
               },
               "phase": "30",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -4808,11 +4808,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4820,7 +4820,7 @@
                 "label": "行动"
               },
               "phase": "31",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -4831,7 +4831,7 @@
               ],
               "event_index": 7,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -4899,7 +4899,7 @@
                 "label": "行动"
               },
               "phase": "32",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -4927,7 +4927,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4935,7 +4935,7 @@
                 "label": "招式"
               },
               "phase": "33",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -4969,7 +4969,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -4977,7 +4977,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "34",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -5125,7 +5125,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5133,7 +5133,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "35",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -5281,7 +5281,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5289,7 +5289,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "36",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -5437,7 +5437,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5445,7 +5445,7 @@
                 "label": "招式"
               },
               "phase": "37",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -5473,7 +5473,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5481,7 +5481,7 @@
                 "label": "星枢回转"
               },
               "phase": "38",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -5523,7 +5523,7 @@
                 "label": "星枢回转"
               },
               "phase": "39",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -5565,7 +5565,7 @@
                 "label": "行动"
               },
               "phase": "40",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -5596,7 +5596,7 @@
           "sequence_label": "行动 6 · 序列 6",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -5630,11 +5630,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5642,7 +5642,7 @@
                 "label": "行动"
               },
               "phase": "41",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -5653,7 +5653,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -5666,7 +5666,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -5678,7 +5678,7 @@
                 "label": "伤害"
               },
               "phase": "42",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -5809,7 +5809,7 @@
               ],
               "event_index": 1,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -5822,7 +5822,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -5834,7 +5834,7 @@
                 "label": "普攻"
               },
               "phase": "43",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -5845,7 +5845,7 @@
               ],
               "event_index": 2,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -5858,11 +5858,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5870,7 +5870,7 @@
                 "label": "行动"
               },
               "phase": "44",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -5881,7 +5881,7 @@
               ],
               "event_index": 3,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -5949,7 +5949,7 @@
                 "label": "行动"
               },
               "phase": "45",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -5977,7 +5977,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -5985,7 +5985,7 @@
                 "label": "招式"
               },
               "phase": "46",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -6019,7 +6019,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6027,7 +6027,7 @@
                 "label": "真火击"
               },
               "phase": "47",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -6175,7 +6175,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6183,7 +6183,7 @@
                 "label": "火里栽莲"
               },
               "phase": "48",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -6225,7 +6225,7 @@
                 "label": "火里栽莲"
               },
               "phase": "49",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -6259,7 +6259,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6267,7 +6267,7 @@
                 "label": "离火灼身"
               },
               "phase": "50",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "状态",
@@ -6307,7 +6307,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6315,7 +6315,7 @@
                 "label": "招式"
               },
               "phase": "51",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -6343,7 +6343,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6351,7 +6351,7 @@
                 "label": "星枢回转"
               },
               "phase": "52",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -6393,7 +6393,7 @@
                 "label": "星枢回转"
               },
               "phase": "53",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -6435,7 +6435,7 @@
                 "label": "行动"
               },
               "phase": "54",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -6466,7 +6466,7 @@
           "sequence_label": "行动 8 · 序列 8",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -6501,11 +6501,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6513,7 +6513,7 @@
                 "label": "行动"
               },
               "phase": "55",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -6524,7 +6524,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -6541,7 +6541,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6549,7 +6549,7 @@
                 "label": "离火灼身"
               },
               "phase": "56",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -6697,7 +6697,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6705,7 +6705,7 @@
                 "label": "火里栽莲"
               },
               "phase": "57",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -6747,7 +6747,7 @@
                 "label": "火里栽莲"
               },
               "phase": "58",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -6777,7 +6777,7 @@
               "category": "damage",
               "text": "基础攻击被闪避",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -6789,7 +6789,7 @@
                 "label": "闪避"
               },
               "phase": "59",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -6920,7 +6920,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -6933,7 +6933,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -6945,7 +6945,7 @@
                 "label": "普攻"
               },
               "phase": "60",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -6956,7 +6956,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -6969,11 +6969,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -6981,7 +6981,7 @@
                 "label": "行动"
               },
               "phase": "61",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -6992,7 +6992,7 @@
               ],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -7060,7 +7060,7 @@
                 "label": "行动"
               },
               "phase": "62",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -7088,7 +7088,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7096,7 +7096,7 @@
                 "label": "招式"
               },
               "phase": "63",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -7130,7 +7130,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7138,7 +7138,7 @@
                 "label": "星枢术"
               },
               "phase": "64",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -7286,7 +7286,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7294,7 +7294,7 @@
                 "label": "招式"
               },
               "phase": "65",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -7322,7 +7322,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7330,7 +7330,7 @@
                 "label": "星枢回转"
               },
               "phase": "66",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -7372,7 +7372,7 @@
                 "label": "星枢回转"
               },
               "phase": "67",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -7414,7 +7414,7 @@
                 "label": "行动"
               },
               "phase": "68",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -7445,7 +7445,7 @@
           "sequence_label": "行动 10 · 序列 10",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -7481,11 +7481,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7493,7 +7493,7 @@
                 "label": "行动"
               },
               "phase": "69",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -7504,7 +7504,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -7521,7 +7521,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7529,7 +7529,7 @@
                 "label": "离火灼身"
               },
               "phase": "70",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -7677,7 +7677,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7685,7 +7685,7 @@
                 "label": "火里栽莲"
               },
               "phase": "71",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -7727,7 +7727,7 @@
                 "label": "火里栽莲"
               },
               "phase": "72",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -7757,7 +7757,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -7769,7 +7769,7 @@
                 "label": "伤害"
               },
               "phase": "73",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -7900,7 +7900,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -7913,7 +7913,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -7925,7 +7925,7 @@
                 "label": "普攻"
               },
               "phase": "74",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -7936,7 +7936,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -7949,11 +7949,11 @@
               "category": "status",
               "text": "离火灼身消散",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7961,11 +7961,11 @@
                 "label": "状态"
               },
               "phase": "75",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -7978,11 +7978,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -7990,7 +7990,7 @@
                 "label": "行动"
               },
               "phase": "76",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -8001,7 +8001,7 @@
               ],
               "event_index": 7,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -8069,7 +8069,7 @@
                 "label": "行动"
               },
               "phase": "77",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -8097,7 +8097,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8105,7 +8105,7 @@
                 "label": "招式"
               },
               "phase": "78",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -8139,7 +8139,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8147,7 +8147,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "79",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -8295,7 +8295,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8303,7 +8303,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "80",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -8451,7 +8451,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8459,7 +8459,7 @@
                 "label": "踏罡三叩"
               },
               "phase": "81",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -8607,7 +8607,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8615,7 +8615,7 @@
                 "label": "招式"
               },
               "phase": "82",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -8643,7 +8643,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8651,7 +8651,7 @@
                 "label": "星枢回转"
               },
               "phase": "83",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -8693,7 +8693,7 @@
                 "label": "星枢回转"
               },
               "phase": "84",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -8735,7 +8735,7 @@
                 "label": "行动"
               },
               "phase": "85",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -8766,7 +8766,7 @@
           "sequence_label": "行动 12 · 序列 12",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -8800,11 +8800,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -8812,7 +8812,7 @@
                 "label": "行动"
               },
               "phase": "86",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -8823,7 +8823,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -8836,7 +8836,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -8848,7 +8848,7 @@
                 "label": "伤害"
               },
               "phase": "87",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -8979,7 +8979,7 @@
               ],
               "event_index": 1,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -8992,7 +8992,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -9004,7 +9004,7 @@
                 "label": "普攻"
               },
               "phase": "88",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -9015,7 +9015,7 @@
               ],
               "event_index": 2,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -9028,11 +9028,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9040,7 +9040,7 @@
                 "label": "行动"
               },
               "phase": "89",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -9051,7 +9051,7 @@
               ],
               "event_index": 3,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -9119,7 +9119,7 @@
                 "label": "行动"
               },
               "phase": "90",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -9147,7 +9147,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9155,7 +9155,7 @@
                 "label": "招式"
               },
               "phase": "91",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -9189,7 +9189,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9197,7 +9197,7 @@
                 "label": "真火击"
               },
               "phase": "92",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -9345,7 +9345,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9353,7 +9353,7 @@
                 "label": "火里栽莲"
               },
               "phase": "93",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -9395,7 +9395,7 @@
                 "label": "火里栽莲"
               },
               "phase": "94",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -9429,7 +9429,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9437,7 +9437,7 @@
                 "label": "离火灼身"
               },
               "phase": "95",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "状态",
@@ -9477,7 +9477,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9485,7 +9485,7 @@
                 "label": "招式"
               },
               "phase": "96",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "技能",
@@ -9513,7 +9513,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9521,7 +9521,7 @@
                 "label": "星枢回转"
               },
               "phase": "97",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -9563,7 +9563,7 @@
                 "label": "星枢回转"
               },
               "phase": "98",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原冷却",
@@ -9605,7 +9605,7 @@
                 "label": "行动"
               },
               "phase": "99",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -9636,7 +9636,7 @@
           "sequence_label": "行动 14 · 序列 14",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -9671,11 +9671,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9683,7 +9683,7 @@
                 "label": "行动"
               },
               "phase": "100",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -9694,7 +9694,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -9711,7 +9711,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9719,7 +9719,7 @@
                 "label": "离火灼身"
               },
               "phase": "101",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -9867,7 +9867,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -9875,7 +9875,7 @@
                 "label": "火里栽莲"
               },
               "phase": "102",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -9917,7 +9917,7 @@
                 "label": "火里栽莲"
               },
               "phase": "103",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -9947,7 +9947,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -9959,7 +9959,7 @@
                 "label": "伤害"
               },
               "phase": "104",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -10090,7 +10090,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10103,7 +10103,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -10115,7 +10115,7 @@
                 "label": "普攻"
               },
               "phase": "105",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -10126,7 +10126,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10139,11 +10139,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10151,7 +10151,7 @@
                 "label": "行动"
               },
               "phase": "106",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -10162,7 +10162,7 @@
               ],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10230,7 +10230,7 @@
                 "label": "行动"
               },
               "phase": "107",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -10258,7 +10258,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10266,7 +10266,7 @@
                 "label": "致命"
               },
               "phase": "108",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -10410,11 +10410,11 @@
               "category": "status",
               "text": "一息还真",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10422,7 +10422,7 @@
                 "label": "一息还真"
               },
               "phase": "109",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -10439,7 +10439,7 @@
               ],
               "event_index": 2,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10456,7 +10456,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10464,7 +10464,7 @@
                 "label": "伤害"
               },
               "phase": "110",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -10608,11 +10608,11 @@
               "category": "resource",
               "text": "一息还真恢复25.2点血气",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10620,7 +10620,7 @@
                 "label": "一息还真"
               },
               "phase": "111",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -10637,7 +10637,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10654,7 +10654,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10662,7 +10662,7 @@
                 "label": "普攻"
               },
               "phase": "112",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -10698,7 +10698,7 @@
                 "label": "行动"
               },
               "phase": "113",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -10729,7 +10729,7 @@
           "sequence_label": "行动 16 · 序列 16",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -10765,11 +10765,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10777,7 +10777,7 @@
                 "label": "行动"
               },
               "phase": "114",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -10788,7 +10788,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -10805,7 +10805,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10813,7 +10813,7 @@
                 "label": "离火灼身"
               },
               "phase": "115",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -10961,7 +10961,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -10969,7 +10969,7 @@
                 "label": "火里栽莲"
               },
               "phase": "116",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "机制",
@@ -11011,7 +11011,7 @@
                 "label": "火里栽莲"
               },
               "phase": "117",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "资源",
@@ -11041,7 +11041,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -11053,7 +11053,7 @@
                 "label": "伤害"
               },
               "phase": "118",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -11184,7 +11184,7 @@
               ],
               "event_index": 4,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11197,7 +11197,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -11209,7 +11209,7 @@
                 "label": "普攻"
               },
               "phase": "119",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -11220,7 +11220,7 @@
               ],
               "event_index": 5,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11233,11 +11233,11 @@
               "category": "status",
               "text": "离火灼身消散",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11245,11 +11245,11 @@
                 "label": "状态"
               },
               "phase": "120",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [],
               "event_index": 6,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11262,11 +11262,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11274,7 +11274,7 @@
                 "label": "行动"
               },
               "phase": "121",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11285,7 +11285,7 @@
               ],
               "event_index": 7,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11351,7 +11351,7 @@
                 "label": "行动"
               },
               "phase": "122",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11379,7 +11379,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11387,7 +11387,7 @@
                 "label": "伤害"
               },
               "phase": "123",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -11535,7 +11535,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11543,7 +11543,7 @@
                 "label": "普攻"
               },
               "phase": "124",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -11579,7 +11579,7 @@
                 "label": "行动"
               },
               "phase": "125",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11610,7 +11610,7 @@
           "sequence_label": "行动 18 · 序列 18",
           "tone": "damage",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -11644,11 +11644,11 @@
               "category": "system",
               "text": "石门守修开始行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11656,7 +11656,7 @@
                 "label": "行动"
               },
               "phase": "126",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11667,7 +11667,7 @@
               ],
               "event_index": 0,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11680,7 +11680,7 @@
               "category": "damage",
               "text": "基础攻击造成10点伤害",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -11692,7 +11692,7 @@
                 "label": "伤害"
               },
               "phase": "127",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -11823,7 +11823,7 @@
               ],
               "event_index": 1,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11836,7 +11836,7 @@
               "category": "system",
               "text": "石门守修完成普通攻击",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
@@ -11848,7 +11848,7 @@
                 "label": "普攻"
               },
               "phase": "128",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -11859,7 +11859,7 @@
               ],
               "event_index": 2,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11872,11 +11872,11 @@
               "category": "system",
               "text": "石门守修结束行动",
               "source": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11884,7 +11884,7 @@
                 "label": "行动"
               },
               "phase": "129",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11895,7 +11895,7 @@
               ],
               "event_index": 3,
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -11961,7 +11961,7 @@
                 "label": "行动"
               },
               "phase": "130",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -11989,7 +11989,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -11997,7 +11997,7 @@
                 "label": "致命"
               },
               "phase": "131",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -12145,7 +12145,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -12153,7 +12153,7 @@
                 "label": "伤害"
               },
               "phase": "132",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "原始伤害",
@@ -12301,7 +12301,7 @@
                 "label": "晓楠"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -12309,7 +12309,7 @@
                 "label": "普攻"
               },
               "phase": "133",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "实际伤害",
@@ -12345,7 +12345,7 @@
                 "label": "行动"
               },
               "phase": "134",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "行动",
@@ -12373,7 +12373,7 @@
                 "label": "天机记录"
               },
               "target": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "label": "石门守修"
               },
               "subject": {
@@ -12381,7 +12381,7 @@
                 "label": "结果"
               },
               "phase": "135",
-              "logical_time": "2026-07-28T20:13:09+08:00",
+              "logical_time": "2026-07-28T21:20:36+08:00",
               "facts": [
                 {
                   "key": "结果",
@@ -12431,8 +12431,8 @@
           "key": "player",
           "label": "晓楠",
           "team_id": "team.player",
-          "team_label": "青岚山散修",
-          "unit_kind": "character",
+          "team_label": "青岚山散修 · 修士 · Lv1",
+          "unit_kind": "修士",
           "visual": {
             "key": "player",
             "number": 1,
@@ -12589,13 +12589,13 @@
           ]
         },
         {
-          "key": "opponent:20260728",
+          "key": "enemy:石门守修:20260728",
           "label": "石门守修",
           "team_id": "team.opponent",
-          "team_label": "石门遗址守修",
-          "unit_kind": "character",
+          "team_label": "石门遗址守修 · 修士 · Lv5",
+          "unit_kind": "修士",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -12738,8 +12738,8 @@
           "key": "player",
           "label": "晓楠",
           "team_id": "team.player",
-          "team_label": "青岚山散修",
-          "unit_kind": "character",
+          "team_label": "青岚山散修 · 修士 · Lv1",
+          "unit_kind": "修士",
           "visual": {
             "key": "player",
             "number": 1,
@@ -12896,13 +12896,13 @@
           ]
         },
         {
-          "key": "opponent:20260728",
+          "key": "enemy:石门守修:20260728",
           "label": "石门守修",
           "team_id": "team.opponent",
-          "team_label": "石门遗址守修",
-          "unit_kind": "character",
+          "team_label": "石门遗址守修 · 修士 · Lv5",
+          "unit_kind": "修士",
           "visual": {
-            "key": "opponent:20260728",
+            "key": "enemy:石门守修:20260728",
             "number": 2,
             "color": "#008f75",
             "foreground": "#ffffff"
@@ -13055,8 +13055,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -13213,13 +13213,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -13361,8 +13361,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -13519,13 +13519,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -13691,8 +13691,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -13849,13 +13849,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -13997,8 +13997,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -14155,13 +14155,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -14335,8 +14335,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -14493,13 +14493,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -14649,8 +14649,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -14807,13 +14807,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -14983,8 +14983,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -15141,13 +15141,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -15297,8 +15297,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -15455,13 +15455,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -15639,8 +15639,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -15797,13 +15797,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -15953,8 +15953,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -16111,13 +16111,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -16279,8 +16279,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -16437,13 +16437,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -16585,8 +16585,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -16743,13 +16743,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -16907,8 +16907,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -17065,13 +17065,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -17213,8 +17213,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -17371,13 +17371,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -17543,8 +17543,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -17701,13 +17701,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -17849,8 +17849,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -18007,13 +18007,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -18183,8 +18183,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -18341,13 +18341,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -18497,8 +18497,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -18655,13 +18655,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -18831,8 +18831,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -18989,13 +18989,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -19145,8 +19145,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -19303,13 +19303,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -19487,8 +19487,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -19645,13 +19645,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -19801,8 +19801,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -19959,13 +19959,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -20127,8 +20127,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -20285,13 +20285,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -20433,8 +20433,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -20591,13 +20591,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -20755,8 +20755,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -20913,13 +20913,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -21061,8 +21061,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -21219,13 +21219,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -21391,8 +21391,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -21549,13 +21549,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -21697,8 +21697,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -21855,13 +21855,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -22035,8 +22035,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -22193,13 +22193,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -22349,8 +22349,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -22507,13 +22507,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -22679,8 +22679,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -22837,13 +22837,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -22993,8 +22993,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -23151,13 +23151,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -23335,8 +23335,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -23493,13 +23493,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -23649,8 +23649,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -23807,13 +23807,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -23971,8 +23971,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -24129,13 +24129,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -24277,8 +24277,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -24435,13 +24435,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -24599,8 +24599,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -24757,13 +24757,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -24905,8 +24905,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -25063,13 +25063,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -25227,8 +25227,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -25385,13 +25385,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -25533,8 +25533,8 @@
               "key": "player",
               "label": "晓楠",
               "team_id": "team.player",
-              "team_label": "青岚山散修",
-              "unit_kind": "character",
+              "team_label": "青岚山散修 · 修士 · Lv1",
+              "unit_kind": "修士",
               "visual": {
                 "key": "player",
                 "number": 1,
@@ -25691,13 +25691,13 @@
               ]
             },
             {
-              "key": "opponent:20260728",
+              "key": "enemy:石门守修:20260728",
               "label": "石门守修",
               "team_id": "team.opponent",
-              "team_label": "石门遗址守修",
-              "unit_kind": "character",
+              "team_label": "石门遗址守修 · 修士 · Lv5",
+              "unit_kind": "修士",
               "visual": {
-                "key": "opponent:20260728",
+                "key": "enemy:石门守修:20260728",
                 "number": 2,
                 "color": "#008f75",
                 "foreground": "#ffffff"
@@ -25840,7 +25840,7 @@
       "segment_index": 0,
       "record": {
         "schema": "晓楠修仙.战报.v1",
-        "generated_at": "2026-07-28T20:13:09+08:00",
+        "generated_at": "2026-07-28T21:20:36+08:00",
         "scene": "青岚山演武台",
         "headline": "晓楠 对阵 石门守修",
         "system": {
@@ -25905,6 +25905,8 @@
             "number": 1,
             "name": "晓楠",
             "title": "青岚山散修",
+            "level": 1,
+            "kind": "修士",
             "color": "#df3654",
             "outcome": "胜",
             "resources": [
@@ -26044,10 +26046,12 @@
             "extra": {}
           },
           {
-            "id": "opponent:20260728",
+            "id": "enemy:石门守修:20260728",
             "number": 2,
             "name": "石门守修",
             "title": "石门遗址守修",
+            "level": 5,
+            "kind": "修士",
             "color": "#008f75",
             "outcome": "负",
             "resources": [
@@ -26171,7 +26175,7 @@
               "color": "#747d8c"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26248,7 +26252,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26289,7 +26293,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26508,7 +26512,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26590,7 +26594,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26639,7 +26643,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26705,13 +26709,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26747,7 +26751,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -26967,7 +26971,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27043,7 +27047,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27262,7 +27266,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27306,13 +27310,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27384,7 +27388,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27425,7 +27429,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27644,7 +27648,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27680,7 +27684,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27792,13 +27796,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -27834,7 +27838,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28054,7 +28058,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28130,7 +28134,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28349,7 +28353,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28393,13 +28397,13 @@
             "category_color": "#b47400",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28423,13 +28427,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28501,7 +28505,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28542,7 +28546,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28761,7 +28765,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -28980,7 +28984,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29199,7 +29203,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29235,7 +29239,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29347,13 +29351,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29383,7 +29387,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29602,7 +29606,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29646,13 +29650,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29724,7 +29728,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29765,7 +29769,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -29984,7 +29988,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30066,7 +30070,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30115,7 +30119,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30151,7 +30155,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30263,13 +30267,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30305,7 +30309,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30525,7 +30529,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30601,7 +30605,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30820,7 +30824,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30864,13 +30868,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30942,7 +30946,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -30983,7 +30987,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31202,7 +31206,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31238,7 +31242,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31350,13 +31354,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31392,7 +31396,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31612,7 +31616,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31688,7 +31692,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31907,7 +31911,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31951,13 +31955,13 @@
             "category_color": "#b47400",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -31981,13 +31985,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32059,7 +32063,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32100,7 +32104,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32319,7 +32323,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32538,7 +32542,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32757,7 +32761,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32793,7 +32797,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32905,13 +32909,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -32941,7 +32945,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33160,7 +33164,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33204,13 +33208,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33282,7 +33286,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33323,7 +33327,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33542,7 +33546,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33624,7 +33628,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33673,7 +33677,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33709,7 +33713,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33821,13 +33825,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -33863,7 +33867,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34083,7 +34087,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34159,7 +34163,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34378,7 +34382,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34422,13 +34426,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34500,7 +34504,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34713,13 +34717,13 @@
             "category_color": "#b47400",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34760,7 +34764,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -34973,13 +34977,13 @@
             "category_color": "#087d68",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35020,7 +35024,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35094,13 +35098,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35136,7 +35140,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35356,7 +35360,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35432,7 +35436,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35651,7 +35655,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35695,13 +35699,13 @@
             "category_color": "#b47400",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35725,13 +35729,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -35803,7 +35807,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36022,7 +36026,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36096,13 +36100,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36132,7 +36136,7 @@
             "category_color": "#d63c50",
             "compact_visible": true,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36351,7 +36355,7 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36395,13 +36399,13 @@
             "category_color": "#2869c7",
             "compact_visible": false,
             "source": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36473,7 +36477,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36692,7 +36696,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36911,7 +36915,7 @@
               "color": "#df3654"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"
@@ -36991,7 +36995,7 @@
               "color": "#747d8c"
             },
             "target": {
-              "id": "opponent:20260728",
+              "id": "enemy:石门守修:20260728",
               "name": "石门守修",
               "number": 2,
               "color": "#008f75"

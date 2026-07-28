@@ -22,8 +22,6 @@ class BattleReportParticipant:
     attributes: Mapping[str, float]
     initial_health: float
     final_health: float
-    level: int = 1
-    kind: str = "修士"
     initial_spirit: float = 0.0
     final_spirit: float = 0.0
     initial_shield: float = 0.0
@@ -36,6 +34,8 @@ class BattleReportParticipant:
     ability_definitions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     color: str = ""
     extra: Mapping[str, Any] = field(default_factory=dict)
+    level: int = 1
+    kind: str = "修士"
 
 
 def build_battle_report(
@@ -57,6 +57,11 @@ def build_battle_report(
     participant_ids = {value.id for value in participants}
     if participant_ids != outcome_ids:
         raise ValueError("战报参战者必须与战斗结果中的两名参战者一致")
+    outcome_by_id = {outcome.left.id: outcome.left, outcome.right.id: outcome.right}
+    for participant in participants:
+        result = outcome_by_id[participant.id]
+        if int(participant.level) != result.level or str(participant.kind) != result.kind:
+            raise ValueError(f"战报参战者类别或等级与战斗结果不一致：{participant.name}")
 
     palette = catalog.participant_colors
     participant_colors = {

@@ -237,8 +237,6 @@ class Fighter:
     id: str
     name: str
     attributes: dict[str, float]
-    level: int
-    kind: str
     health: float
     spirit: float
     shield: float = 0.0
@@ -252,6 +250,8 @@ class Fighter:
     consumed_items: dict[str, int] = field(default_factory=dict)
     skill_cursor: int = 0
     current_skill: str = ""
+    level: int = 1
+    kind: str = "修士"
 
     def value(self, key: str, default: float = 0.0) -> float:
         result = float(self.attributes.get(key, default))

@@ -9,7 +9,7 @@ import sqlite3
 from typing import Any
 
 from game.content import GameContent
-from game.core import Database, require_user_id, utc_now
+from game.core import Database, rarity_weighted_choice, require_user_id, utc_now
 
 from .models import (
     AssetState,
@@ -710,8 +710,8 @@ def _weighted_choice(
     definitions: dict[str, dict[str, Any]],
 ) -> str:
     ids = tuple(definitions)
-    weights = [max(0, int(definitions[key].get("权重") or 0)) for key in ids]
-    return str(rng.choices(ids, weights=weights, k=1)[0])
+    weights = [int(definitions[key]["权重"]) for key in ids]
+    return str(rarity_weighted_choice(rng, ids, weights))
 
 
 def _weighted_sample(

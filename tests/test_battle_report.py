@@ -6,6 +6,7 @@ import unittest
 
 from game.content import GameContent
 from game.core import JsonDataReader
+from game.features.diren import EnemyFeature
 from game.rules import BattleEngine, CombatantSnapshot
 from game.rules.battle import (
     BattleReportCatalog,
@@ -35,13 +36,10 @@ class BattleReportTest(unittest.TestCase):
             "能力": [dict(value) for value in technique_definition["组成"]],
         }
         player_attributes = dict(self.content.player["人物"]["属性"])
-        enemy_definition = self.content.npc_definitions["山道劫修"]
         seed = 71
-        enemy_id = f"opponent:{seed}"
-        enemy_techniques = self.content.configured_battle_techniques(
-            enemy_definition["功法"],
-            instance_prefix=enemy_id,
-        )
+        enemy = EnemyFeature(self.content).spawn("山道劫修", seed=seed)
+        enemy_id = enemy.instance_id
+        enemy_techniques = enemy.techniques
         outcome = BattleEngine(self.content.combat).simulate(
             left=CombatantSnapshot(
                 id="player",
@@ -52,13 +50,7 @@ class BattleReportTest(unittest.TestCase):
                 weapon_attack=10,
                 techniques=(technique,),
             ),
-            right=CombatantSnapshot(
-                id=enemy_id,
-                name="乙",
-                attributes=enemy_definition["人物"]["属性"],
-                weapon_attack=float(enemy_definition["本命武器"]["攻击"]),
-                techniques=tuple(enemy_techniques),
-            ),
+            right=enemy.battle_snapshot(),
             item_definitions=self.content.item_definitions,
             seed=seed,
             action_limit=30,
@@ -78,20 +70,24 @@ class BattleReportTest(unittest.TestCase):
                     statuses=outcome.left.statuses,
                     techniques=(technique,),
                     ability_definitions=self.content.atomic_ability_definitions,
+                    level=1,
+                    kind="修士",
                 ),
                 BattleReportParticipant(
                     enemy_id,
-                    "乙",
-                    "修士",
-                    enemy_definition["人物"]["属性"],
-                    enemy_definition["人物"]["属性"]["血气上限"],
+                    enemy.enemy_id,
+                    "敌方",
+                    outcome.right.attributes,
+                    outcome.right.attributes["血气上限"],
                     outcome.right.health,
-                    initial_spirit=enemy_definition["人物"]["属性"]["精神上限"],
+                    initial_spirit=outcome.right.attributes["精神上限"],
                     final_spirit=outcome.right.spirit,
                     statuses=outcome.right.statuses,
                     techniques=tuple(enemy_techniques),
                     moves=("基础攻击",),
                     ability_definitions=self.content.atomic_ability_definitions,
+                    level=enemy.level,
+                    kind=enemy.kind,
                 ),
             ),
             catalog=self.content.battle_report,
@@ -105,6 +101,8 @@ class BattleReportTest(unittest.TestCase):
         self.assertEqual(colors["player"], self.content.battle_report.participant_colors[0])
         self.assertEqual(colors[enemy_id], self.content.battle_report.participant_colors[1])
         self.assertNotEqual(colors["player"], colors[enemy_id])
+        self.assertEqual(report["participants"][1]["level"], enemy.level)
+        self.assertEqual(report["participants"][1]["kind"], "修士")
         for event in report["events"]:
             if event["kind"] in {"战斗开始", "战斗结束"}:
                 self.assertEqual(event["source"]["id"], "system")
@@ -129,6 +127,10 @@ class BattleReportTest(unittest.TestCase):
         self.assertEqual(
             presentation["detail"]["segments"][0]["combatants"][0]["visual"]["color"],
             report["participants"][0]["color"],
+        )
+        self.assertIn(
+            f"Lv{enemy.level}",
+            presentation["detail"]["segments"][0]["initial_participants"][1]["team_label"],
         )
         self.assertIn("0", bundle["events"])
         self.assertIn("0:before", bundle["participants"])

@@ -231,7 +231,7 @@ class ExplorationFeature:
             if stamina < cost or health <= 0:
                 break
             stamina -= cost
-            enemy_id = str(rng.choice(enemy_pool))
+            enemy_id = self.content.choose_enemy(enemy_pool, rng)
             enemy_seed = rng.getrandbits(63)
             enemy = self.enemy.spawn(enemy_id, seed=enemy_seed)
             battle_seed = rng.getrandbits(63)

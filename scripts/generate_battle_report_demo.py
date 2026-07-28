@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 
 from game.content import GameContent
 from game.core import JsonDataReader
+from game.features.diren import EnemyFeature
 from game.rules import BattleEngine, CombatantSnapshot
 from game.rules.battle import (
     BattleReportParticipant,
@@ -67,8 +68,9 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
     player_attributes = dict(content.player["人物"]["属性"])
 
     enemy_name = "石门守修"
-    enemy_definition = content.npc_definitions[enemy_name]
-    enemy_attributes = dict(enemy_definition["人物"]["属性"])
+    seed = 20260728
+    enemy = EnemyFeature(content).spawn(enemy_name, seed=seed)
+    enemy_attributes = dict(enemy.attributes)
     enemy_attributes.update(
         {
             "血气上限": 156,
@@ -80,15 +82,11 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
             "暴击率": 5,
         }
     )
-    enemy_techniques = content.configured_battle_techniques(
-        enemy_definition["功法"],
-        instance_prefix="opponent:demo",
-    )
-    enemy_weapon_attack = float(enemy_definition["本命武器"]["攻击"])
+    enemy_techniques = enemy.techniques
+    enemy_weapon_attack = enemy.weapon_attack
     initial_health = float(player_attributes["血气上限"])
     initial_spirit = float(player_attributes["精神上限"])
-    seed = 20260728
-    enemy_id = f"opponent:{seed}"
+    enemy_id = enemy.instance_id
 
     outcome = engine.simulate(
         left=CombatantSnapshot(
@@ -106,6 +104,8 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
             attributes=enemy_attributes,
             weapon_attack=enemy_weapon_attack,
             techniques=tuple(enemy_techniques),
+            level=enemy.level,
+            kind=enemy.kind,
         ),
         item_definitions=content.item_definitions,
         seed=seed,
@@ -130,6 +130,8 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
                 techniques=techniques,
                 moves=("基础攻击",),
                 ability_definitions=content.atomic_ability_definitions,
+                level=1,
+                kind="修士",
             ),
             BattleReportParticipant(
                 id=enemy_id,
@@ -146,6 +148,8 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
                 techniques=tuple(enemy_techniques),
                 moves=("基础攻击",),
                 ability_definitions=content.atomic_ability_definitions,
+                level=enemy.level,
+                kind=enemy.kind,
             ),
         ),
         catalog=content.battle_report,

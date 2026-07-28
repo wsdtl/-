@@ -14,6 +14,7 @@ from game.app import build_game_services
 from game.cmd.功法.service import _mechanism_text
 from game.content import GameContent, GameContentError, _validate
 from game.core import JsonDataReader
+from game.features.diren import EnemyFeature
 from game.rules import BattleEngine, CombatantSnapshot
 from game.rules.battle import BattleContext, DamageRequest, Fighter
 
@@ -45,6 +46,7 @@ class CombatCoreTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.content = GameContent.load(JsonDataReader(ROOT / "data"))
         cls.engine = BattleEngine(cls.content.combat)
+        cls.enemies = EnemyFeature(cls.content)
         cls.player_attributes = dict(cls.content.player["人物"]["属性"])
 
     def fighter(
@@ -98,7 +100,7 @@ class CombatCoreTest(unittest.TestCase):
             "能力": [dict(value) for value in definition.get("组成") or ()],
         }
 
-    def npc_snapshot(
+    def enemy_snapshot(
         self,
         enemy_id: str,
         seed: int,
@@ -107,19 +109,29 @@ class CombatCoreTest(unittest.TestCase):
         definition: dict | None = None,
     ) -> CombatantSnapshot:
         configured = content or self.content
-        opponent = definition or configured.npc_definitions[enemy_id]
+        opponent = definition or configured.enemy_definitions[enemy_id]
+        level = int(opponent["等级"][0])
+        growth = (
+            configured.player["人物"]["每级成长"]
+            if opponent["类别"] == "修士"
+            else opponent["每级成长"]
+        )
         return CombatantSnapshot(
             id=f"opponent:{seed}",
             name=enemy_id,
-            attributes=opponent["人物"]["属性"],
-            weapon_attack=float(opponent["本命武器"]["攻击"]),
+            attributes=configured.attributes_at_level(opponent["属性"], growth, level),
+            level=level,
+            kind=str(opponent["类别"]),
+            weapon_attack=float((opponent.get("本命武器") or {}).get("攻击") or 0),
             techniques=tuple(
                 configured.configured_battle_techniques(
-                    opponent["功法"],
+                    opponent.get("功法") or [],
                     instance_prefix=f"opponent:{seed}",
                 )
             ),
-            medicine_threshold=float(opponent["战斗策略"]["用药阈值"]),
+            medicine_threshold=float(
+                (opponent.get("战斗策略") or {}).get("用药阈值") or 0.3
+            ),
         )
 
     def simulate(
@@ -136,7 +148,7 @@ class CombatCoreTest(unittest.TestCase):
         spirit: float = 60,
     ):
         names = techniques or []
-        opponent = enemy or self.content.npc_definitions[enemy_id]
+        opponent = enemy or self.content.enemy_definitions[enemy_id]
         return (rules or self.engine).simulate(
             left=CombatantSnapshot(
                 id="player",
@@ -151,7 +163,7 @@ class CombatCoreTest(unittest.TestCase):
                     for index, name in enumerate(names)
                 ),
             ),
-            right=self.npc_snapshot(
+            right=self.enemy_snapshot(
                 enemy_id,
                 seed,
                 definition=opponent,
@@ -253,6 +265,100 @@ class CombatCoreTest(unittest.TestCase):
         with self.assertRaisesRegex(GameContentError, "没有执行器 尚不存在的执行器"):
             _validate(replace(self.content, combat=combat))
 
+    def test_classified_directories_expand_and_reject_duplicate_names(self) -> None:
+        self.assertEqual(
+            self.content.enemy_groups["山脚走兽"],
+            ("青牙山犬", "黄鬃山獾"),
+        )
+        self.assertEqual(self.content.enemy_groups["山脚虫兽"], ("赤尾毒蝎",))
+        self.assertEqual(self.content.npc_groups["青溪村修士"], ("宁药师",))
+        self.assertEqual(
+            self.content.enemies_in_groups(["山脚走兽", "山脚虫兽"]),
+            ("青牙山犬", "黄鬃山獾", "赤尾毒蝎"),
+        )
+        self.assertEqual(
+            self.content.enemies_in_groups(
+                ["山道劫修", "密林火修", "石门守修"]
+            ),
+            ("山道劫修", "密林火修", "石门守修"),
+        )
+
+        with TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "data"
+            shutil.copytree(ROOT / "data" / "rules", data_dir / "rules")
+            shutil.copytree(ROOT / "data" / "content", data_dir / "content")
+            duplicate = {
+                "版本": "测试.重复功法.v1",
+                "功法": {
+                    "离火归元诀": deepcopy(
+                        self.content.technique_definitions["离火归元诀"]
+                    )
+                },
+            }
+            (data_dir / "content" / "功法" / "重复功法.json").write_text(
+                json.dumps(duplicate, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(GameContentError, "离火归元诀.*重名"):
+                GameContent.load(JsonDataReader(data_dir))
+
+        with TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "data"
+            shutil.copytree(ROOT / "data" / "rules", data_dir / "rules")
+            shutil.copytree(ROOT / "data" / "content", data_dir / "content")
+            (data_dir / "content" / "敌人" / "空池.json").write_text(
+                json.dumps(
+                    {"版本": "测试.空池.v1", "敌人": {}},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(GameContentError, "空池.json.*资源池不能为空"):
+                GameContent.load(JsonDataReader(data_dir))
+
+    def test_integrated_pools_use_inverse_integer_weights(self) -> None:
+        enemy_pool = self.content.enemies_in_groups(["山脚走兽", "山脚虫兽"])
+        self.assertEqual(
+            self.content.choose_enemy(enemy_pool, FixedRandom(0.5, 0.5, 0.5)),
+            "青牙山犬",
+        )
+        npc_pool = self.content.npcs_in_groups(
+            ["青溪村修士", "山脚修士", "密林修士", "遗址修士"]
+        )
+        self.assertEqual(
+            self.content.choose_npc(npc_pool, FixedRandom(0.5, 0.5, 0.5, 0.5)),
+            "陆行舟",
+        )
+        self.assertEqual(
+            self.content.choose_item(
+                ("小还丹", "地脉苔"),
+                FixedRandom(0.5, 0.5),
+            ),
+            "小还丹",
+        )
+
+        for definitions in (
+            self.content.npc_definitions,
+            self.content.enemy_definitions,
+            self.content.item_definitions,
+            self.content.rarity_definitions,
+            self.content.affix_definitions,
+        ):
+            self.assertTrue(
+                all(
+                    isinstance(definition["权重"], int)
+                    and not isinstance(definition["权重"], bool)
+                    and definition["权重"] >= 1
+                    for definition in definitions.values()
+                )
+            )
+
+        items = deepcopy(self.content.items)
+        items["物品"]["小还丹"]["权重"] = 0.5
+        with self.assertRaisesRegex(GameContentError, "小还丹.权重.*必须是整数"):
+            _validate(replace(self.content, items=items))
+
     def test_json_alias_and_new_technique_need_no_python_branch(self) -> None:
         alias = deepcopy(self.content.atomic_ability_definitions["造成伤害"])
         mechanism = {
@@ -287,14 +393,24 @@ class CombatCoreTest(unittest.TestCase):
             shutil.copytree(ROOT / "data" / "rules", data_dir / "rules")
             shutil.copytree(ROOT / "data" / "content", data_dir / "content")
             changes = (
-                (data_dir / "rules" / "原子能力.json", "原子能力", "灵焰冲击", alias),
-                (data_dir / "content" / "机制.json", "机制", "试制灵焰", mechanism),
-                (data_dir / "content" / "功法.json", "功法", "试制功法", technique_definition),
+                (data_dir / "rules" / "战斗" / "原子能力.json", "原子能力", "灵焰冲击", alias),
+                (data_dir / "content" / "战斗机制" / "机制.json", "机制", "试制灵焰", mechanism),
             )
             for path, section, key, value in changes:
                 data = json.loads(path.read_text(encoding="utf-8"))
                 data[section][key] = value
                 path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            (data_dir / "content" / "功法" / "试制功法.json").write_text(
+                json.dumps(
+                    {
+                        "版本": "测试.试制功法.v1",
+                        "功法": {"试制功法": technique_definition},
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
             configured = GameContent.load(JsonDataReader(data_dir))
 
         engine = BattleEngine(configured.combat)
@@ -316,7 +432,7 @@ class CombatCoreTest(unittest.TestCase):
                 weapon_attack=10,
                 techniques=(instance,),
             ),
-            right=self.npc_snapshot("石门守修", 11, content=configured),
+            right=self.enemy_snapshot("石门守修", 11, content=configured),
             item_definitions=configured.item_definitions,
             seed=11,
             action_limit=1,
@@ -406,8 +522,8 @@ class CombatCoreTest(unittest.TestCase):
         engine = BattleEngine(combat)
         attributes = dict(self.player_attributes)
         attributes.update({"连击率": 100, "连击伤害": 50, "速度": 500})
-        enemy = deepcopy(self.content.npc_definitions["山道劫修"])
-        enemy["人物"]["属性"].update({"血气上限": 1000, "速度": 1})
+        enemy = deepcopy(self.content.enemy_definitions["山道劫修"])
+        enemy["属性"].update({"血气上限": 1000, "速度": 1})
         technique = {
             "实例": "listener",
             "功法": "监听验算",
@@ -432,7 +548,7 @@ class CombatCoreTest(unittest.TestCase):
                 weapon_attack=10,
                 techniques=(technique,),
             ),
-            right=self.npc_snapshot("山道劫修", 9, definition=enemy),
+            right=self.enemy_snapshot("山道劫修", 9, definition=enemy),
             item_definitions=self.content.item_definitions,
             seed=9,
             action_limit=1,
@@ -570,13 +686,21 @@ class CombatCoreTest(unittest.TestCase):
         ]
         self.assertEqual(left_events, right_events)
 
-    def test_roadside_npc_uses_own_medicine_and_only_drops_inventory(self) -> None:
-        npc_definition = self.content.npc_definitions["山道劫修"]
-        self.assertNotIn("本命武器", npc_definition["纳戒"])
+    def test_enemy_cultivator_uses_own_medicine_and_only_drops_inventory(self) -> None:
+        enemy_definition = self.content.enemy_definitions["山道劫修"]
+        self.assertEqual(enemy_definition["类别"], "修士")
+        self.assertNotIn("本命武器", enemy_definition["纳戒"])
+        enemy_instance = self.enemies.spawn("山道劫修", seed=23)
+        self.assertIn(enemy_instance.level, range(1, 4))
+        self.assertGreater(enemy_instance.weapon_attack, 0)
+        self.assertNotIn(enemy_definition["本命武器"]["名称"], enemy_instance.inventory)
+
+        beast = self.enemies.spawn("青牙山犬", seed=23)
+        self.assertEqual(beast.kind, "灵兽")
+        self.assertEqual(beast.weapon_attack, 0)
+        self.assertFalse(beast.inventory)
         left_attributes = dict(self.player_attributes)
         left_attributes.update({"攻击": 20, "速度": 200})
-        right_attributes = dict(self.player_attributes)
-        right_attributes.update({"血气上限": 100, "速度": 100})
         outcome = self.engine.simulate(
             left=CombatantSnapshot(
                 id="player",
@@ -585,12 +709,8 @@ class CombatCoreTest(unittest.TestCase):
                 health=100,
                 spirit=60,
             ),
-            right=CombatantSnapshot(
-                id="npc",
-                name="路边修士",
-                attributes=right_attributes,
-                health=100,
-                spirit=60,
+            right=replace(
+                enemy_instance.battle_snapshot(),
                 inventory={"小还丹": 1, "踏罡残页": 1},
                 auto_medicine=True,
                 medicine_threshold=1.0,
@@ -607,13 +727,15 @@ class CombatCoreTest(unittest.TestCase):
                 data_dir=ROOT / "data",
                 database_path=Path(directory) / "game.db",
             )
+            services.player.ensure("npc-loot-test", "测试修士")
             initial_assets = services.player.load("npc-loot-test")
             original_weapon = initial_assets.weapon.name
             original_medicine = initial_assets.inventory.get("小还丹", 0)
             services.location.move("npc-loot-test", "青岚山脚")
             nearby = services.npc.nearby("npc-loot-test")
-            self.assertEqual([value.npc_id for value in nearby], ["山道劫修"])
-            spoken = services.npc.talk("npc-loot-test", "山道劫修", seed=1)
+            self.assertEqual([value.npc_id for value in nearby], ["陆行舟"])
+            self.assertTrue(nearby[0].level_text.startswith("Lv"))
+            spoken = services.npc.talk("npc-loot-test", "陆行舟", seed=1)
             self.assertIsNotNone(spoken)
             with services.database.transaction(write=True) as connection:
                 services.exploration._apply_rewards(
@@ -623,9 +745,9 @@ class CombatCoreTest(unittest.TestCase):
                         {
                             "result": "victory",
                             "consumed_items": {},
-                            "npc_spirit_stones": 9,
+                            "enemy_spirit_stones": 9,
                             "weapon_experience": 5,
-                            "npc_inventory": dict(outcome.right.inventory),
+                            "enemy_drops": dict(outcome.right.inventory),
                         }
                     ],
                 )
@@ -677,7 +799,7 @@ class CombatCoreTest(unittest.TestCase):
             self.assertEqual(seclusion.completed_rounds, 1)
             self.assertEqual(len(seclusion.techniques), 1)
             technique = seclusion.techniques[0]
-            self.assertEqual(technique.technique_id, "离火归元诀")
+            self.assertIn(technique.technique_id, services.content.technique_definitions)
             self.assertEqual(
                 services.player.equip_technique("user-1", technique.born_order, 1),
                 "equipped",
@@ -693,6 +815,21 @@ class CombatCoreTest(unittest.TestCase):
             assert settlement is not None
             self.assertEqual(settlement.completed_rounds, 1)
             self.assertEqual(settlement.victories, 1)
+            self.assertIn(
+                settlement.encounters[0]["enemy"],
+                services.location.state("青岚山脚").enemies,
+            )
+            encountered = services.content.enemy_definitions[
+                settlement.encounters[0]["enemy"]
+            ]
+            self.assertGreaterEqual(
+                settlement.encounters[0]["enemy_level"],
+                encountered["等级"][0],
+            )
+            self.assertLessEqual(
+                settlement.encounters[0]["enemy_level"],
+                encountered["等级"][1],
+            )
             assets = services.player.load("user-1")
             self.assertEqual(assets.player.stamina, 50)
             self.assertEqual(assets.weapon.experience, settlement.weapon_experience)

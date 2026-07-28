@@ -70,7 +70,7 @@ class RuleSchemaValidator:
         self.events = frozenset(str(value) for value in events)
         self.mechanisms = mechanisms
 
-    def validate_definitions(self, path: str = "rules/原子能力.json -> 原子能力") -> None:
+    def validate_definitions(self, path: str = "rules/战斗/原子能力.json -> 原子能力") -> None:
         if not self.abilities:
             raise RuleSchemaError(f"{path}：不能为空")
         for ability_name, raw_definition in self.abilities.items():
@@ -112,7 +112,7 @@ class RuleSchemaValidator:
                     f"{path}.{ability_name}.字段.{field_name}",
                 )
 
-    def validate_mechanisms(self, path: str = "content/机制.json -> 机制") -> None:
+    def validate_mechanisms(self, path: str = "content/战斗机制/机制.json -> 机制") -> None:
         if not self.mechanisms:
             raise RuleSchemaError(f"{path}：不能为空")
         for mechanism_name, node in self.mechanisms.items():
@@ -268,9 +268,10 @@ class RuleSchemaValidator:
         if field_type != "机制引用":
             self._choice(reference, spec, path)
             return
-        target = self._object(self.mechanisms[reference], f"content/机制.json -> 机制.{reference}")
-        target_category = self.category_of(target, f"content/机制.json -> 机制.{reference}")
-        target_executor = self.executor_of(target, f"content/机制.json -> 机制.{reference}")
+        target_path = f"content/战斗机制/机制.json -> 机制.{reference}"
+        target = self._object(self.mechanisms[reference], target_path)
+        target_category = self.category_of(target, target_path)
+        target_executor = self.executor_of(target, target_path)
         self._allow_value(target_category, spec.get("目标类别"), path, "机制类别")
         self._allow_value(target_executor, spec.get("目标执行器"), path, "机制执行器")
 

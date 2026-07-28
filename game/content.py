@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from game.core import JsonDataReader
+from game.core import JsonDataReader, rarity_weighted_choice
 from game.rules.battle.catalog import BattleReportCatalog
 from game.rules.battle.executors import EXECUTOR_CATEGORIES
 from game.rules.battle.schema import RuleSchemaError, RuleSchemaValidator
@@ -102,6 +102,10 @@ class GameContent:
         return self.techniques["功法"]
 
     @property
+    def technique_groups(self) -> dict[str, tuple[str, ...]]:
+        return self.techniques["分组"]
+
+    @property
     def rarity_definitions(self) -> dict[str, dict[str, Any]]:
         return self.techniques["品级"]
 
@@ -128,6 +132,10 @@ class GameContent:
     @property
     def item_definitions(self) -> dict[str, dict[str, Any]]:
         return self.items["物品"]
+
+    @property
+    def item_groups(self) -> dict[str, tuple[str, ...]]:
+        return self.items["分组"]
 
     @property
     def item_categories(self) -> tuple[str, ...]:
@@ -162,6 +170,15 @@ class GameContent:
 
     def enemies_in_groups(self, groups: list[str]) -> tuple[str, ...]:
         return _expand_groups(groups, self.enemy_groups)
+
+    def choose_npc(self, npc_ids: tuple[str, ...], rng: Any) -> str:
+        return _weighted_choice(npc_ids, self.npc_definitions, rng, "修士")
+
+    def choose_enemy(self, enemy_ids: tuple[str, ...], rng: Any) -> str:
+        return _weighted_choice(enemy_ids, self.enemy_definitions, rng, "敌人")
+
+    def choose_item(self, item_ids: tuple[str, ...], rng: Any) -> str:
+        return _weighted_choice(item_ids, self.item_definitions, rng, "物品")
 
     def attributes_at_level(
         self,
@@ -330,7 +347,7 @@ def _validate_combat(
         maximum = _number(value.get("最大值"), f"{path}.最大值")
         if maximum < minimum:
             raise GameContentError(f"数据文件有问题：{path}：最大值不能小于最小值")
-        _positive(value.get("权重"), f"{path}.权重")
+        _integer(value.get("权重"), f"{path}.权重", minimum=1)
 
     resources = _require_object(combat, "资源", RESOURCES_FILE)
     for resource_id, definition in resources.items():
@@ -385,7 +402,7 @@ def _validate_techniques(
     for rarity_id, definition in rarities.items():
         path = f"{TECHNIQUES_FILE} -> 品级.{rarity_id}"
         value = _object(definition, path)
-        _positive(value.get("权重"), f"{path}.权重")
+        _integer(value.get("权重"), f"{path}.权重", minimum=1)
         _positive(value.get("威力倍率"), f"{path}.威力倍率")
         count = _integer(value.get("词条数量"), f"{path}.词条数量", minimum=0)
         _integer(value.get("评分"), f"{path}.评分", minimum=0)
@@ -437,6 +454,7 @@ def _validate_items(items: dict[str, Any], categories: list[str]) -> None:
             raise GameContentError(f"数据文件有问题：{path}.类别：未知或不可用类别 {category}")
         if not str(value.get("说明") or "").strip():
             raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
+        _integer(value.get("权重"), f"{path}.权重", minimum=1)
         if not isinstance(value.get("可堆叠"), bool):
             raise GameContentError(f"数据文件有问题：{path}.可堆叠：必须是布尔值")
         _integer(value.get("评分"), f"{path}.评分", minimum=0)
@@ -476,6 +494,7 @@ def _validate_npcs(
             {
                 "身份",
                 "说明",
+                "权重",
                 "等级",
                 "实力波动",
                 "属性",
@@ -497,6 +516,7 @@ def _validate_npcs(
             raise GameContentError(f"数据文件有问题：{path}.身份.话语：可交互修士不能为空")
         if not str(value.get("说明") or "").strip():
             raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
+        _integer(value.get("权重"), f"{path}.权重", minimum=1)
         _level_range(value.get("等级"), f"{path}.等级", maximum_level)
         attributes = _require_object(value, "属性", path)
         missing = required - set(attributes)
@@ -625,6 +645,7 @@ def _validate_enemies(
             {
                 "类别",
                 "说明",
+                "权重",
                 "等级",
                 "实力波动",
                 "属性",
@@ -640,6 +661,7 @@ def _validate_enemies(
         for key in ("类别", "说明"):
             if not str(value.get(key) or "").strip():
                 raise GameContentError(f"数据文件有问题：{path}.{key}：不能为空")
+        _integer(value.get("权重"), f"{path}.权重", minimum=1)
         _level_range(value.get("等级"), f"{path}.等级", maximum_level)
         attributes = _require_object(value, "属性", path)
         missing = required - set(attributes)
@@ -704,7 +726,10 @@ def _validate_strength_variation(
 
 
 def _level_range(value: Any, path: str, maximum_level: int) -> tuple[int, int]:
-    low, high = _range(value, path, minimum=1)
+    if isinstance(value, int) and not isinstance(value, bool):
+        low = high = _integer(value, path, minimum=1)
+    else:
+        low, high = _range(value, path, minimum=1)
     if high > maximum_level:
         raise GameContentError(f"数据文件有问题：{path}：不能超过人物等级上限 {maximum_level}")
     return low, high
@@ -839,6 +864,7 @@ def _read_technique_catalog(reader: JsonDataReader) -> dict[str, Any]:
     techniques: dict[str, Any] = {}
     rarity_sources: dict[str, str] = {}
     technique_sources: dict[str, str] = {}
+    groups: dict[str, tuple[str, ...]] = {}
     for file_path, raw in reader.read_directory(TECHNIQUES_FILE):
         value = _object(raw, file_path)
         _require_version(value, file_path)
@@ -856,20 +882,29 @@ def _read_technique_catalog(reader: JsonDataReader) -> dict[str, Any]:
                 "品级",
             )
         if "功法" in value:
+            values = _require_object(value, "功法", file_path)
+            group_id = file_path.rsplit("/", 1)[-1].removesuffix(".json")
+            groups[group_id] = tuple(str(key) for key in values)
             _merge_unique(
                 techniques,
                 technique_sources,
-                _require_object(value, "功法", file_path),
+                values,
                 file_path,
                 "功法",
             )
-    return {"版本": "目录展开", "品级": rarities, "功法": techniques}
+    return {
+        "版本": "目录展开",
+        "品级": rarities,
+        "功法": techniques,
+        "分组": groups,
+    }
 
 
 def _read_item_catalog(reader: JsonDataReader) -> dict[str, Any]:
     categories: list[str] = []
     items: dict[str, Any] = {}
     sources: dict[str, str] = {}
+    groups: dict[str, tuple[str, ...]] = {}
     for file_path, raw in reader.read_directory(ITEMS_FILE):
         value = _object(raw, file_path)
         _require_version(value, file_path)
@@ -882,14 +917,22 @@ def _read_item_catalog(reader: JsonDataReader) -> dict[str, Any]:
                     raise GameContentError(f"数据文件有问题：{file_path} -> 物品类别：重复 {category}")
                 categories.append(category)
         if "物品" in value:
+            values = _require_object(value, "物品", file_path)
+            group_id = file_path.rsplit("/", 1)[-1].removesuffix(".json")
+            groups[group_id] = tuple(str(key) for key in values)
             _merge_unique(
                 items,
                 sources,
-                _require_object(value, "物品", file_path),
+                values,
                 file_path,
                 "物品",
             )
-    return {"版本": "目录展开", "物品类别": categories, "物品": items}
+    return {
+        "版本": "目录展开",
+        "物品类别": categories,
+        "物品": items,
+        "分组": groups,
+    }
 
 
 def _read_multi_section_catalog(
@@ -935,6 +978,8 @@ def _read_grouped_catalog(
         _require_version(value, file_path)
         _allow_only(value, file_path, {"版本", section})
         values = _require_object(value, section, file_path)
+        if not values:
+            raise GameContentError(f"数据文件有问题：{file_path} -> {section}：资源池不能为空")
         group_id = file_path.rsplit("/", 1)[-1].removesuffix(".json")
         if group_id in groups:
             raise GameContentError(f"数据目录有问题：{directory}：文件名重复 {group_id}.json")
@@ -974,6 +1019,18 @@ def _expand_groups(
     for group_id in group_ids:
         result.extend(definitions[str(group_id)])
     return tuple(dict.fromkeys(result))
+
+
+def _weighted_choice(
+    object_ids: tuple[str, ...],
+    definitions: dict[str, dict[str, Any]],
+    rng: Any,
+    kind: str,
+) -> str:
+    if not object_ids:
+        raise GameContentError(f"{kind}整合池不能为空")
+    weights = [int(definitions[object_id]["权重"]) for object_id in object_ids]
+    return str(rarity_weighted_choice(rng, object_ids, weights))
 
 
 def _require_version(value: dict[str, Any], path: str) -> None:

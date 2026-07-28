@@ -240,7 +240,7 @@ def _combatant(participant: Mapping[str, Any], visual: Mapping[str, Any], index:
         "label": participant["name"],
         "team_id": "team.player" if index == 0 else "team.opponent",
         "team_label": _participant_title(participant),
-        "unit_kind": "character",
+        "unit_kind": str(participant.get("kind") or "参战者"),
         "visual": dict(visual),
     }
 
@@ -308,7 +308,7 @@ def _participant_record(
         "label": participant["name"],
         "team_id": "team.player" if index == 0 else "team.opponent",
         "team_label": _participant_title(participant),
-        "unit_kind": "character",
+        "unit_kind": str(participant.get("kind") or "参战者"),
         "visual": dict(visual),
         "gauges": gauges,
         "status_group": {

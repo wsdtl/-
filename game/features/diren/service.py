@@ -127,7 +127,9 @@ def _roll_item_pool(
     return _roll_range(rng, definition["灵石"]), dict(items)
 
 
-def _roll_range(rng: random.Random, value: list[int]) -> int:
+def _roll_range(rng: random.Random, value: int | list[int]) -> int:
+    if isinstance(value, int):
+        return value
     return rng.randint(int(value[0]), int(value[1]))
 
 
