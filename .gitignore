@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+.runtime/
+log/
+launch/runtime/
+data/*.db
+data/*.db-shm
+data/*.db-wal

@@ -1,0 +1,2782 @@
+{
+  "schema": "game.battle_report.presentation",
+  "version": 3,
+  "ui": {
+    "text": {
+      "brand_suffix": "交锋记录",
+      "settlement_label": "结算",
+      "archive_kicker": "交锋档案",
+      "archive_title": "完整战报已归档",
+      "more_summary": "更多结算",
+      "segment_label": "战斗片段",
+      "segment_select_label": "选择战斗片段",
+      "previous_segment_label": "上一片段",
+      "next_segment_label": "下一片段",
+      "participant_panel_title": "参战者状态",
+      "comparison_title": "行动前后状态",
+      "comparison_empty": "本次行动没有可见状态变化。",
+      "process_group_label": "过程记录",
+      "raw_data_label": "后端原始记录",
+      "event_facts_label": "事件事实",
+      "empty_timeline": "本场交锋没有可展示的行动事实。",
+      "empty_filter": "当前筛选下没有事件。",
+      "empty_participants": "本场交锋没有参战者快照。",
+      "empty_value": "无",
+      "undecided_value": "未决",
+      "none_actor": "无",
+      "other_team_label": "其他阵营",
+      "additional_team_template": "另有 {count} 方"
+    },
+    "modes": [
+      {
+        "id": "compact",
+        "label": "战斗记录"
+      },
+      {
+        "id": "detail",
+        "label": "全部事件"
+      }
+    ],
+    "filters": [
+      {
+        "id": "all",
+        "label": "全部"
+      },
+      {
+        "id": "damage",
+        "label": "伤害"
+      },
+      {
+        "id": "status",
+        "label": "状态与控制"
+      },
+      {
+        "id": "resource",
+        "label": "资源与恢复"
+      },
+      {
+        "id": "system",
+        "label": "过程"
+      }
+    ],
+    "snapshots": [
+      {
+        "id": "before",
+        "label": "战前"
+      },
+      {
+        "id": "after",
+        "label": "战后"
+      }
+    ]
+  },
+  "summary": {
+    "title": "晓楠 对阵 石门守修",
+    "outcome": "晓楠取胜",
+    "tone": "victory",
+    "lines": [
+      "地点: 青岚山演武台",
+      "战斗行动: 19",
+      "后端事件: 135",
+      "机制触发: 16"
+    ]
+  },
+  "started_at": "2026-07-28T20:13:09+08:00",
+  "finished_at": "2026-07-28T20:13:09+08:00",
+  "detail": {
+    "available": true,
+    "retention_notice": "",
+    "segment_count": 1,
+    "segments": [
+      {
+        "index": 0,
+        "position_label": "1 / 1",
+        "title": "晓楠 对阵 石门守修",
+        "outcome": "晓楠取胜",
+        "started_at": "2026-07-28T20:13:09+08:00",
+        "finished_at": "2026-07-28T20:13:09+08:00",
+        "duration_label": "19 次行动",
+        "system_visual": {
+          "key": "system",
+          "number": 0,
+          "color": "#747d8c",
+          "foreground": "#ffffff"
+        },
+        "combatants": [
+          {
+            "key": "player",
+            "label": "晓楠",
+            "team_id": "team.player",
+            "team_label": "青岚山散修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            }
+          },
+          {
+            "key": "opponent:20260728",
+            "label": "石门守修",
+            "team_id": "team.opponent",
+            "team_label": "石门遗址守修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            }
+          }
+        ],
+        "initial_participants": [
+          {
+            "key": "player",
+            "label": "晓楠",
+            "team_id": "team.player",
+            "team_label": "青岚山散修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "gauges": [
+              {
+                "id": "health",
+                "label": "血气",
+                "current": 100.0,
+                "maximum": 100.0,
+                "display": "100 / 100",
+                "tone": "primary",
+                "presentation": "bar"
+              },
+              {
+                "id": "spirit",
+                "label": "精神",
+                "current": 60.0,
+                "maximum": 78.45,
+                "display": "60 / 78.45",
+                "tone": "secondary",
+                "presentation": "bar"
+              }
+            ],
+            "status_group": {
+              "id": "temporary_effects",
+              "label": "当前状态",
+              "presentation": "chips",
+              "empty_text": "当前无持续状态",
+              "items": []
+            },
+            "detail_label": "完整状态",
+            "detail_groups": [
+              {
+                "id": "techniques",
+                "label": "功法",
+                "items": [
+                  {
+                    "id": "离火归元诀",
+                    "label": "离火归元诀",
+                    "display": "凡品 · 离火引诀"
+                  },
+                  {
+                    "id": "北斗御神篇",
+                    "label": "北斗御神篇",
+                    "display": "凡品 · 星枢回转"
+                  },
+                  {
+                    "id": "踏罡行气经",
+                    "label": "踏罡行气经",
+                    "display": "凡品 · 三叩天门"
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "moves",
+                "label": "招式",
+                "items": [
+                  {
+                    "id": "基础攻击",
+                    "label": "基础攻击",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "mechanisms",
+                "label": "机制",
+                "items": [
+                  {
+                    "id": "星枢回转",
+                    "label": "星枢回转",
+                    "display": ""
+                  },
+                  {
+                    "id": "星枢术",
+                    "label": "星枢术",
+                    "display": ""
+                  },
+                  {
+                    "id": "火里栽莲",
+                    "label": "火里栽莲",
+                    "display": ""
+                  },
+                  {
+                    "id": "真火击",
+                    "label": "真火击",
+                    "display": ""
+                  },
+                  {
+                    "id": "离火灼身",
+                    "label": "离火灼身",
+                    "display": ""
+                  },
+                  {
+                    "id": "踏罡三叩",
+                    "label": "踏罡三叩",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "attributes",
+                "label": "属性",
+                "items": [
+                  {
+                    "id": "攻击",
+                    "label": "攻击",
+                    "display": "20.05",
+                    "value": 20.05
+                  },
+                  {
+                    "id": "速度",
+                    "label": "速度",
+                    "display": "115.45",
+                    "value": 115.45
+                  },
+                  {
+                    "id": "命中率",
+                    "label": "命中率",
+                    "display": "100%",
+                    "value": 100
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "settlement",
+                "label": "本场统计",
+                "items": [
+                  {
+                    "id": "造成伤害",
+                    "label": "造成伤害",
+                    "display": "193.2"
+                  },
+                  {
+                    "id": "恢复资源",
+                    "label": "恢复资源",
+                    "display": "9"
+                  },
+                  {
+                    "id": "触发机制",
+                    "label": "触发机制",
+                    "display": "6"
+                  }
+                ],
+                "empty_text": ""
+              }
+            ]
+          },
+          {
+            "key": "opponent:20260728",
+            "label": "石门守修",
+            "team_id": "team.opponent",
+            "team_label": "石门遗址守修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "gauges": [
+              {
+                "id": "health",
+                "label": "血气",
+                "current": 168.0,
+                "maximum": 168.0,
+                "display": "168 / 168",
+                "tone": "primary",
+                "presentation": "bar"
+              },
+              {
+                "id": "spirit",
+                "label": "精神",
+                "current": 35.0,
+                "maximum": 35.0,
+                "display": "35 / 35",
+                "tone": "secondary",
+                "presentation": "bar"
+              }
+            ],
+            "status_group": {
+              "id": "temporary_effects",
+              "label": "当前状态",
+              "presentation": "chips",
+              "empty_text": "当前无持续状态",
+              "items": []
+            },
+            "detail_label": "完整状态",
+            "detail_groups": [
+              {
+                "id": "techniques",
+                "label": "功法",
+                "items": [
+                  {
+                    "id": "玄龟定息功",
+                    "label": "玄龟定息功",
+                    "display": "凡品"
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "moves",
+                "label": "招式",
+                "items": [
+                  {
+                    "id": "基础攻击",
+                    "label": "基础攻击",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "mechanisms",
+                "label": "机制",
+                "items": [
+                  {
+                    "id": "一息还真",
+                    "label": "一息还真",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "attributes",
+                "label": "属性",
+                "items": [
+                  {
+                    "id": "攻击",
+                    "label": "攻击",
+                    "display": "10",
+                    "value": 10
+                  },
+                  {
+                    "id": "防御",
+                    "label": "防御",
+                    "display": "10",
+                    "value": 10
+                  },
+                  {
+                    "id": "速度",
+                    "label": "速度",
+                    "display": "102",
+                    "value": 102
+                  },
+                  {
+                    "id": "命中率",
+                    "label": "命中率",
+                    "display": "96%",
+                    "value": 96
+                  },
+                  {
+                    "id": "暴击率",
+                    "label": "暴击率",
+                    "display": "5%",
+                    "value": 5
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "settlement",
+                "label": "本场统计",
+                "items": [
+                  {
+                    "id": "造成伤害",
+                    "label": "造成伤害",
+                    "display": "84"
+                  },
+                  {
+                    "id": "恢复资源",
+                    "label": "恢复资源",
+                    "display": "25.2"
+                  },
+                  {
+                    "id": "触发机制",
+                    "label": "触发机制",
+                    "display": "1"
+                  }
+                ],
+                "empty_text": ""
+              }
+            ]
+          }
+        ],
+        "final_participants": [
+          {
+            "key": "player",
+            "label": "晓楠",
+            "team_id": "team.player",
+            "team_label": "青岚山散修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "gauges": [
+              {
+                "id": "health",
+                "label": "血气",
+                "current": 16.0,
+                "maximum": 100.0,
+                "display": "16 / 100",
+                "tone": "primary",
+                "presentation": "bar"
+              },
+              {
+                "id": "spirit",
+                "label": "精神",
+                "current": 3.0,
+                "maximum": 78.45,
+                "display": "3 / 78.45",
+                "tone": "secondary",
+                "presentation": "bar"
+              }
+            ],
+            "status_group": {
+              "id": "temporary_effects",
+              "label": "当前状态",
+              "presentation": "chips",
+              "empty_text": "当前无持续状态",
+              "items": []
+            },
+            "detail_label": "完整状态",
+            "detail_groups": [
+              {
+                "id": "techniques",
+                "label": "功法",
+                "items": [
+                  {
+                    "id": "离火归元诀",
+                    "label": "离火归元诀",
+                    "display": "凡品 · 离火引诀"
+                  },
+                  {
+                    "id": "北斗御神篇",
+                    "label": "北斗御神篇",
+                    "display": "凡品 · 星枢回转"
+                  },
+                  {
+                    "id": "踏罡行气经",
+                    "label": "踏罡行气经",
+                    "display": "凡品 · 三叩天门"
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "moves",
+                "label": "招式",
+                "items": [
+                  {
+                    "id": "基础攻击",
+                    "label": "基础攻击",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "mechanisms",
+                "label": "机制",
+                "items": [
+                  {
+                    "id": "星枢回转",
+                    "label": "星枢回转",
+                    "display": ""
+                  },
+                  {
+                    "id": "星枢术",
+                    "label": "星枢术",
+                    "display": ""
+                  },
+                  {
+                    "id": "火里栽莲",
+                    "label": "火里栽莲",
+                    "display": ""
+                  },
+                  {
+                    "id": "真火击",
+                    "label": "真火击",
+                    "display": ""
+                  },
+                  {
+                    "id": "离火灼身",
+                    "label": "离火灼身",
+                    "display": ""
+                  },
+                  {
+                    "id": "踏罡三叩",
+                    "label": "踏罡三叩",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "attributes",
+                "label": "属性",
+                "items": [
+                  {
+                    "id": "攻击",
+                    "label": "攻击",
+                    "display": "20.05",
+                    "value": 20.05
+                  },
+                  {
+                    "id": "速度",
+                    "label": "速度",
+                    "display": "115.45",
+                    "value": 115.45
+                  },
+                  {
+                    "id": "命中率",
+                    "label": "命中率",
+                    "display": "100%",
+                    "value": 100
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "settlement",
+                "label": "本场统计",
+                "items": [
+                  {
+                    "id": "造成伤害",
+                    "label": "造成伤害",
+                    "display": "193.2"
+                  },
+                  {
+                    "id": "恢复资源",
+                    "label": "恢复资源",
+                    "display": "9"
+                  },
+                  {
+                    "id": "触发机制",
+                    "label": "触发机制",
+                    "display": "6"
+                  }
+                ],
+                "empty_text": ""
+              }
+            ]
+          },
+          {
+            "key": "opponent:20260728",
+            "label": "石门守修",
+            "team_id": "team.opponent",
+            "team_label": "石门遗址守修",
+            "unit_kind": "character",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "gauges": [
+              {
+                "id": "health",
+                "label": "血气",
+                "current": 0.0,
+                "maximum": 168.0,
+                "display": "0 / 168",
+                "tone": "primary",
+                "presentation": "bar"
+              },
+              {
+                "id": "spirit",
+                "label": "精神",
+                "current": 35.0,
+                "maximum": 35.0,
+                "display": "35 / 35",
+                "tone": "secondary",
+                "presentation": "bar"
+              }
+            ],
+            "status_group": {
+              "id": "temporary_effects",
+              "label": "当前状态",
+              "presentation": "chips",
+              "empty_text": "当前无持续状态",
+              "items": []
+            },
+            "detail_label": "完整状态",
+            "detail_groups": [
+              {
+                "id": "techniques",
+                "label": "功法",
+                "items": [
+                  {
+                    "id": "玄龟定息功",
+                    "label": "玄龟定息功",
+                    "display": "凡品"
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "moves",
+                "label": "招式",
+                "items": [
+                  {
+                    "id": "基础攻击",
+                    "label": "基础攻击",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "mechanisms",
+                "label": "机制",
+                "items": [
+                  {
+                    "id": "一息还真",
+                    "label": "一息还真",
+                    "display": ""
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "attributes",
+                "label": "属性",
+                "items": [
+                  {
+                    "id": "攻击",
+                    "label": "攻击",
+                    "display": "10",
+                    "value": 10
+                  },
+                  {
+                    "id": "防御",
+                    "label": "防御",
+                    "display": "10",
+                    "value": 10
+                  },
+                  {
+                    "id": "速度",
+                    "label": "速度",
+                    "display": "102",
+                    "value": 102
+                  },
+                  {
+                    "id": "命中率",
+                    "label": "命中率",
+                    "display": "96%",
+                    "value": 96
+                  },
+                  {
+                    "id": "暴击率",
+                    "label": "暴击率",
+                    "display": "5%",
+                    "value": 5
+                  }
+                ],
+                "empty_text": ""
+              },
+              {
+                "id": "settlement",
+                "label": "本场统计",
+                "items": [
+                  {
+                    "id": "造成伤害",
+                    "label": "造成伤害",
+                    "display": "84"
+                  },
+                  {
+                    "id": "恢复资源",
+                    "label": "恢复资源",
+                    "display": "25.2"
+                  },
+                  {
+                    "id": "触发机制",
+                    "label": "触发机制",
+                    "display": "1"
+                  }
+                ],
+                "empty_text": ""
+              }
+            ]
+          }
+        ],
+        "counts": {
+          "actions": 19,
+          "events": 135
+        },
+        "timeline": [
+          {
+            "sequence": 0,
+            "title": "战斗建立",
+            "round_label": "战斗建立",
+            "tone": "system",
+            "visual": {
+              "key": "system",
+              "number": 0,
+              "color": "#747d8c",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "system"
+            ],
+            "summary_events": [
+              {
+                "kind": "战斗开始",
+                "label": "开战",
+                "tone": "phase",
+                "category": "system",
+                "text": "晓楠与石门守修进入战斗",
+                "source": {
+                  "key": "system",
+                  "label": "天机记录"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "system",
+                  "number": 0,
+                  "color": "#747d8c",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 1,
+            "title": "晓楠 对 石门守修 使用 离火引诀",
+            "round_label": "第 1 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展离火引诀，消耗12点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "真火击造成19.14点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "施加离火灼身，持续2回合",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 2,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 2 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 3,
+            "title": "晓楠 对 石门守修 使用 星枢回转",
+            "round_label": "第 3 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展星枢回转，消耗9点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "星辉造成16.4点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 4,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 4 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击暴击，造成14点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status_end",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "离火灼身消散",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 5,
+            "title": "晓楠 对 石门守修 使用 三叩天门",
+            "round_label": "第 5 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展三叩天门，消耗6点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡一叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡二叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡三叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 6,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 6 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 7,
+            "title": "晓楠 对 石门守修 使用 离火引诀",
+            "round_label": "第 7 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展离火引诀，消耗12点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "真火击造成19.14点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "施加离火灼身，持续2回合",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 8,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 8 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "miss",
+                "label": "闪避",
+                "tone": "control",
+                "category": "damage",
+                "text": "基础攻击被闪避",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 9,
+            "title": "晓楠 对 石门守修 使用 星枢回转",
+            "round_label": "第 9 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展星枢回转，消耗9点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "星辉造成16.4点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 10,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 10 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status_end",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "离火灼身消散",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 11,
+            "title": "晓楠 对 石门守修 使用 三叩天门",
+            "round_label": "第 11 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展三叩天门，消耗6点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡一叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡二叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "踏罡三叩造成7.66点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 12,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 12 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 13,
+            "title": "晓楠 对 石门守修 使用 离火引诀",
+            "round_label": "第 13 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "resource",
+              "damage",
+              "system",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "skill",
+                "label": "招式",
+                "tone": "resource",
+                "category": "resource",
+                "text": "施展离火引诀，消耗12点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "真火击造成19.14点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "施加离火灼身，持续2回合",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "星枢回转触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "cooldown",
+                "label": "冷却",
+                "tone": "status",
+                "category": "status",
+                "text": "技能冷却由1变为0",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 14,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 14 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 15,
+            "title": "晓楠 对 石门守修 使用 基础攻击",
+            "round_label": "第 15 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "status",
+              "resource"
+            ],
+            "summary_events": [
+              {
+                "kind": "受到致命伤害",
+                "label": "致命",
+                "tone": "damage",
+                "category": "damage",
+                "text": "石门守修受到致命伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "fatal_guard",
+                "label": "护命",
+                "tone": "status",
+                "category": "status",
+                "text": "一息还真",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成12.8点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "一息还真恢复25.2点血气",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 16,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 16 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system",
+              "resource",
+              "status"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "离火灼身造成3.61点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "trigger",
+                "label": "机制",
+                "tone": "phase",
+                "category": "system",
+                "text": "火里栽莲触发",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "recover",
+                "label": "恢复",
+                "tone": "resource",
+                "category": "resource",
+                "text": "火里栽莲恢复1点精神",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "status_end",
+                "label": "状态",
+                "tone": "status",
+                "category": "status",
+                "text": "离火灼身消散",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 17,
+            "title": "晓楠 对 石门守修 使用 基础攻击",
+            "round_label": "第 17 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成18.23点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 18,
+            "title": "石门守修 对 晓楠 使用 基础攻击",
+            "round_label": "第 18 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "opponent:20260728",
+              "number": 2,
+              "color": "#008f75",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage"
+            ],
+            "summary_events": [
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成10点伤害",
+                "source": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "target": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "visual": {
+                  "key": "opponent:20260728",
+                  "number": 2,
+                  "color": "#008f75",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          },
+          {
+            "sequence": 19,
+            "title": "晓楠 对 石门守修 使用 基础攻击",
+            "round_label": "第 19 次行动",
+            "tone": "damage",
+            "visual": {
+              "key": "player",
+              "number": 1,
+              "color": "#df3654",
+              "foreground": "#ffffff"
+            },
+            "categories": [
+              "damage",
+              "system"
+            ],
+            "summary_events": [
+              {
+                "kind": "受到致命伤害",
+                "label": "致命",
+                "tone": "damage",
+                "category": "damage",
+                "text": "石门守修受到致命伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "damage",
+                "label": "伤害",
+                "tone": "damage",
+                "category": "damage",
+                "text": "基础攻击造成4.36点伤害",
+                "source": {
+                  "key": "player",
+                  "label": "晓楠"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "player",
+                  "number": 1,
+                  "color": "#df3654",
+                  "foreground": "#ffffff"
+                }
+              },
+              {
+                "kind": "战斗结束",
+                "label": "结果",
+                "tone": "phase",
+                "category": "system",
+                "text": "晓楠取胜",
+                "source": {
+                  "key": "system",
+                  "label": "天机记录"
+                },
+                "target": {
+                  "key": "opponent:20260728",
+                  "label": "石门守修"
+                },
+                "visual": {
+                  "key": "system",
+                  "number": 0,
+                  "color": "#747d8c",
+                  "foreground": "#ffffff"
+                }
+              }
+            ],
+            "comparison_available": true
+          }
+        ]
+      }
+    ]
+  },
+  "game_name": "晓楠修仙"
+}

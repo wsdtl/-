@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>晓楠修仙 · 天道管理台</title>
+  <link rel="stylesheet" href="/static/game-console/style.css?v=1">
+</head>
+<body>
+  <main class="console-shell" id="consoleShell" hidden>
+    <header class="console-header">
+      <div class="brand-block">
+        <h1>晓楠修仙</h1>
+        <span>天道</span>
+      </div>
+      <div class="driver-filter" role="group" aria-label="消息来源">
+        <button type="button" data-filter="all" class="is-active">全部</button>
+        <button type="button" data-filter="qq">QQ</button>
+        <button type="button" data-filter="local">本地</button>
+      </div>
+      <div class="header-actions">
+        <span class="connection-status is-waiting" id="connectionStatus">连接中</span>
+        <button type="button" class="logout-button" id="logoutButton">退出</button>
+      </div>
+    </header>
+
+    <section class="message-stage" aria-label="消息流水">
+      <div class="message-list" id="messageList" tabindex="0">
+        <div class="history-sentinel" id="historySentinel" aria-live="polite">读取更早消息</div>
+      </div>
+      <button type="button" class="jump-latest" id="jumpLatest" hidden>
+        回到最新 <span id="unreadCount"></span>
+      </button>
+    </section>
+
+    <form class="command-composer" id="commandForm">
+      <textarea id="commandInput" rows="1" maxlength="4000" placeholder="输入游戏命令" aria-label="游戏命令"></textarea>
+      <button type="submit" id="sendButton">发送</button>
+    </form>
+  </main>
+
+  <section class="login-shell" id="loginShell">
+    <form class="login-panel" id="loginForm" autocomplete="on">
+      <div class="login-mark">晓楠修仙</div>
+      <h1>天道管理台</h1>
+      <label for="username">身份</label>
+      <input id="username" name="username" type="text" value="天道" autocomplete="username" readonly required>
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <p class="login-status" id="loginStatus" role="status" aria-live="polite"></p>
+      <button type="submit" id="loginButton">进入管理台</button>
+    </form>
+  </section>
+
+  <script src="/static/game-console/app.js?v=1" defer></script>
+</body>
+</html>

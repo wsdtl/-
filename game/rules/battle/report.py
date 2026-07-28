@@ -1,0 +1,463 @@
+"""把战斗结算转换为前端只需渲染的公开战报。"""
+
+from __future__ import annotations
+
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+from .catalog import BattleReportCatalog
+from .models import BattleEvent, BattleOutcome, StatusState
+
+
+@dataclass(frozen=True)
+class BattleReportParticipant:
+    """生成战报所需的参战者公开快照。"""
+
+    id: str
+    name: str
+    title: str
+    attributes: Mapping[str, float]
+    initial_health: float
+    final_health: float
+    level: int = 1
+    kind: str = "修士"
+    initial_spirit: float = 0.0
+    final_spirit: float = 0.0
+    initial_shield: float = 0.0
+    final_shield: float = 0.0
+    initial_statuses: Sequence[StatusState | Mapping[str, Any]] = ()
+    statuses: Sequence[StatusState | Mapping[str, Any]] = ()
+    techniques: Sequence[Mapping[str, Any]] = ()
+    moves: Sequence[str] = ()
+    mechanisms: Sequence[str] = ()
+    ability_definitions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    color: str = ""
+    extra: Mapping[str, Any] = field(default_factory=dict)
+
+
+def build_battle_report(
+    outcome: BattleOutcome,
+    participants: Sequence[BattleReportParticipant],
+    *,
+    catalog: BattleReportCatalog,
+    seed: int | None = None,
+    generated_at: str | None = None,
+    scene: str = "青岚山演武台",
+) -> dict[str, Any]:
+    """生成 `晓楠修仙.战报.v1`；前端不再解释战斗事件。"""
+
+    if len(participants) != 2:
+        raise ValueError("当前战报必须恰好包含两名参战者")
+    if len({value.id for value in participants}) != len(participants):
+        raise ValueError("战报参战者 ID 不能重复")
+    outcome_ids = {outcome.left.id, outcome.right.id}
+    participant_ids = {value.id for value in participants}
+    if participant_ids != outcome_ids:
+        raise ValueError("战报参战者必须与战斗结果中的两名参战者一致")
+
+    palette = catalog.participant_colors
+    participant_colors = {
+        value.id: value.color or palette[index % len(palette)]
+        for index, value in enumerate(participants)
+    }
+    participants_by_id = {value.id: value for value in participants}
+    event_reports = [
+        _event_report(event, index + 1, participants_by_id, participant_colors, catalog)
+        for index, event in enumerate(outcome.events)
+    ]
+    category_counts = Counter(event["category"] for event in event_reports)
+    filters = []
+    for definition in catalog.category_definitions:
+        category_id = definition["id"]
+        filters.append(
+            {
+                **definition,
+                "count": len(event_reports)
+                if category_id == "all"
+                else category_counts.get(category_id, 0),
+            }
+        )
+
+    winner_id = outcome.winner_id or ""
+    participant_reports = [
+        _participant_report(
+            value,
+            number=index + 1,
+            color=participant_colors[value.id],
+            outcome_label="平" if outcome.draw else "胜" if value.id == winner_id else "负",
+            events=outcome.events,
+            catalog=catalog,
+        )
+        for index, value in enumerate(participants)
+    ]
+    result_title = (
+        "胜负未分"
+        if outcome.draw
+        else f"{participants_by_id[winner_id].name}取胜"
+    )
+
+    return {
+        "schema": catalog.report_schema,
+        "generated_at": generated_at or datetime.now().astimezone().isoformat(timespec="seconds"),
+        "scene": scene,
+        "headline": f"{participants[0].name} 对阵 {participants[1].name}",
+        "system": dict(catalog.system),
+        "result": {
+            "code": (
+                "draw"
+                if outcome.draw
+                else "victory"
+                if winner_id == participants[0].id
+                else "defeat"
+            ),
+            "title": result_title,
+            "description": f"历经 {outcome.actions} 次行动，{result_title}。",
+            "actions": outcome.actions,
+            "event_count": len(event_reports),
+            "trigger_count": outcome.trigger_activations,
+            "winner_id": winner_id or None,
+            "seed": seed,
+        },
+        "view_modes": catalog.view_modes,
+        "filters": filters,
+        "participants": participant_reports,
+        "events": event_reports,
+    }
+
+
+def _participant_report(
+    participant: BattleReportParticipant,
+    *,
+    number: int,
+    color: str,
+    outcome_label: str,
+    events: Sequence[BattleEvent],
+    catalog: BattleReportCatalog,
+) -> dict[str, Any]:
+    damage = sum(
+        event.amount
+        for event in events
+        if event.kind == "damage" and event.source_id == participant.id
+    )
+    recovery = sum(
+        event.amount
+        for event in events
+        if catalog.normalized_category(event.kind) == "recover"
+        and event.source_id == participant.id
+    )
+    mechanisms = {
+        event.mechanism
+        for event in events
+        if event.source_id == participant.id and event.mechanism
+    }
+    mechanisms.update(str(value) for value in participant.mechanisms if str(value).strip())
+
+    health_max = max(1.0, float(participant.attributes.get("血气上限", 1.0)))
+    spirit_max = max(0.0, float(participant.attributes.get("精神上限", 0.0)))
+    shield_max = max(0.0, float(participant.attributes.get("护盾上限", 0.0)))
+    resources = [
+        _resource("health", participant.final_health, health_max, catalog),
+    ]
+    if spirit_max > 0 or participant.final_spirit > 0:
+        resources.append(_resource("spirit", participant.final_spirit, spirit_max, catalog))
+    if shield_max > 0 or participant.final_shield > 0:
+        resources.append(_resource("shield", participant.final_shield, shield_max, catalog))
+
+    return {
+        "id": participant.id,
+        "number": number,
+        "name": participant.name,
+        "title": participant.title,
+        "level": max(1, int(participant.level)),
+        "kind": str(participant.kind or "参战者"),
+        "color": color,
+        "outcome": outcome_label,
+        "resources": resources,
+        "initial_resources": {
+            "health": _round(participant.initial_health),
+            "spirit": _round(participant.initial_spirit),
+            "shield": _round(participant.initial_shield),
+        },
+        "totals": [
+            {"label": "造成伤害", "value": _number_text(damage)},
+            {"label": "恢复资源", "value": _number_text(recovery)},
+            {"label": "触发机制", "value": str(len(mechanisms))},
+        ],
+        "attributes": [
+            {
+                "key": key,
+                "label": key,
+                "value": _round(float(participant.attributes.get(key, 0.0))),
+                "display": _attribute_text(
+                    key,
+                    float(participant.attributes.get(key, 0.0)),
+                    catalog,
+                ),
+            }
+            for key in catalog.attribute_summary
+            if float(participant.attributes.get(key, 0.0)) != 0
+        ],
+        "techniques": [
+            _technique_report(value, catalog, participant.ability_definitions)
+            for value in participant.techniques
+        ],
+        "moves": [str(value) for value in participant.moves if str(value).strip()],
+        "mechanisms": sorted(mechanisms),
+        "statuses": [_status_report(value) for value in participant.statuses],
+        "initial_statuses": [
+            _status_report(value) for value in participant.initial_statuses
+        ],
+        "extra": dict(participant.extra),
+    }
+
+
+def _event_report(
+    event: BattleEvent,
+    sequence: int,
+    participants: Mapping[str, BattleReportParticipant],
+    colors: Mapping[str, str],
+    catalog: BattleReportCatalog,
+) -> dict[str, Any]:
+    category = catalog.normalized_category(event.kind)
+    category_definition = catalog.normalized_category_definition(category)
+    is_system = event.kind in catalog.system_kinds
+    source = _actor_report(
+        "system" if is_system else event.source_id,
+        str(catalog.system["name"]) if is_system else event.source,
+        participants,
+        colors,
+        catalog,
+    )
+    target = _actor_report(event.target_id, event.target, participants, colors, catalog)
+    details = [
+        {
+            "label": str(key),
+            "value": _json_value(value),
+            "display": _detail_text(str(key), value, catalog),
+        }
+        for key, value in event.values.items()
+        if key != "技能键"
+    ]
+    steps = [
+        {
+            "label": key.replace("伤害", "") or "伤害",
+            "value": _round(float(event.values[key])),
+            "display": _number_text(float(event.values[key])),
+        }
+        for key in catalog.damage_steps
+        if isinstance(event.values.get(key), int | float)
+        and not isinstance(event.values.get(key), bool)
+    ]
+    amount_text = ""
+    if event.amount > 0 and category == "damage":
+        amount_text = f"{_number_text(event.amount)} 伤害"
+    elif event.amount > 0 and category == "recover":
+        amount_text = f"{_number_text(event.amount)} 恢复"
+
+    return {
+        "sequence": sequence,
+        "turn": event.turn,
+        "turn_label": "开战" if event.turn == 0 else f"第 {event.turn} 次行动",
+        "kind": event.kind,
+        "kind_label": catalog.kind_label(event.kind),
+        "category": category,
+        "category_label": category_definition["label"],
+        "category_color": category_definition["color"],
+        "compact_visible": event.kind not in catalog.compact_hidden_kinds,
+        "source": source,
+        "target": target,
+        "text": event.text,
+        "amount": _round(event.amount),
+        "amount_text": amount_text,
+        "mechanism": event.mechanism,
+        "tags": list(event.tags),
+        "steps": steps,
+        "details": details,
+    }
+
+
+def _actor_report(
+    actor_id: str,
+    fallback_name: str,
+    participants: Mapping[str, BattleReportParticipant],
+    colors: Mapping[str, str],
+    catalog: BattleReportCatalog,
+) -> dict[str, Any]:
+    participant = participants.get(actor_id)
+    if participant is None:
+        return {
+            "id": actor_id or "system",
+            "name": fallback_name or str(catalog.system["name"]),
+            "number": None,
+            "color": str(catalog.system["color"]),
+        }
+    ids = list(participants)
+    return {
+        "id": participant.id,
+        "name": participant.name,
+        "number": ids.index(participant.id) + 1,
+        "color": colors[participant.id],
+    }
+
+
+def _resource(
+    resource_id: str,
+    current: float,
+    maximum: float,
+    catalog: BattleReportCatalog,
+) -> dict[str, Any]:
+    definition = catalog.resources[resource_id]
+    maximum = max(0.0, float(maximum))
+    current = max(0.0, min(maximum, float(current))) if maximum else max(0.0, float(current))
+    return {
+        "id": resource_id,
+        "label": definition["label"],
+        "current": _round(current),
+        "maximum": _round(maximum),
+        "display": f"{_number_text(current)} / {_number_text(maximum)}",
+        "percent": round(current / maximum * 100, 2) if maximum else 0,
+        "color": definition["color"],
+    }
+
+
+def _technique_report(
+    value: Mapping[str, Any],
+    catalog: BattleReportCatalog,
+    ability_definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    active: Mapping[str, Any] = {}
+    mechanisms: list[str] = []
+    fixed_attributes: dict[str, float] = {}
+    for raw_node in value.get("能力") or value.get("组成") or ():
+        if not isinstance(raw_node, Mapping):
+            continue
+        node = dict(raw_node)
+        executor = _ability_executor(node, ability_definitions)
+        if executor == "装配主动技能" and not active:
+            active = node
+        elif executor == "装配属性":
+            fixed_attributes.update(
+                {
+                    str(key): float(amount)
+                    for key, amount in dict(node.get("属性") or {}).items()
+                }
+            )
+        if executor in {"装配主动技能", "装配被动技能"}:
+            mechanisms.extend(_mechanism_names(node.get("效果") or (), ability_definitions))
+
+    affixes = []
+    for item in value.get("词条") or ():
+        if isinstance(item, Mapping):
+            name = str(item.get("词条") or item.get("名称") or item.get("属性") or "词条")
+            attribute = str(item.get("属性") or "")
+            amount = item.get("数值")
+            display = name
+            if isinstance(amount, int | float) and not isinstance(amount, bool):
+                display = (
+                    f"{name} · {attribute} "
+                    f"+{_attribute_text(attribute, float(amount), catalog)}"
+                )
+            affixes.append({"name": name, "display": display})
+        else:
+            affixes.append({"name": str(item), "display": str(item)})
+    return {
+        "name": str(value.get("功法") or value.get("名称") or "未命名功法"),
+        "rarity": str(value.get("品级") or ""),
+        "born_order": int(value.get("出生序号") or 0),
+        "move": str(active.get("名称") or ""),
+        "mechanisms": list(dict.fromkeys(mechanisms)),
+        "affixes": affixes,
+        "fixed_attributes": fixed_attributes,
+    }
+
+
+def _mechanism_names(
+    values: Sequence[Any],
+    ability_definitions: Mapping[str, Mapping[str, Any]] | None,
+) -> list[str]:
+    result: list[str] = []
+    for raw_value in values:
+        if not isinstance(raw_value, Mapping):
+            continue
+        value = dict(raw_value)
+        executor = _ability_executor(value, ability_definitions)
+        if executor == "引用机制":
+            result.append(str(value.get("机制") or ""))
+        else:
+            result.append(str(value.get("名称") or value.get("能力") or ""))
+    return [value for value in result if value]
+
+
+def _ability_executor(
+    value: Mapping[str, Any],
+    definitions: Mapping[str, Mapping[str, Any]] | None,
+) -> str:
+    ability = str(value.get("能力") or "")
+    if definitions and ability in definitions:
+        return str(definitions[ability].get("执行器") or ability)
+    return ability
+
+
+def _status_report(value: StatusState | Mapping[str, Any]) -> dict[str, Any]:
+    status = value.to_dict() if isinstance(value, StatusState) else dict(value)
+    return {
+        "name": str(status.get("名称") or "未知状态"),
+        "category": str(status.get("类别") or status.get("分类") or "中性"),
+        "turns": max(0, int(status.get("剩余回合") or status.get("持续数值") or 0)),
+        "stacks": max(1, int(status.get("层数") or 1)),
+        "source": str(status.get("来源名称") or status.get("来源") or ""),
+    }
+
+
+def _detail_text(key: str, value: Any, catalog: BattleReportCatalog) -> str:
+    if value is None:
+        return "未进行判定"
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, int | float):
+        if key in catalog.percent_details:
+            return _percent_text(float(value))
+        if key in catalog.multiplier_details:
+            return f"{_number_text(float(value))} 倍"
+        return _number_text(float(value))
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return "、".join(str(item) for item in value)
+    return str(value)
+
+
+def _attribute_text(key: str, value: float, catalog: BattleReportCatalog) -> str:
+    if key in catalog.percent_attributes:
+        return f"{_number_text(value)}%"
+    return _number_text(value)
+
+
+def _percent_text(value: float) -> str:
+    return f"{_number_text(value * 100)}%"
+
+
+def _number_text(value: float) -> str:
+    rounded = round(float(value), 2)
+    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.2f}".rstrip("0").rstrip(".")
+
+
+def _round(value: float) -> float | int:
+    rounded = round(float(value), 3)
+    return int(rounded) if rounded.is_integer() else rounded
+
+
+def _json_value(value: Any) -> Any:
+    if value is None or isinstance(value, bool | str):
+        return value
+    if isinstance(value, int | float):
+        return _round(float(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence):
+        return [_json_value(item) for item in value]
+    return str(value)
+
+
+__all__ = ["BattleReportParticipant", "build_battle_report"]

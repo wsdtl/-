@@ -1,0 +1,7 @@
+APScheduler==3.11.0
+cryptography==44.0.1
+fastapi==0.115.8
+loguru==0.7.3
+tzdata==2025.1
+urllib3==2.3.0
+uvicorn==0.34.0

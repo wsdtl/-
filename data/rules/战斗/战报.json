@@ -1,0 +1,282 @@
+{
+  "版本": "晓楠修仙.战报配置.v1",
+  "协议": {
+    "战报": "晓楠修仙.战报.v1",
+    "展示": "game.battle_report.presentation",
+    "展示版本": 3
+  },
+  "游戏名称": "晓楠修仙",
+  "视觉": {
+    "前景色": "#ffffff",
+    "系统": {
+      "name": "天机记录",
+      "color": "#747d8c"
+    },
+    "参战者颜色": [
+      "#df3654",
+      "#008f75",
+      "#236bd3",
+      "#d07a00"
+    ],
+    "资源": {
+      "health": {
+        "label": "血气",
+        "color": "#d63c50",
+        "tone": "primary",
+        "presentation": "bar"
+      },
+      "spirit": {
+        "label": "精神",
+        "color": "#2869c7",
+        "tone": "secondary",
+        "presentation": "bar"
+      },
+      "shield": {
+        "label": "护盾",
+        "color": "#b47400",
+        "tone": "shield",
+        "presentation": "value"
+      }
+    }
+  },
+  "标准化": {
+    "分类": [
+      {"id": "all", "label": "全部", "color": "#505967"},
+      {"id": "damage", "label": "伤害", "color": "#d63c50"},
+      {"id": "status", "label": "状态", "color": "#b47400"},
+      {"id": "recover", "label": "恢复", "color": "#087d68"},
+      {"id": "action", "label": "行动", "color": "#2869c7"}
+    ],
+    "默认分类": "action",
+    "类型分类": {
+      "damage": "damage",
+      "miss": "damage",
+      "受到致命伤害": "damage",
+      "status": "status",
+      "status_end": "status",
+      "control_resisted": "status",
+      "fatal_guard": "status",
+      "cooldown": "status",
+      "recover": "recover",
+      "heal": "recover",
+      "medicine": "recover"
+    },
+    "类型名称": {
+      "战斗开始": "开战",
+      "战斗结束": "结果",
+      "行动开始": "行动",
+      "行动结束": "行动",
+      "skill": "招式",
+      "技能施放后": "招式",
+      "damage": "伤害",
+      "miss": "闪避",
+      "受到致命伤害": "致命",
+      "普通攻击后": "普攻",
+      "status": "状态",
+      "status_end": "状态",
+      "control_resisted": "抵抗",
+      "fatal_guard": "护命",
+      "trigger": "机制",
+      "cooldown": "冷却",
+      "recover": "恢复",
+      "heal": "治疗",
+      "medicine": "丹药"
+    },
+    "系统类型": [
+      "战斗开始",
+      "战斗结束"
+    ],
+    "紧凑隐藏类型": [
+      "行动开始",
+      "行动结束",
+      "技能施放后",
+      "普通攻击后"
+    ],
+    "百分比明细": [
+      "命中率",
+      "命中判定值",
+      "暴击率",
+      "暴击判定值",
+      "格挡率",
+      "格挡判定值",
+      "格挡减伤"
+    ],
+    "倍率明细": [
+      "暴击倍率",
+      "防御倍率",
+      "伤害倍率"
+    ],
+    "百分比属性": [
+      "命中率",
+      "闪避率",
+      "暴击率",
+      "抗暴率",
+      "格挡率",
+      "破格率",
+      "格挡减伤",
+      "比例穿透",
+      "伤害加成",
+      "伤害减免",
+      "吸血率",
+      "反伤率",
+      "连击率",
+      "连击伤害",
+      "反击率"
+    ],
+    "属性摘要": [
+      "攻击",
+      "防御",
+      "速度",
+      "命中率",
+      "闪避率",
+      "暴击率",
+      "格挡率",
+      "伤害加成",
+      "伤害减免",
+      "吸血率",
+      "连击率",
+      "反击率"
+    ],
+    "伤害步骤": [
+      "原始伤害",
+      "暴击后伤害",
+      "防御后伤害",
+      "增减伤后伤害",
+      "格挡后伤害",
+      "实际伤害"
+    ],
+    "查看模式": [
+      {"id": "compact", "label": "简要"},
+      {"id": "full", "label": "完整"}
+    ]
+  },
+  "展示": {
+    "界面": {
+      "text": {
+        "brand_suffix": "交锋记录",
+        "settlement_label": "结算",
+        "archive_kicker": "交锋档案",
+        "archive_title": "完整战报已归档",
+        "more_summary": "更多结算",
+        "segment_label": "战斗片段",
+        "segment_select_label": "选择战斗片段",
+        "previous_segment_label": "上一片段",
+        "next_segment_label": "下一片段",
+        "participant_panel_title": "参战者状态",
+        "comparison_title": "行动前后状态",
+        "comparison_empty": "本次行动没有可见状态变化。",
+        "process_group_label": "过程记录",
+        "raw_data_label": "后端原始记录",
+        "event_facts_label": "事件事实",
+        "empty_timeline": "本场交锋没有可展示的行动事实。",
+        "empty_filter": "当前筛选下没有事件。",
+        "empty_participants": "本场交锋没有参战者快照。",
+        "empty_value": "无",
+        "undecided_value": "未决",
+        "none_actor": "无",
+        "other_team_label": "其他阵营",
+        "additional_team_template": "另有 {count} 方"
+      },
+      "modes": [
+        {"id": "compact", "label": "战斗记录"},
+        {"id": "detail", "label": "全部事件"}
+      ],
+      "filters": [
+        {"id": "all", "label": "全部"},
+        {"id": "damage", "label": "伤害"},
+        {"id": "status", "label": "状态与控制"},
+        {"id": "resource", "label": "资源与恢复"},
+        {"id": "system", "label": "过程"}
+      ],
+      "snapshots": [
+        {"id": "before", "label": "战前"},
+        {"id": "after", "label": "战后"}
+      ]
+    },
+    "伤害事实": [
+      "原始伤害",
+      "命中率",
+      "命中判定值",
+      "命中",
+      "暴击率",
+      "暴击判定值",
+      "暴击",
+      "暴击倍率",
+      "有效防御",
+      "防御后伤害",
+      "伤害倍率",
+      "增减伤后伤害",
+      "格挡率",
+      "格挡判定值",
+      "格挡",
+      "格挡后伤害",
+      "实际伤害",
+      "伤害前护盾",
+      "伤害后护盾",
+      "伤害前血气",
+      "伤害后血气"
+    ],
+    "类型分类": {
+      "skill": "resource",
+      "recover": "resource",
+      "heal": "resource",
+      "medicine": "resource"
+    },
+    "战报分类": {
+      "damage": "damage",
+      "status": "status",
+      "recover": "resource"
+    },
+    "默认分类": "system",
+    "类型色调": {
+      "miss": "control",
+      "control_resisted": "control"
+    },
+    "分类色调": {
+      "damage": "damage",
+      "status": "status",
+      "resource": "resource"
+    },
+    "默认色调": "phase",
+    "分类优先级": [
+      "damage",
+      "status",
+      "resource",
+      "system"
+    ],
+    "资源键": {
+      "血气": "health",
+      "精神": "spirit",
+      "护盾": "shield"
+    },
+    "状态色调": {
+      "负面": "negative",
+      "控制": "negative",
+      "正面": "positive",
+      "增益": "positive"
+    },
+    "默认状态色调": "neutral",
+    "结果色调": {
+      "victory": "victory",
+      "defeat": "defeat",
+      "draw": "neutral"
+    },
+    "默认结果色调": "neutral",
+    "参战者": {
+      "状态组": {
+        "id": "temporary_effects",
+        "label": "当前状态",
+        "presentation": "chips",
+        "empty_text": "当前无持续状态"
+      },
+      "详情标题": "完整状态",
+      "详情分组": {
+        "techniques": "功法",
+        "moves": "招式",
+        "mechanisms": "机制",
+        "attributes": "属性",
+        "settlement": "本场统计"
+      }
+    }
+  }
+}
