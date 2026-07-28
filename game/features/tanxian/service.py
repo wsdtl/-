@@ -13,6 +13,7 @@ from typing import Any
 from game.content import GameContent
 from game.core import Database, elapsed_seconds, record_exists, require_user_id, utc_now
 from game.features.didian import LocationFeature
+from game.features.diren import EnemyFeature
 from game.features.player import PlayerFeature
 from game.rules import BattleEngine, CombatantSnapshot
 
@@ -74,6 +75,7 @@ class ExplorationFeature:
         content: GameContent,
         player: PlayerFeature,
         location: LocationFeature,
+        enemy: EnemyFeature,
         battle: BattleEngine,
         *,
         clock: Callable[[], str] = utc_now,
@@ -83,6 +85,7 @@ class ExplorationFeature:
         self.content = content
         self.player = player
         self.location = location
+        self.enemy = enemy
         self.battle = battle
         self.clock = clock
         self.seed_factory = seed_factory or (lambda: secrets.randbits(63))
@@ -229,14 +232,8 @@ class ExplorationFeature:
                 break
             stamina -= cost
             enemy_id = str(rng.choice(enemy_pool))
-            enemy = self.content.enemy_definitions[enemy_id]
-            enemy_rng = random.Random(rng.getrandbits(63))
-            enemy_level, enemy_attributes = _roll_enemy_attributes(
-                enemy_rng,
-                self.content,
-                enemy,
-            )
-            enemy_stones, enemy_drops = _roll_enemy_drops(enemy_rng, enemy)
+            enemy_seed = rng.getrandbits(63)
+            enemy = self.enemy.spawn(enemy_id, seed=enemy_seed)
             battle_seed = rng.getrandbits(63)
             player_snapshot = CombatantSnapshot(
                 id=f"player:{assets.player.user_id}",
@@ -256,13 +253,7 @@ class ExplorationFeature:
                 cooldowns=cooldowns,
                 skill_cursor=skill_cursor,
             )
-            enemy_snapshot = CombatantSnapshot(
-                id=f"enemy:{enemy_id}:{battle_seed}",
-                name=enemy_id,
-                attributes=enemy_attributes,
-                level=enemy_level,
-                kind=str(enemy["类别"]),
-            )
+            enemy_snapshot = enemy.battle_snapshot()
             outcome = self.battle.simulate(
                 left=player_snapshot,
                 right=enemy_snapshot,
@@ -289,8 +280,8 @@ class ExplorationFeature:
                     "round": number,
                     "enemy_id": enemy_id,
                     "enemy_name": enemy_id,
-                    "enemy_level": enemy_level,
-                    "enemy_kind": str(enemy["类别"]),
+                    "enemy_level": enemy.level,
+                    "enemy_kind": enemy.kind,
                     "result": battle_result,
                     "actions": outcome.actions,
                     "health": health,
@@ -301,11 +292,11 @@ class ExplorationFeature:
                     "cooldowns": cooldowns,
                     "skill_cursor": skill_cursor,
                     "consumed_items": dict(outcome.left.consumed_items),
-                    "enemy_spirit_stones": enemy_stones,
-                    "enemy_drops": enemy_drops,
+                    "enemy_spirit_stones": enemy.spirit_stones,
+                    "enemy_drops": enemy.defeated_items(outcome.right.inventory),
                     "weapon_experience": _roll_range(
-                        enemy_rng,
-                        enemy["交锋所得"]["本命武器经验"],
+                        random.Random(enemy_seed ^ battle_seed),
+                        self.content.enemy_definitions[enemy_id]["交锋所得"]["本命武器经验"],
                     ),
                 }
             )
@@ -381,37 +372,6 @@ class ExplorationFeature:
 
 def _roll_range(rng: random.Random, value: list[int]) -> int:
     return rng.randint(int(value[0]), int(value[1]))
-
-
-def _roll_enemy_attributes(
-    rng: random.Random,
-    content: GameContent,
-    definition: dict[str, Any],
-) -> tuple[int, dict[str, float]]:
-    level = _roll_range(rng, definition["等级"])
-    attributes = content.attributes_at_level(
-        definition["属性"],
-        definition["每级成长"],
-        level,
-    )
-    minimum, maximum = (int(value) for value in definition["实力波动"]["倍率"])
-    for key in definition["实力波动"]["属性"]:
-        name = str(key)
-        attributes[name] = round(attributes[name] * rng.randint(minimum, maximum) / 100, 4)
-    return level, attributes
-
-
-def _roll_enemy_drops(
-    rng: random.Random,
-    definition: dict[str, Any],
-) -> tuple[int, dict[str, int]]:
-    drops = definition["掉落"]
-    stones = _roll_range(rng, drops["灵石"])
-    items: Counter[str] = Counter()
-    for drop in drops["物品"]:
-        if rng.random() <= float(drop["概率"]):
-            items[str(drop["物品"])] += _roll_range(rng, drop["数量"])
-    return stones, dict(items)
 
 
 def _load_rounds(value: str) -> list[dict[str, Any]]:

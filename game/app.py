@@ -10,7 +10,14 @@ from launch import OnEvent, config
 
 from .content import GameContent
 from .core import Database, JsonDataReader, utc_now
-from .features import ExplorationFeature, LocationFeature, NpcFeature, PlayerFeature, SeclusionFeature
+from .features import (
+    EnemyFeature,
+    ExplorationFeature,
+    LocationFeature,
+    NpcFeature,
+    PlayerFeature,
+    SeclusionFeature,
+)
 from .rules import BattleEngine
 
 
@@ -22,6 +29,7 @@ class GameServices:
     player: PlayerFeature
     location: LocationFeature
     npc: NpcFeature
+    enemy: EnemyFeature
     battle: BattleEngine
     seclusion: SeclusionFeature
     exploration: ExplorationFeature
@@ -47,6 +55,7 @@ def build_game_services(
     player = PlayerFeature(database, content)
     location = LocationFeature(database, content, player, clock=clock)
     npc = NpcFeature(content, location)
+    enemy = EnemyFeature(content)
     battle = BattleEngine(content.combat)
     seclusion = SeclusionFeature(database, content, player, location, clock=clock)
     exploration = ExplorationFeature(
@@ -54,6 +63,7 @@ def build_game_services(
         content,
         player,
         location,
+        enemy,
         battle,
         clock=clock,
     )
@@ -68,6 +78,7 @@ def build_game_services(
         player=player,
         location=location,
         npc=npc,
+        enemy=enemy,
         battle=battle,
         seclusion=seclusion,
         exploration=exploration,
