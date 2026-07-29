@@ -37,7 +37,7 @@ async def show_inventory(message: str, context, client_id: str, manager) -> None
     reply = (
         M.document()
         .section(result.category_name, icon="inventory")
-        .row(("数量", result.total), ("页码", f"{result.page}/{result.pages}"))
+        .row(("条目", result.total), ("页码", f"{result.page}/{result.pages}"))
     )
     if not result.entries:
         reply.line("此类物品为空。")
@@ -51,10 +51,17 @@ async def show_inventory(message: str, context, client_id: str, manager) -> None
         else:
             definition = services.content.item_definitions[entry.key]
             if isinstance(definition.get("使用效果"), dict):
-                name = M.command(entry.name, f"使用物品 {entry.name}")
+                if definition["使用效果"].get("类型") == "增加伙伴经验":
+                    name = M.command(entry.name, f"使用物品 {entry.name} ", submit=False)
+                else:
+                    name = M.command(entry.name, f"使用物品 {entry.name}")
             else:
                 name = entry.name
-            reply.item(index, name, f" ×{entry.quantity} · 评分{entry.score}")
+            reply.item(
+                index,
+                name,
+                f" ×{entry.quantity} · 评分{entry.score} · 参考价{entry.reference_price}灵石",
+            )
     if result.pages > 1:
         if result.page > 1:
             reply.line(M.command("上一页", f"纳戒 {result.category_name} {result.page - 1}"))
@@ -69,19 +76,41 @@ async def use_item(message: str, context, client_id: str, manager) -> None:
     if not text:
         await manager.send(_error("用法：使用物品 名称 数量"), client_id)
         return
-    name, quantity = _item_request(text)
     services = current_game_services()
     user_id = _user_id(context)
     await asyncio.to_thread(services.player.ensure, user_id, context.sender_name)
-    result = await asyncio.to_thread(services.player.use_item, user_id, name, quantity)
+    partner_request = _partner_item_request(text, services)
+    if partner_request is None:
+        name, quantity = _item_request(text)
+        result = await asyncio.to_thread(services.player.use_item, user_id, name, quantity)
+    else:
+        name, partner_name, quantity = partner_request
+        result = await asyncio.to_thread(
+            services.npc.use_experience_item,
+            user_id,
+            partner_name,
+            name,
+            quantity,
+            context.sender_name,
+        )
     if result.status == "used":
-        text = f"使用{result.item_name}×{result.quantity}，恢复{_number(result.recovered)}点{result.resource}。"
+        if result.experience:
+            level_text = f"，提升{result.levels_gained}级" if result.levels_gained else ""
+            text = (
+                f"使用{result.item_name}×{result.quantity}，"
+                f"{result.target}获得{result.experience}点经验{level_text}。"
+            )
+        else:
+            text = f"使用{result.item_name}×{result.quantity}，恢复{_number(result.recovered)}点{result.resource}。"
     else:
         text = {
             "not_found": "纳戒中没有这种物品。",
             "not_usable": f"{result.item_name}当前不能直接使用。",
             "insufficient": f"{result.item_name}数量不足。",
             "already_full": f"{result.item_name}对应的状态已经圆满。",
+            "partner_required": "使用同修器物时需要指定一名已结交伙伴。",
+            "target_not_found": f"没有找到已结交伙伴“{result.target}”。",
+            "progress_locked": f"{result.target}当前不能继续获得经验。",
         }[result.status]
     reply = (
         M.document()
@@ -101,6 +130,31 @@ def _item_request(text: str) -> tuple[str, int]:
         except ValueError:
             pass
     return text, 1
+
+
+def _partner_item_request(text: str, services) -> tuple[str, str, int] | None:
+    parts = text.split()
+    if not parts:
+        return None
+    resolved = services.player.resolve_item(parts[0])
+    if resolved is None:
+        return None
+    item_id, _ = resolved
+    use = services.content.item_definitions[item_id].get("使用效果")
+    if not isinstance(use, dict) or use.get("类型") != "增加伙伴经验":
+        return None
+    if len(parts) < 2:
+        return parts[0], "", 1
+    quantity = 1
+    if len(parts) >= 3:
+        try:
+            quantity = max(1, int(parts[-1]))
+            partner_name = " ".join(parts[1:-1])
+        except ValueError:
+            partner_name = " ".join(parts[1:])
+    else:
+        partner_name = parts[1]
+    return parts[0], partner_name, quantity
 
 
 def _category_id(value: str, services) -> str | None:

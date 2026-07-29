@@ -54,21 +54,23 @@ def build_game_services(
     )
     player = PlayerFeature(database, content)
     location = LocationFeature(database, content, player, clock=clock)
-    npc = NpcFeature(content, location)
+    npc = NpcFeature(database, content, location, player, clock=clock)
     enemy = EnemyFeature(content)
     battle = BattleEngine(content.combat)
-    seclusion = SeclusionFeature(database, content, player, location, clock=clock)
+    seclusion = SeclusionFeature(database, content, player, location, npc, clock=clock)
     exploration = ExplorationFeature(
         database,
         content,
         player,
         location,
         enemy,
+        npc,
         battle,
         clock=clock,
     )
     player.initialize()
     location.initialize()
+    npc.initialize()
     seclusion.initialize()
     exploration.initialize()
     return GameServices(

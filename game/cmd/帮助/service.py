@@ -14,9 +14,10 @@ async def show_help(message: str, *, user_id: str, client_id: str, manager) -> N
         return
 
     services = current_game_services()
-    seclusion, exploration = await asyncio.gather(
+    seclusion, exploration, partners = await asyncio.gather(
         asyncio.to_thread(services.seclusion.progress, user_id),
         asyncio.to_thread(services.exploration.progress, user_id),
+        asyncio.to_thread(services.npc.party, user_id),
     )
     if seclusion is not None:
         location = await asyncio.to_thread(services.location.current, user_id)
@@ -29,9 +30,11 @@ async def show_help(message: str, *, user_id: str, client_id: str, manager) -> N
                 ("已完成感悟", f"{seclusion.completed_rounds}/{seclusion.maximum_rounds}轮"),
                 ("结算状态", "可出关" if seclusion.ready else "进行中"),
             )
-            .line(M.command("刷新进度", "帮助"), " | ", M.command("出关", "出关"))
-            .build()
         )
+        if partners:
+            reply.field("同行闭关", "、".join(value.npc_id for value in partners))
+        reply.line(M.command("刷新进度", "帮助"), " | ", M.command("出关", "出关"))
+        reply = reply.build()
     elif exploration is not None:
         location = await asyncio.to_thread(services.location.current, user_id)
         reply = (
@@ -43,13 +46,15 @@ async def show_help(message: str, *, user_id: str, client_id: str, manager) -> N
                 ("已完成遭遇", f"{exploration.completed_rounds}/{exploration.planned_rounds}轮"),
                 ("结算状态", "可结算" if exploration.ready else "进行中"),
             )
-            .line(
-                M.command("刷新进度", "帮助"),
-                " | ",
-                M.command("结束探险", "结束探险"),
-            )
-            .build()
         )
+        if exploration.partners:
+            reply.field("同行参战", "、".join(exploration.partners))
+        reply.line(
+            M.command("刷新进度", "帮助"),
+            " | ",
+            M.command("结束探险", "结束探险"),
+        )
+        reply = reply.build()
     else:
         reply = (
             M.document()
@@ -82,7 +87,11 @@ async def show_help(message: str, *, user_id: str, client_id: str, manager) -> N
                 " | ",
                 M.command("前往", "前往"),
             )
-            .line(M.command("附近修士", "修士"))
+            .line(
+                M.command("附近修士", "修士"),
+                " | ",
+                M.command("同行伙伴", "伙伴"),
+            )
             .section("天道", icon="admin")
             .line(M.command("管理台", "web"))
             .build()

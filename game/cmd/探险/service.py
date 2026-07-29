@@ -10,6 +10,8 @@ from game.features.tanxian import (
     INSUFFICIENT_STAMINA,
     LOCATION_UNAVAILABLE,
     NO_HEALTH,
+    PARTNER_INSUFFICIENT_STAMINA,
+    PARTNER_NO_HEALTH,
     SECLUSION_ACTIVE,
     STARTED,
 )
@@ -61,9 +63,11 @@ async def start(
             .section("探险", icon="system")
             .line("已从", result.location_name, "踏入山野，预计可完成", f"{result.planned_rounds}轮遭遇。")
             .line("每满10分钟解锁1轮，结束探险时才会结算战果。")
-            .line(M.command("查看进度", "帮助"), " | ", M.command("结束探险", "结束探险"))
-            .build()
         )
+        if result.partners:
+            reply.field("同行参战", "、".join(result.partners))
+        reply.line(M.command("查看进度", "帮助"), " | ", M.command("结束探险", "结束探险"))
+        reply = reply.build()
     elif result.status == LOCATION_UNAVAILABLE:
         reply = (
             M.document()
@@ -73,6 +77,20 @@ async def start(
             .build()
         )
     else:
+        if result.status == PARTNER_NO_HEALTH:
+            reply = _message(
+                "探险",
+                f"同行伙伴{result.blocked_partner}血气已经耗尽，请先闭关恢复或让其离队。",
+            )
+            await manager.send(reply, client_id)
+            return
+        if result.status == PARTNER_INSUFFICIENT_STAMINA:
+            reply = _message(
+                "探险",
+                f"同行伙伴{result.blocked_partner}体力不足10点，请先闭关恢复或让其离队。",
+            )
+            await manager.send(reply, client_id)
+            return
         text = {
             ALREADY_ACTIVE: "当前已经在探险",
             SECLUSION_ACTIVE: "正在闭关，不能开始探险",
@@ -117,6 +135,8 @@ async def end(message: str, *, user_id: str, client_id: str, manager) -> None:
             reply.field("本命武器提升等级", result.weapon_levels_gained)
         _append_items(reply, "消耗", result.consumed_items, services)
         _append_items(reply, "所得", result.drops, services)
+        if result.partners:
+            reply.field("同行参战", "、".join(result.partners))
     reply.line(M.command("查看状态", "状态"), " | ", M.command("查看本命武器", "本命武器"))
     await manager.send(reply.build(), client_id)
 

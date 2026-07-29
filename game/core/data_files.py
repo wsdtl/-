@@ -40,13 +40,27 @@ class JsonDataReader:
         except (OSError, json.JSONDecodeError) as exc:
             raise JsonDataError(f"数据文件读取失败：{requested.as_posix()}：{exc}") from exc
 
+    def validate_unique_filenames(self) -> None:
+        """确保整个 data 树不存在同名 JSON，避免扁平加载后来源含混。"""
+
+        sources: dict[str, Path] = {}
+        for path in sorted(self.root.rglob("*.json"), key=lambda value: value.as_posix().casefold()):
+            key = path.name.casefold()
+            if key in sources:
+                first = sources[key].relative_to(self.root).as_posix()
+                second = path.relative_to(self.root).as_posix()
+                raise JsonDataError(
+                    f"数据目录有问题：JSON 文件名重复 {path.name}：{first} 与 {second}"
+                )
+            sources[key] = path
+
     def read_directory(self, relative_path: str | Path) -> tuple[tuple[str, Any], ...]:
-        """读取分类目录内的全部 JSON；子目录由自己的组件另行负责。"""
+        """递归读取分类目录中的全部 JSON，并在返回时抹平目录层级。"""
 
         directory = self._resolve_directory(relative_path)
         files = sorted(
-            (path for path in directory.iterdir() if path.is_file() and path.suffix.lower() == ".json"),
-            key=lambda path: path.name.casefold(),
+            (path for path in directory.rglob("*.json") if path.is_file()),
+            key=lambda path: path.relative_to(directory).as_posix().casefold(),
         )
         if not files:
             requested = directory.relative_to(self.root).as_posix()

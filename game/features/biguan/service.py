@@ -11,6 +11,7 @@ from game.content import GameContent
 from game.core import Database, elapsed_seconds, record_exists, require_user_id, utc_now
 from game.features.didian import LocationFeature
 from game.features.player import PlayerFeature, TechniqueState
+from game.features.xiushi import NpcFeature, PartnerSeclusionResult
 
 
 SCHEMA = """
@@ -49,6 +50,7 @@ class SeclusionSettlement:
     recovered_spirit: float
     recovered_stamina: float
     techniques: tuple[TechniqueState, ...]
+    partners: tuple[PartnerSeclusionResult, ...] = ()
 
 
 class SeclusionFeature:
@@ -58,6 +60,7 @@ class SeclusionFeature:
         content: GameContent,
         player: PlayerFeature,
         location: LocationFeature,
+        npc: NpcFeature,
         *,
         clock: Callable[[], str] = utc_now,
         seed_factory: Callable[[], int] | None = None,
@@ -66,6 +69,7 @@ class SeclusionFeature:
         self.content = content
         self.player = player
         self.location = location
+        self.npc = npc
         self.clock = clock
         self.seed_factory = seed_factory or (lambda: secrets.randbits(63))
 
@@ -150,6 +154,15 @@ class SeclusionFeature:
                 int(row["seed"]),
                 progress.completed_rounds,
             )
+            partner_results = self.npc.settle_seclusion_in_connection(
+                connection,
+                actor,
+                experience=experience_result.applied,
+                recovery_ratio=ratio,
+                clear_statuses=bool(
+                    progress.ready and self.rules.get("圆满时清除临时状态")
+                ),
+            )
             self.player.update_player_in_connection(
                 connection,
                 player,
@@ -167,6 +180,7 @@ class SeclusionFeature:
             recovered["spirit"],
             recovered["stamina"],
             tuple(techniques),
+            partner_results,
         )
 
     def _progress(self, started_at: str, now: str) -> SeclusionProgress:

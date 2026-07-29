@@ -15,6 +15,7 @@ from game.core import Database, elapsed_seconds, record_exists, require_user_id,
 from game.features.didian import LocationFeature
 from game.features.diren import EnemyFeature
 from game.features.player import PlayerFeature
+from game.features.xiushi import NpcFeature, PartnerAsset
 from game.rules import BattleEngine, CombatantSnapshot
 
 
@@ -35,6 +36,8 @@ ALREADY_ACTIVE = "already_active"
 SECLUSION_ACTIVE = "seclusion_active"
 INSUFFICIENT_STAMINA = "insufficient_stamina"
 NO_HEALTH = "no_health"
+PARTNER_NO_HEALTH = "partner_no_health"
+PARTNER_INSUFFICIENT_STAMINA = "partner_insufficient_stamina"
 LOCATION_UNAVAILABLE = "location_unavailable"
 
 
@@ -43,6 +46,8 @@ class ExplorationStart:
     status: str
     planned_rounds: int = 0
     location_name: str = ""
+    partners: tuple[str, ...] = ()
+    blocked_partner: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +57,7 @@ class ExplorationProgress:
     completed_rounds: int
     planned_rounds: int
     ready: bool
+    partners: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,6 +72,7 @@ class ExplorationSettlement:
     consumed_items: dict[str, int]
     drops: dict[str, int]
     encounters: tuple[dict[str, Any], ...]
+    partners: tuple[str, ...] = ()
 
 
 class ExplorationFeature:
@@ -76,6 +83,7 @@ class ExplorationFeature:
         player: PlayerFeature,
         location: LocationFeature,
         enemy: EnemyFeature,
+        npc: NpcFeature,
         battle: BattleEngine,
         *,
         clock: Callable[[], str] = utc_now,
@@ -86,6 +94,7 @@ class ExplorationFeature:
         self.player = player
         self.location = location
         self.enemy = enemy
+        self.npc = npc
         self.battle = battle
         self.clock = clock
         self.seed_factory = seed_factory or (lambda: secrets.randbits(63))
@@ -113,7 +122,12 @@ class ExplorationFeature:
                     "SELECT rounds_json FROM exploration_states WHERE user_id = ?",
                     (actor,),
                 ).fetchone()
-                return ExplorationStart(ALREADY_ACTIVE, len(_load_rounds(row["rounds_json"])))
+                existing = _load_rounds(row["rounds_json"])
+                return ExplorationStart(
+                    ALREADY_ACTIVE,
+                    len(existing),
+                    partners=_party_names(existing),
+                )
 
             current_location = self.location.current_in_connection(connection, actor)
             enemy_pool = self.location.enemy_pool_in_connection(connection, actor)
@@ -124,14 +138,28 @@ class ExplorationFeature:
                 )
 
             assets = self.player.load_assets_in_connection(connection, actor)
+            partners = self.npc.party_assets_in_connection(connection, actor)
             cost = int(self.rules["每轮体力消耗"])
             if assets.player.health <= 0:
                 return ExplorationStart(NO_HEALTH)
             if assets.player.stamina < cost:
                 return ExplorationStart(INSUFFICIENT_STAMINA)
+            for partner in partners:
+                if partner.health <= 0:
+                    return ExplorationStart(
+                        PARTNER_NO_HEALTH,
+                        partners=tuple(value.npc_id for value in partners),
+                        blocked_partner=partner.npc_id,
+                    )
+                if partner.stamina < cost:
+                    return ExplorationStart(
+                        PARTNER_INSUFFICIENT_STAMINA,
+                        partners=tuple(value.npc_id for value in partners),
+                        blocked_partner=partner.npc_id,
+                    )
 
             seed = int(self.seed_factory())
-            rounds = self._plan_rounds(assets, seed, enemy_pool)
+            rounds = self._plan_rounds(assets, partners, seed, enemy_pool)
             connection.execute(
                 """
                 INSERT INTO exploration_states(
@@ -146,7 +174,12 @@ class ExplorationFeature:
                     _json(rounds),
                 ),
             )
-        return ExplorationStart(STARTED, len(rounds), current_location.label)
+        return ExplorationStart(
+            STARTED,
+            len(rounds),
+            current_location.label,
+            tuple(value.npc_id for value in partners),
+        )
 
     def progress(self, user_id: str) -> ExplorationProgress | None:
         actor = require_user_id(user_id)
@@ -157,10 +190,12 @@ class ExplorationFeature:
             ).fetchone()
         if row is None:
             return None
+        rounds = _load_rounds(row["rounds_json"])
         return self._progress(
             str(row["started_at"]),
-            len(_load_rounds(row["rounds_json"])),
+            len(rounds),
             self.clock(),
+            _party_names(rounds),
         )
 
     def end(self, user_id: str) -> ExplorationSettlement | None:
@@ -173,7 +208,12 @@ class ExplorationFeature:
             if row is None:
                 return None
             rounds = _load_rounds(row["rounds_json"])
-            progress = self._progress(str(row["started_at"]), len(rounds), self.clock())
+            progress = self._progress(
+                str(row["started_at"]),
+                len(rounds),
+                self.clock(),
+                _party_names(rounds),
+            )
             completed = rounds[: progress.completed_rounds]
             if completed:
                 self._apply_round_state(connection, actor, int(row["asset_revision"]), completed)
@@ -205,11 +245,13 @@ class ExplorationFeature:
             dict(consumed),
             dict(drops),
             encounters,
+            progress.partners,
         )
 
     def _plan_rounds(
         self,
         assets,
+        partners: tuple[PartnerAsset, ...],
         seed: int,
         enemy_pool: tuple[str, ...],
     ) -> list[dict[str, Any]]:
@@ -224,13 +266,47 @@ class ExplorationFeature:
         skill_cursor = 0
         inventory = dict(assets.inventory)
         techniques = self.player.battle_techniques(assets.techniques)
+        party_states = {
+            partner.npc_id: {
+                "npc_id": partner.npc_id,
+                "combatant_id": partner.combatant_id,
+                "revision": partner.revision,
+                "health": partner.health,
+                "spirit": partner.spirit,
+                "stamina": partner.stamina,
+                "shield": 0.0,
+                "statuses": [dict(value) for value in partner.statuses],
+                "cooldowns": {},
+                "skill_cursor": 0,
+            }
+            for partner in partners
+        }
+        item_definitions = self.content.combat_item_definitions()
         result: list[dict[str, Any]] = []
         cost = int(rules["每轮体力消耗"])
 
         for number in range(1, int(rules["最多轮数"]) + 1):
-            if stamina < cost or health <= 0:
+            if (
+                stamina < cost
+                or health <= 0
+                or any(
+                    float(value["health"]) <= 0 or float(value["stamina"]) < cost
+                    for value in party_states.values()
+                )
+            ):
                 break
             stamina -= cost
+            active_partners: list[PartnerAsset] = []
+            for partner in partners:
+                state = party_states[partner.npc_id]
+                if float(state["health"]) <= 0 or float(state["stamina"]) < cost:
+                    continue
+                state["stamina"] = float(state["stamina"]) - cost
+                partner.health = float(state["health"])
+                partner.spirit = float(state["spirit"])
+                partner.stamina = float(state["stamina"])
+                partner.statuses = [dict(value) for value in state["statuses"]]
+                active_partners.append(partner)
             enemy_id = self.content.choose_enemy(enemy_pool, rng)
             enemy_seed = rng.getrandbits(63)
             enemy = self.enemy.spawn(enemy_id, seed=enemy_seed)
@@ -254,27 +330,62 @@ class ExplorationFeature:
                 skill_cursor=skill_cursor,
             )
             enemy_snapshot = enemy.battle_snapshot()
-            outcome = self.battle.simulate(
-                left=player_snapshot,
-                right=enemy_snapshot,
-                item_definitions=self.content.item_definitions,
+            partner_snapshots = tuple(
+                self.npc.battle_snapshot(
+                    partner,
+                    inventory=inventory,
+                    auto_medicine=assets.player.auto_medicine,
+                    medicine_threshold=float(rules["自动用药阈值"]),
+                    shield=float(party_states[partner.npc_id]["shield"]),
+                    cooldowns=dict(party_states[partner.npc_id]["cooldowns"]),
+                    skill_cursor=int(party_states[partner.npc_id]["skill_cursor"]),
+                )
+                for partner in active_partners
+            )
+            outcome = self.battle.simulate_teams(
+                left=(player_snapshot, *partner_snapshots),
+                right=(enemy_snapshot,),
+                item_definitions=item_definitions,
                 seed=battle_seed,
                 action_limit=int(rules["战斗行动上限"]),
+                share_left_inventory=True,
             )
-            inventory = dict(outcome.left.inventory)
-            health = outcome.left.health
-            spirit = outcome.left.spirit
-            shield = outcome.left.shield
-            statuses = [value.to_dict() for value in outcome.left.statuses]
-            cooldowns = dict(outcome.left.cooldowns)
-            skill_cursor = outcome.left.skill_cursor
+            player_result = next(
+                value for value in outcome.left_results if value.id == player_snapshot.id
+            )
+            inventory = dict(player_result.inventory)
+            health = player_result.health
+            spirit = player_result.spirit
+            shield = player_result.shield
+            statuses = [value.to_dict() for value in player_result.statuses]
+            cooldowns = dict(player_result.cooldowns)
+            skill_cursor = player_result.skill_cursor
+            partner_results = {value.id: value for value in outcome.left_results[1:]}
+            for partner in active_partners:
+                partner_result = partner_results[partner.combatant_id]
+                state = party_states[partner.npc_id]
+                state.update(
+                    {
+                        "health": partner_result.health,
+                        "spirit": partner_result.spirit,
+                        "shield": partner_result.shield,
+                        "statuses": [value.to_dict() for value in partner_result.statuses],
+                        "cooldowns": dict(partner_result.cooldowns),
+                        "skill_cursor": partner_result.skill_cursor,
+                    }
+                )
             battle_result = (
                 "victory"
-                if outcome.winner_id == player_snapshot.id
+                if outcome.winner_side == "left"
                 else "draw"
                 if outcome.draw
                 else "defeat"
             )
+            consumed_items: Counter[str] = Counter()
+            for combatant in outcome.left_results:
+                consumed_items.update(
+                    {str(key): int(value) for key, value in combatant.consumed_items.items()}
+                )
             result.append(
                 {
                     "round": number,
@@ -291,7 +402,8 @@ class ExplorationFeature:
                     "statuses": statuses,
                     "cooldowns": cooldowns,
                     "skill_cursor": skill_cursor,
-                    "consumed_items": dict(outcome.left.consumed_items),
+                    "party": [dict(party_states[value.npc_id]) for value in partners],
+                    "consumed_items": dict(consumed_items),
                     "enemy_spirit_stones": enemy.spirit_stones,
                     "enemy_drops": enemy.defeated_items(outcome.right.inventory),
                     "weapon_experience": _roll_range(
@@ -304,7 +416,13 @@ class ExplorationFeature:
                 break
         return result
 
-    def _progress(self, started_at: str, planned_rounds: int, now: str) -> ExplorationProgress:
+    def _progress(
+        self,
+        started_at: str,
+        planned_rounds: int,
+        now: str,
+        partners: tuple[str, ...] = (),
+    ) -> ExplorationProgress:
         duration = int(self.rules["持续秒数"])
         elapsed = min(duration, elapsed_seconds(started_at, now))
         unlocked = min(planned_rounds, elapsed // int(self.rules["每轮秒数"]))
@@ -314,6 +432,7 @@ class ExplorationFeature:
             unlocked,
             planned_rounds,
             elapsed >= duration,
+            partners,
         )
 
     def _apply_round_state(
@@ -336,6 +455,12 @@ class ExplorationFeature:
             player,
             expected_revision=expected_revision,
         )
+        if "party" in final:
+            self.npc.apply_exploration_states_in_connection(
+                connection,
+                user_id,
+                [dict(value) for value in final.get("party") or ()],
+            )
 
     def _apply_rewards(self, connection, user_id: str, rounds: list[dict[str, Any]]):
         weapon = self.player.load_weapon_in_connection(connection, user_id)
@@ -354,7 +479,17 @@ class ExplorationFeature:
                 drops[str(item_id)] += int(quantity)
 
         for item_id, quantity in consumed.items():
-            if not self.player.remove_item_in_connection(connection, user_id, item_id, quantity):
+            resolved = self.player.resolve_item(item_id)
+            if resolved is None:
+                raise RuntimeError(f"探险结算包含未知消耗物品：{item_id}")
+            base_item_id, grade_id = resolved
+            if not self.player.remove_item_in_connection(
+                connection,
+                user_id,
+                base_item_id,
+                quantity,
+                grade_id,
+            ):
                 raise RuntimeError(f"探险结算缺少已消耗物品：{item_id}")
         player = self.player.load_player_in_connection(connection, user_id)
         player.spirit_stones += stones
@@ -365,8 +500,27 @@ class ExplorationFeature:
         )
         weapon_levels = self.player.gain_weapon_experience(weapon, weapon_exp)
         self.player.update_weapon_in_connection(connection, weapon)
+        self.npc.gain_party_weapon_experience_in_connection(
+            connection,
+            user_id,
+            weapon_exp,
+            tuple(
+                str(value["npc_id"])
+                for value in (rounds[0].get("party") or ())
+            ),
+        )
         for item_id, quantity in drops.items():
-            self.player.add_item_in_connection(connection, user_id, item_id, quantity)
+            resolved = self.player.resolve_item(item_id)
+            if resolved is None:
+                raise RuntimeError(f"探险结算包含未知掉落物品：{item_id}")
+            base_item_id, grade_id = resolved
+            self.player.add_item_in_connection(
+                connection,
+                user_id,
+                base_item_id,
+                quantity,
+                grade_id,
+            )
         return stones, weapon_exp, weapon_levels, consumed, drops
 
 
@@ -381,6 +535,12 @@ def _load_rounds(value: str) -> list[dict[str, Any]]:
     return [dict(item) for item in loaded]
 
 
+def _party_names(rounds: list[dict[str, Any]]) -> tuple[str, ...]:
+    if not rounds:
+        return ()
+    return tuple(str(value["npc_id"]) for value in rounds[0].get("party") or ())
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -390,6 +550,8 @@ __all__ = [
     "INSUFFICIENT_STAMINA",
     "LOCATION_UNAVAILABLE",
     "NO_HEALTH",
+    "PARTNER_INSUFFICIENT_STAMINA",
+    "PARTNER_NO_HEALTH",
     "SECLUSION_ACTIVE",
     "STARTED",
     "ExplorationFeature",

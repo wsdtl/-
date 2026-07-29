@@ -100,7 +100,7 @@ class TechniqueState:
     instance_id: str
     user_id: str
     technique_id: str
-    rarity_id: str
+    grade_id: str
     affixes: tuple[dict[str, Any], ...]
     born_order: int
     equipped_slot: int | None
@@ -124,6 +124,8 @@ class InventoryEntry:
     quantity: int
     score: int
     detail: str = ""
+    grade_id: str = ""
+    reference_price: int = 0
     equipped_slot: int | None = None
 
 
@@ -151,6 +153,10 @@ class ItemUseResult:
     quantity: int = 0
     recovered: float = 0.0
     resource: str = ""
+    effect: str = ""
+    experience: int = 0
+    levels_gained: int = 0
+    target: str = ""
 
 
 __all__ = [

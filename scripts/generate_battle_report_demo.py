@@ -47,9 +47,9 @@ def _technique(
     return {
         "实例": f"demo-technique-{born_order}",
         "功法": name,
-        "品级": "凡品",
+        "品级": "黄品",
         "出生序号": born_order,
-        "威力倍率": float(content.rarity_definitions["凡品"]["威力倍率"]),
+        "威力倍率": float(content.grade_definitions["黄品"]["能力倍率"]),
         "词条": [_affix(content, affix_name)],
         "能力": [dict(value) for value in definition.get("组成") or ()],
     }
@@ -107,7 +107,7 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
             level=enemy.level,
             kind=enemy.kind,
         ),
-        item_definitions=content.item_definitions,
+        item_definitions=content.combat_item_definitions(),
         seed=seed,
         action_limit=60,
     )

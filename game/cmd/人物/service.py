@@ -15,11 +15,12 @@ async def show_status(message: str, context, client_id: str, manager) -> None:
     services = current_game_services()
     user_id = _user_id(context)
     await asyncio.to_thread(services.player.ensure, user_id, context.sender_name)
-    assets, location, seclusion, exploration = await asyncio.gather(
+    assets, location, seclusion, exploration, partners = await asyncio.gather(
         asyncio.to_thread(services.player.load, user_id),
         asyncio.to_thread(services.location.current, user_id, context.sender_name),
         asyncio.to_thread(services.seclusion.progress, user_id),
         asyncio.to_thread(services.exploration.progress, user_id),
+        asyncio.to_thread(services.npc.party_assets, user_id),
     )
     player = assets.player
     if player.breakthrough_pending:
@@ -43,7 +44,19 @@ async def show_status(message: str, context, client_id: str, manager) -> None:
         )
         .row(("当前地点", location.label), ("当前状态", activity))
         .row(("自动用药", "开启" if player.auto_medicine else "关闭"))
-        .line(
+    )
+    if partners:
+        reply.field(
+            "同行伙伴",
+            "、".join(
+                f"{value.npc_id} Lv{value.level} · {value.direction_id}"
+                for value in partners
+            ),
+        )
+    else:
+        reply.field("同行伙伴", "无")
+    reply = (
+        reply.line(
             M.command("地点", "地点"),
             " | ",
             M.command("地图", "地图"),

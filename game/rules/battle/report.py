@@ -49,15 +49,18 @@ def build_battle_report(
 ) -> dict[str, Any]:
     """生成 `晓楠修仙.战报.v1`；前端不再解释战斗事件。"""
 
-    if len(participants) != 2:
-        raise ValueError("当前战报必须恰好包含两名参战者")
+    if len(participants) < 2:
+        raise ValueError("战报至少需要两名参战者")
     if len({value.id for value in participants}) != len(participants):
         raise ValueError("战报参战者 ID 不能重复")
-    outcome_ids = {outcome.left.id, outcome.right.id}
+    left_results = outcome.left_results
+    right_results = outcome.right_results
+    outcome_results = (*left_results, *right_results)
+    outcome_ids = {value.id for value in outcome_results}
     participant_ids = {value.id for value in participants}
     if participant_ids != outcome_ids:
-        raise ValueError("战报参战者必须与战斗结果中的两名参战者一致")
-    outcome_by_id = {outcome.left.id: outcome.left, outcome.right.id: outcome.right}
+        raise ValueError("战报参战者必须与战斗结果中的全部参战者一致")
+    outcome_by_id = {value.id: value for value in outcome_results}
     for participant in participants:
         result = outcome_by_id[participant.id]
         if int(participant.level) != result.level or str(participant.kind) != result.kind:
@@ -86,13 +89,27 @@ def build_battle_report(
             }
         )
 
+    left_ids = {value.id for value in left_results}
+    right_ids = {value.id for value in right_results}
+    winner_ids = (
+        left_ids
+        if outcome.winner_side == "left"
+        else right_ids
+        if outcome.winner_side == "right"
+        else set()
+    )
+    winner_names = [
+        participants_by_id[value.id].name
+        for value in outcome_results
+        if value.id in winner_ids
+    ]
     winner_id = outcome.winner_id or ""
     participant_reports = [
         _participant_report(
             value,
             number=index + 1,
             color=participant_colors[value.id],
-            outcome_label="平" if outcome.draw else "胜" if value.id == winner_id else "负",
+            outcome_label="平" if outcome.draw else "胜" if value.id in winner_ids else "负",
             events=outcome.events,
             catalog=catalog,
         )
@@ -101,21 +118,27 @@ def build_battle_report(
     result_title = (
         "胜负未分"
         if outcome.draw
-        else f"{participants_by_id[winner_id].name}取胜"
+        else f"{'、'.join(winner_names)}取胜"
+    )
+    left_names = "、".join(
+        participants_by_id[value.id].name for value in left_results
+    )
+    right_names = "、".join(
+        participants_by_id[value.id].name for value in right_results
     )
 
     return {
         "schema": catalog.report_schema,
         "generated_at": generated_at or datetime.now().astimezone().isoformat(timespec="seconds"),
         "scene": scene,
-        "headline": f"{participants[0].name} 对阵 {participants[1].name}",
+        "headline": f"{left_names} 对阵 {right_names}",
         "system": dict(catalog.system),
         "result": {
             "code": (
                 "draw"
                 if outcome.draw
                 else "victory"
-                if winner_id == participants[0].id
+                if outcome.winner_side == "left"
                 else "defeat"
             ),
             "title": result_title,
@@ -124,6 +147,7 @@ def build_battle_report(
             "event_count": len(event_reports),
             "trigger_count": outcome.trigger_activations,
             "winner_id": winner_id or None,
+            "winner_ids": [value.id for value in outcome_results if value.id in winner_ids],
             "seed": seed,
         },
         "view_modes": catalog.view_modes,
@@ -370,7 +394,7 @@ def _technique_report(
             affixes.append({"name": str(item), "display": str(item)})
     return {
         "name": str(value.get("功法") or value.get("名称") or "未命名功法"),
-        "rarity": str(value.get("品级") or ""),
+        "grade": str(value.get("品级") or ""),
         "born_order": int(value.get("出生序号") or 0),
         "move": str(active.get("名称") or ""),
         "mechanisms": list(dict.fromkeys(mechanisms)),

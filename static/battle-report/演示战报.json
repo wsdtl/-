@@ -81,8 +81,8 @@
       "机制触发: 16"
     ]
   },
-  "started_at": "2026-07-28T21:20:36+08:00",
-  "finished_at": "2026-07-28T21:20:36+08:00",
+  "started_at": "2026-07-29T00:03:29+08:00",
+  "finished_at": "2026-07-29T00:03:29+08:00",
   "detail": {
     "available": true,
     "retention_notice": "",
@@ -93,8 +93,8 @@
         "position_label": "1 / 1",
         "title": "晓楠 对阵 石门守修",
         "outcome": "晓楠取胜",
-        "started_at": "2026-07-28T21:20:36+08:00",
-        "finished_at": "2026-07-28T21:20:36+08:00",
+        "started_at": "2026-07-29T00:03:29+08:00",
+        "finished_at": "2026-07-29T00:03:29+08:00",
         "duration_label": "19 次行动",
         "system_visual": {
           "key": "system",
@@ -179,17 +179,17 @@
                   {
                     "id": "离火归元诀",
                     "label": "离火归元诀",
-                    "display": "凡品 · 离火引诀"
+                    "display": "黄品 · 离火引诀"
                   },
                   {
                     "id": "北斗御神篇",
                     "label": "北斗御神篇",
-                    "display": "凡品 · 星枢回转"
+                    "display": "黄品 · 星枢回转"
                   },
                   {
                     "id": "踏罡行气经",
                     "label": "踏罡行气经",
-                    "display": "凡品 · 三叩天门"
+                    "display": "黄品 · 三叩天门"
                   }
                 ],
                 "empty_text": ""
@@ -340,7 +340,7 @@
                   {
                     "id": "玄龟定息功",
                     "label": "玄龟定息功",
-                    "display": "凡品"
+                    "display": "黄品"
                   }
                 ],
                 "empty_text": ""
@@ -480,17 +480,17 @@
                   {
                     "id": "离火归元诀",
                     "label": "离火归元诀",
-                    "display": "凡品 · 离火引诀"
+                    "display": "黄品 · 离火引诀"
                   },
                   {
                     "id": "北斗御神篇",
                     "label": "北斗御神篇",
-                    "display": "凡品 · 星枢回转"
+                    "display": "黄品 · 星枢回转"
                   },
                   {
                     "id": "踏罡行气经",
                     "label": "踏罡行气经",
-                    "display": "凡品 · 三叩天门"
+                    "display": "黄品 · 三叩天门"
                   }
                 ],
                 "empty_text": ""
@@ -641,7 +641,7 @@
                   {
                     "id": "玄龟定息功",
                     "label": "玄龟定息功",
-                    "display": "凡品"
+                    "display": "黄品"
                   }
                 ],
                 "empty_text": ""

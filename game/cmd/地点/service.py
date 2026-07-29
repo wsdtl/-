@@ -36,14 +36,21 @@ async def show_map(message: str, context, client_id: str, manager) -> None:
     for location in services.location.all_locations():
         distance = services.location.distance(current, location)
         if location.location_id == current.location_id:
-            reply.line(location.name, " · ", location.coordinate_text, " · ", location.kind, " · 当前所在")
+            reply.line(
+                location.name,
+                " · ",
+                location.coordinate_text,
+                " · ",
+                _functions(location.functions),
+                " · 当前所在",
+            )
         else:
             reply.line(
                 M.command(location.name, f"地点 {location.name}"),
                 " · ",
                 location.coordinate_text,
                 " · ",
-                location.kind,
+                _functions(location.functions),
                 " · 距离",
                 f"{distance}格",
             )
@@ -71,25 +78,32 @@ async def show_location(message: str, context, client_id: str, manager) -> None:
         )
         return
 
+    nearby = await asyncio.to_thread(
+        services.npc.at_location,
+        _user_id(context),
+        target.location_id,
+        context.sender_name,
+    )
+    npc_names = tuple(value.npc_id for value in nearby)
     distance = services.location.distance(current, target)
     reply = (
         M.document()
         .section(target.name, icon="navigation")
         .row(("坐标", target.coordinate_text), ("地貌", target.kind))
         .row(
-            ("可行之事", _functions(target.functions)),
+            ("可用功能", _functions(target.functions)),
             ("距当前位置", "当前所在" if distance == 0 else f"{distance}格"),
         )
         .line(target.description)
     )
     if target.location_id == current.location_id:
         _append_function_commands(reply, target.functions)
-        _append_npc_commands(reply, target.npcs)
+        _append_npc_commands(reply, npc_names)
         if target.enemies:
             reply.field("可能遭遇", "、".join(target.enemies))
     else:
-        if target.npcs:
-            reply.field("常见修士", "、".join(target.npcs))
+        if npc_names:
+            reply.field("常见修士", "、".join(npc_names))
         if target.enemies:
             reply.field("可能遭遇", "、".join(target.enemies))
         reply.line(M.command(f"前往{target.name}", f"前往 {target.name}"))
@@ -138,16 +152,22 @@ async def move(message: str, context, client_id: str, manager) -> None:
         context.sender_name,
     )
     if result.status == MOVED:
+        nearby = await asyncio.to_thread(
+            services.npc.at_location,
+            _user_id(context),
+            result.current.location_id,
+            context.sender_name,
+        )
         reply = (
             M.document()
             .section("行路", icon="navigation")
             .line("已从", result.previous.name, "行至", result.current.name, "。")
             .line(result.current.description)
             .row(("坐标", result.current.coordinate_text), ("移动距离", f"{result.distance}格"))
-            .row(("地貌", result.current.kind), ("可行之事", _functions(result.current.functions)))
+            .row(("地貌", result.current.kind), ("可用功能", _functions(result.current.functions)))
         )
         _append_function_commands(reply, result.current.functions)
-        _append_npc_commands(reply, result.current.npcs)
+        _append_npc_commands(reply, tuple(value.npc_id for value in nearby))
         if result.current.enemies:
             reply.field("可能遭遇", "、".join(result.current.enemies))
         reply.line(M.command("查看地点", "地点"), " | ", M.command("返回地图", "地图"))

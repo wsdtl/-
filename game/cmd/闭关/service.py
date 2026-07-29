@@ -46,14 +46,17 @@ async def start(
     services = current_game_services()
     result = await asyncio.to_thread(services.seclusion.start, user_id, display_name)
     if result == STARTED:
+        partners = await asyncio.to_thread(services.npc.party, user_id, display_name)
         reply = (
             M.document()
             .section("闭关", icon="system")
             .line("已开始闭关，本次最多感悟6轮。")
             .line("每满10分钟完成1轮，60分钟后恢复至圆满状态。")
-            .line(M.command("查看进度", "帮助"), " | ", M.command("提前出关", "出关"))
-            .build()
         )
+        if partners:
+            reply.field("同行闭关", "、".join(value.npc_id for value in partners))
+        reply.line(M.command("查看进度", "帮助"), " | ", M.command("提前出关", "出关"))
+        reply = reply.build()
     elif result == LOCATION_UNAVAILABLE:
         location = await asyncio.to_thread(services.location.current, user_id, display_name)
         reply = (
@@ -104,12 +107,26 @@ async def end(message: str, *, user_id: str, client_id: str, manager) -> None:
             reply.line(
                 "感悟所得：",
                 M.command(
-                    f"{technique.rarity_id}·{technique.technique_id}",
+                    f"{technique.grade_id}·{technique.technique_id}",
                     f"功法 {technique.born_order}",
                 ),
             )
         if not result.techniques:
             reply.line("本次没有悟得新功法。")
+    for partner in result.partners:
+        reply.line(
+            partner.npc_id,
+            "：经验 +",
+            partner.experience,
+            " · Lv",
+            partner.level,
+            " · 恢复血气/精神/体力 ",
+            _number(partner.recovered_health),
+            "/",
+            _number(partner.recovered_spirit),
+            "/",
+            _number(partner.recovered_stamina),
+        )
     reply.line(M.command("查看状态", "状态"), " | ", M.command("查看功法", "功法"))
     await manager.send(reply.build(), client_id)
 

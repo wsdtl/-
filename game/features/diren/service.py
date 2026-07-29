@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass
 import random
 from typing import Any, Mapping
@@ -58,6 +57,7 @@ class EnemyFeature:
         key = str(enemy_id)
         definition = self.content.enemy_definitions[key]
         rng = random.Random(int(seed))
+        grade_rng = random.Random(int(seed) ^ 0x6A09E667F3BCC909)
         kind = str(definition["类别"])
         level = _roll_range(rng, definition["等级"])
         growth = (
@@ -67,9 +67,15 @@ class EnemyFeature:
         )
         attributes = self.content.attributes_at_level(definition["属性"], growth, level)
         _apply_variation(rng, attributes, definition["实力波动"])
+        loot = definition["掉落"]
 
         if kind == "修士":
-            spirit_stones, inventory = _roll_item_pool(rng, definition["纳戒"])
+            spirit_stones, inventory = _roll_item_pool(
+                rng,
+                grade_rng,
+                loot,
+                self.content,
+            )
             strategy = definition["战斗策略"]
             weapon_attack = float(definition["本命武器"]["攻击"])
             techniques = tuple(
@@ -82,7 +88,12 @@ class EnemyFeature:
             auto_medicine = rng.random() < float(strategy["用药概率"])
             medicine_threshold = float(strategy["用药阈值"])
         else:
-            spirit_stones, fixed_drops = _roll_item_pool(rng, definition["掉落"])
+            spirit_stones, fixed_drops = _roll_item_pool(
+                rng,
+                grade_rng,
+                loot,
+                self.content,
+            )
             inventory = {}
             weapon_attack = 0.0
             techniques = ()
@@ -118,13 +129,15 @@ def _apply_variation(
 
 def _roll_item_pool(
     rng: random.Random,
+    grade_rng: random.Random,
     definition: dict[str, Any],
+    content: GameContent,
 ) -> tuple[int, dict[str, int]]:
-    items: Counter[str] = Counter()
-    for value in definition["物品"]:
-        if rng.random() <= float(value["概率"]):
-            items[str(value["物品"])] += _roll_range(rng, value["数量"])
-    return _roll_range(rng, definition["灵石"]), dict(items)
+    item_ids = content.items_in_groups(list(definition["物品池"]))
+    item_id = content.choose_item(item_ids, rng)
+    grade_id = content.choose_grade(grade_rng)
+    item = content.graded_item_definition(item_id, grade_id)
+    return _roll_range(rng, definition["灵石"]), {str(item["名称"]): 1}
 
 
 def _roll_range(rng: random.Random, value: int | list[int]) -> int:

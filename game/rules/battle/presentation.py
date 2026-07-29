@@ -22,8 +22,8 @@ def build_battle_report_presentation(
     version = catalog.presentation_version
     ui = catalog.ui
     participants = [dict(value) for value in report.get("participants") or ()]
-    if len(participants) != 2:
-        raise ValueError("当前公开战报必须包含两名参战者")
+    if len(participants) < 2:
+        raise ValueError("公开战报至少需要两名参战者")
 
     visuals = {
         value["id"]: {
@@ -327,7 +327,7 @@ def _detail_groups(
 ) -> list[dict[str, Any]]:
     techniques = []
     for value in participant.get("techniques") or ():
-        metadata = [item for item in (value.get("rarity"), value.get("move")) if item]
+        metadata = [item for item in (value.get("grade"), value.get("move")) if item]
         techniques.append(_item(value["name"], " · ".join(metadata)))
     attributes = [
         _item(value["label"], value["display"], value.get("value"))

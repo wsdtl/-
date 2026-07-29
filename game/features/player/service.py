@@ -55,8 +55,9 @@ CREATE TABLE IF NOT EXISTS weapons (
 CREATE TABLE IF NOT EXISTS inventory_stacks (
     user_id TEXT NOT NULL REFERENCES players(user_id) ON DELETE CASCADE,
     item_id TEXT NOT NULL,
+    grade_id TEXT NOT NULL,
     quantity INTEGER NOT NULL CHECK (quantity >= 0),
-    PRIMARY KEY (user_id, item_id)
+    PRIMARY KEY (user_id, item_id, grade_id)
 );
 
 CREATE TABLE IF NOT EXISTS techniques (
@@ -87,6 +88,50 @@ class PlayerFeature:
 
     def initialize(self) -> None:
         self.database.initialize(SCHEMA)
+        self._migrate_inventory_stacks()
+
+    def _migrate_inventory_stacks(self) -> None:
+        """把旧的无品级库存原子迁移为最低品级，不丢现有资产。"""
+
+        with self.database.transaction(write=True) as connection:
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(inventory_stacks)")
+            }
+            if "grade_id" in columns:
+                return
+            base_grade = self.lowest_grade_id
+            connection.execute(
+                "ALTER TABLE inventory_stacks RENAME TO inventory_stacks_legacy"
+            )
+            connection.execute(
+                """
+                CREATE TABLE inventory_stacks (
+                    user_id TEXT NOT NULL REFERENCES players(user_id) ON DELETE CASCADE,
+                    item_id TEXT NOT NULL,
+                    grade_id TEXT NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity >= 0),
+                    PRIMARY KEY (user_id, item_id, grade_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO inventory_stacks(user_id, item_id, grade_id, quantity)
+                SELECT user_id, item_id, ?, quantity
+                FROM inventory_stacks_legacy
+                WHERE quantity > 0
+                """,
+                (base_grade,),
+            )
+            connection.execute("DROP TABLE inventory_stacks_legacy")
+
+    @property
+    def lowest_grade_id(self) -> str:
+        return min(
+            self.content.grade_definitions,
+            key=lambda grade_id: int(self.content.grade_definitions[grade_id]["阶序"]),
+        )
 
     def ensure(self, user_id: str, display_name: str = "") -> PlayerState:
         actor = require_user_id(user_id)
@@ -151,7 +196,13 @@ class PlayerFeature:
             ),
         )
         for item_id, quantity in dict(self.content.player.get("初始物品") or {}).items():
-            self.add_item_in_connection(connection, actor, str(item_id), int(quantity))
+            self.add_item_in_connection(
+                connection,
+                actor,
+                str(item_id),
+                int(quantity),
+                self.lowest_grade_id,
+            )
 
     def load(self, user_id: str) -> AssetState:
         actor = require_user_id(user_id)
@@ -167,9 +218,13 @@ class PlayerFeature:
         player = self.load_player_in_connection(connection, actor)
         weapon = self.load_weapon_in_connection(connection, actor)
         inventory = {
-            str(row["item_id"]): int(row["quantity"])
+            self.item_name(str(row["item_id"]), str(row["grade_id"])): int(row["quantity"])
             for row in connection.execute(
-                "SELECT item_id, quantity FROM inventory_stacks WHERE user_id = ? AND quantity > 0",
+                """
+                SELECT item_id, grade_id, quantity
+                FROM inventory_stacks
+                WHERE user_id = ? AND quantity > 0
+                """,
                 (actor,),
             )
         }
@@ -222,14 +277,14 @@ class PlayerFeature:
             key=lambda value: value.born_order,
         ):
             definition = self.content.technique_definitions[instance.technique_id]
-            rarity = self.content.rarity_definitions[instance.rarity_id]
+            grade = self.content.grade_definitions[instance.grade_id]
             result.append(
                 {
                     "实例": instance.instance_id,
                     "功法": instance.technique_id,
-                    "品级": instance.rarity_id,
+                    "品级": instance.grade_id,
                     "出生序号": instance.born_order,
-                    "威力倍率": float(rarity["威力倍率"]),
+                    "威力倍率": float(grade["能力倍率"]),
                     "词条": [dict(value) for value in instance.affixes],
                     "能力": [dict(value) for value in definition.get("组成") or ()],
                 }
@@ -297,49 +352,108 @@ class PlayerFeature:
         if cursor.rowcount != 1:
             raise RuntimeError("本命武器不存在")
 
-    @staticmethod
     def add_item_in_connection(
+        self,
         connection: sqlite3.Connection,
         user_id: str,
         item_id: str,
         quantity: int,
+        grade_id: str | None = None,
     ) -> None:
         amount = int(quantity)
         if amount < 1:
             return
+        item_key = str(item_id)
+        grade_key = str(grade_id or self.lowest_grade_id)
+        if item_key not in self.content.item_definitions:
+            raise ValueError(f"未知物品：{item_key}")
+        if grade_key not in self.content.grade_definitions:
+            raise ValueError(f"未知品级：{grade_key}")
         connection.execute(
             """
-            INSERT INTO inventory_stacks(user_id, item_id, quantity)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id, item_id)
+            INSERT INTO inventory_stacks(user_id, item_id, grade_id, quantity)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, item_id, grade_id)
             DO UPDATE SET quantity = quantity + excluded.quantity
             """,
-            (user_id, item_id, amount),
+            (user_id, item_key, grade_key, amount),
         )
 
-    @staticmethod
     def remove_item_in_connection(
+        self,
         connection: sqlite3.Connection,
         user_id: str,
         item_id: str,
         quantity: int,
+        grade_id: str | None = None,
     ) -> bool:
+        return self.take_item_in_connection(
+            connection,
+            user_id,
+            item_id,
+            quantity,
+            grade_id,
+        ) is not None
+
+    def take_item_in_connection(
+        self,
+        connection: sqlite3.Connection,
+        user_id: str,
+        item_id: str,
+        quantity: int,
+        grade_id: str | None = None,
+    ) -> dict[str, int] | None:
+        """按低品级优先扣除物品，并返回实际扣除的完整品级名称。"""
+
         amount = max(1, int(quantity))
-        cursor = connection.execute(
-            """
-            UPDATE inventory_stacks
-            SET quantity = quantity - ?
-            WHERE user_id = ? AND item_id = ? AND quantity >= ?
-            """,
-            (amount, user_id, item_id, amount),
+        item_key = str(item_id)
+        rows = list(
+            connection.execute(
+                """
+                SELECT grade_id, quantity
+                FROM inventory_stacks
+                WHERE user_id = ? AND item_id = ? AND quantity > 0
+                """
+                + (" AND grade_id = ?" if grade_id is not None else ""),
+                (user_id, item_key, str(grade_id))
+                if grade_id is not None
+                else (user_id, item_key),
+            )
         )
-        if cursor.rowcount != 1:
-            return False
+        rows.sort(
+            key=lambda row: int(self.content.grade_definitions[str(row["grade_id"])]["阶序"])
+        )
+        if sum(int(row["quantity"]) for row in rows) < amount:
+            return None
+        remaining = amount
+        taken: dict[str, int] = {}
+        for row in rows:
+            if remaining <= 0:
+                break
+            consumed = min(remaining, int(row["quantity"]))
+            row_grade = str(row["grade_id"])
+            connection.execute(
+                """
+                UPDATE inventory_stacks
+                SET quantity = quantity - ?
+                WHERE user_id = ? AND item_id = ? AND grade_id = ?
+                """,
+                (consumed, user_id, item_key, row_grade),
+            )
+            taken[self.item_name(item_key, row_grade)] = consumed
+            remaining -= consumed
         connection.execute(
-            "DELETE FROM inventory_stacks WHERE user_id = ? AND item_id = ? AND quantity = 0",
-            (user_id, item_id),
+            """
+            DELETE FROM inventory_stacks
+            WHERE user_id = ? AND item_id = ? AND quantity = 0
+            """,
+            (user_id, item_key),
         )
-        return True
+        return taken
+
+    @staticmethod
+    def item_name(item_id: str, grade_id: str) -> str:
+        return f"{grade_id}·{item_id}"
 
     def gain_experience(self, player: PlayerState, amount: int) -> ExperienceResult:
         pending = max(0, int(amount))
@@ -394,6 +508,14 @@ class PlayerFeature:
         rule = self.content.player["本命武器"]["经验"]
         return int(rule["基础"]) + int(rule["等级平方系数"]) * int(level) ** 2
 
+    def _weapon_progress(self, weapon: WeaponState) -> int:
+        initial_level = int(self.content.player["本命武器"]["初始等级"])
+        completed = sum(
+            self.weapon_experience_required(level)
+            for level in range(initial_level, int(weapon.level))
+        )
+        return completed + int(weapon.experience)
+
     def weapon_attack(self, weapon: WeaponState) -> float:
         rules = self.content.player["本命武器"]
         return float(weapon.attributes.get("攻击", rules["基础攻击"])) + (
@@ -406,10 +528,10 @@ class PlayerFeature:
         user_id: str,
         rng: random.Random,
     ) -> TechniqueState:
-        technique_id = rng.choice(tuple(self.content.technique_definitions))
+        technique_id = _weighted_choice(rng, self.content.technique_definitions)
         technique_definition = self.content.technique_definitions[technique_id]
-        rarity_id = _weighted_choice(rng, self.content.rarity_definitions)
-        rarity = self.content.rarity_definitions[rarity_id]
+        grade_id = _weighted_choice(rng, self.content.grade_definitions)
+        grade = self.content.grade_definitions[grade_id]
         affix_pool = {
             affix_id: self.content.affix_definitions[affix_id]
             for affix_id in technique_definition["随机词条"]
@@ -417,7 +539,7 @@ class PlayerFeature:
         affix_ids = _weighted_sample(
             rng,
             affix_pool,
-            int(rarity["词条数量"]),
+            int(grade["词条数量"]),
         )
         affixes = tuple(
             _roll_affix(affix_id, affix_pool[affix_id], rng)
@@ -430,7 +552,7 @@ class PlayerFeature:
             ).fetchone()[0]
         )
         instance_id = f"technique:{user_id}:{born_order}"
-        score = int(rarity["评分"]) + sum(_affix_score(value) for value in affixes)
+        score = int(grade["评分"]) + sum(_affix_score(value) for value in affixes)
         acquired_at = utc_now()
         connection.execute(
             """
@@ -443,7 +565,7 @@ class PlayerFeature:
                 instance_id,
                 user_id,
                 technique_id,
-                rarity_id,
+                grade_id,
                 _json(affixes),
                 born_order,
                 score,
@@ -454,7 +576,7 @@ class PlayerFeature:
             instance_id,
             user_id,
             technique_id,
-            rarity_id,
+            grade_id,
             affixes,
             born_order,
             None,
@@ -515,25 +637,122 @@ class PlayerFeature:
 
     def use_item(self, user_id: str, item_name: str, quantity: int = 1) -> ItemUseResult:
         actor = require_user_id(user_id)
-        item_id = self.resolve_item(item_name)
-        if item_id is None:
+        resolved = self.resolve_item(item_name)
+        if resolved is None:
             return ItemUseResult("not_found")
-        definition = self.content.item_definitions[item_id]
-        use = definition.get("使用效果")
+        item_id, requested_grade = resolved
+        display_name = (
+            self.item_name(item_id, requested_grade)
+            if requested_grade is not None
+            else item_id
+        )
+        use = self.content.item_definitions[item_id].get("使用效果")
         if not isinstance(use, dict):
-            return ItemUseResult("not_usable", item_id)
-        count = max(1, int(quantity))
+            return ItemUseResult("not_usable", display_name)
+        effect_type = str(use.get("类型") or "")
+        if effect_type == "增加伙伴经验":
+            return ItemUseResult(
+                "partner_required",
+                display_name,
+                effect=effect_type,
+            )
+
+        requested_count = max(1, int(quantity))
         with self.database.transaction(write=True) as connection:
             player = self.load_player_in_connection(connection, actor)
-            row = connection.execute(
-                "SELECT quantity FROM inventory_stacks WHERE user_id = ? AND item_id = ?",
-                (actor, item_id),
-            ).fetchone()
-            available = int(row["quantity"]) if row is not None else 0
-            count = min(count, available)
-            if count < 1:
-                return ItemUseResult("insufficient", item_id)
-            effect_type = str(use.get("类型") or "")
+            if effect_type == "增加人物经验":
+                if player.breakthrough_pending or player.level >= int(
+                    self.content.player["人物"]["等级上限"]
+                ):
+                    return ItemUseResult(
+                        "progress_locked",
+                        display_name,
+                        effect=effect_type,
+                        target=player.name,
+                    )
+                taken = self.take_item_in_connection(
+                    connection,
+                    actor,
+                    item_id,
+                    requested_count,
+                    requested_grade,
+                )
+                if taken is None:
+                    return ItemUseResult("insufficient", display_name)
+                gained = self.gain_experience(
+                    player,
+                    int(use["经验"]) * requested_count,
+                )
+                self.update_player_in_connection(
+                    connection,
+                    player,
+                    expected_revision=player.revision,
+                )
+                return ItemUseResult(
+                    "used",
+                    display_name,
+                    requested_count,
+                    effect=effect_type,
+                    experience=gained.applied,
+                    levels_gained=gained.levels_gained,
+                    target=player.name,
+                )
+
+            if effect_type == "增加本命武器经验":
+                weapon = self.load_weapon_in_connection(connection, actor)
+                if weapon.level >= int(self.content.player["本命武器"]["等级上限"]):
+                    return ItemUseResult(
+                        "progress_locked",
+                        display_name,
+                        effect=effect_type,
+                        target=weapon.name,
+                    )
+                taken = self.take_item_in_connection(
+                    connection,
+                    actor,
+                    item_id,
+                    requested_count,
+                    requested_grade,
+                )
+                if taken is None:
+                    return ItemUseResult("insufficient", display_name)
+                before = self._weapon_progress(weapon)
+                levels = self.gain_weapon_experience(
+                    weapon,
+                    int(use["经验"]) * requested_count,
+                )
+                applied = self._weapon_progress(weapon) - before
+                self.update_weapon_in_connection(connection, weapon)
+                return ItemUseResult(
+                    "used",
+                    display_name,
+                    requested_count,
+                    effect=effect_type,
+                    experience=applied,
+                    levels_gained=levels,
+                    target=weapon.name,
+                )
+
+            rows = list(
+                connection.execute(
+                    """
+                    SELECT grade_id, quantity
+                    FROM inventory_stacks
+                    WHERE user_id = ? AND item_id = ? AND quantity > 0
+                    """
+                    + (" AND grade_id = ?" if requested_grade is not None else ""),
+                    (actor, item_id, requested_grade)
+                    if requested_grade is not None
+                    else (actor, item_id),
+                )
+            )
+            rows.sort(
+                key=lambda row: int(
+                    self.content.grade_definitions[str(row["grade_id"])]["阶序"]
+                )
+            )
+            if not rows:
+                return ItemUseResult("insufficient", display_name)
             if effect_type == "恢复血气":
                 resource_field = "health"
                 resource_name = "血气"
@@ -541,38 +760,77 @@ class PlayerFeature:
                 resource_field = "spirit"
                 resource_name = "精神"
             else:
-                return ItemUseResult("not_usable", item_id)
+                return ItemUseResult("not_usable", display_name)
             maximum = player.resource_maximum(resource_name)
             current = float(getattr(player, resource_field))
             if current >= maximum:
-                return ItemUseResult("already_full", item_id, resource=resource_name)
-            per_item = max(0.0, float(use.get("恢复量") or 0))
-            needed = max(1, math.ceil((maximum - current) / per_item)) if per_item else 1
-            count = min(count, needed)
-            recovered = min(maximum - current, per_item * count)
-            if not self.remove_item_in_connection(connection, actor, item_id, count):
-                return ItemUseResult("insufficient", item_id)
-            setattr(player, resource_field, current + recovered)
-            previous = player.revision
-            self.update_player_in_connection(connection, player, expected_revision=previous)
+                return ItemUseResult("already_full", display_name, resource=resource_name)
+            used = 0
+            recovered = 0.0
+            for row in rows:
+                if used >= requested_count or current >= maximum:
+                    break
+                grade_id = str(row["grade_id"])
+                graded = self.content.graded_item_definition(item_id, grade_id)
+                per_item = float(graded["使用效果"]["恢复量"])
+                needed = max(1, math.ceil((maximum - current) / per_item))
+                count = min(int(row["quantity"]), requested_count - used, needed)
+                applied = min(maximum - current, per_item * count)
+                connection.execute(
+                    """
+                    UPDATE inventory_stacks
+                    SET quantity = quantity - ?
+                    WHERE user_id = ? AND item_id = ? AND grade_id = ?
+                    """,
+                    (count, actor, item_id, grade_id),
+                )
+                used += count
+                recovered += applied
+                current += applied
+            connection.execute(
+                """
+                DELETE FROM inventory_stacks
+                WHERE user_id = ? AND item_id = ? AND quantity = 0
+                """,
+                (actor, item_id),
+            )
+            setattr(player, resource_field, current)
+            self.update_player_in_connection(
+                connection,
+                player,
+                expected_revision=player.revision,
+            )
         return ItemUseResult(
             "used",
-            item_id,
-            count,
+            display_name,
+            used,
             recovered,
             resource_name,
+            effect=effect_type,
         )
 
-    def resolve_item(self, value: str) -> str | None:
+    def resolve_item(self, value: str) -> tuple[str, str | None] | None:
         text = str(value or "").strip()
-        return text if text in self.content.item_definitions else None
+        if text in self.content.item_definitions:
+            return text, None
+        for grade_id in self.content.grade_definitions:
+            prefix = f"{grade_id}·"
+            if text.startswith(prefix):
+                item_id = text[len(prefix) :]
+                if item_id in self.content.item_definitions:
+                    return item_id, grade_id
+        return None
 
     def inventory_categories(self, user_id: str) -> tuple[tuple[str, str, int], ...]:
         actor = require_user_id(user_id)
         with self.database.transaction() as connection:
             counts = {key: 0 for key in self.content.item_categories}
             for row in connection.execute(
-                "SELECT item_id, quantity FROM inventory_stacks WHERE user_id = ? AND quantity > 0",
+                """
+                SELECT item_id, grade_id, quantity
+                FROM inventory_stacks
+                WHERE user_id = ? AND quantity > 0
+                """,
                 (actor,),
             ):
                 definition = self.content.item_definitions.get(str(row["item_id"]))
@@ -602,24 +860,38 @@ class PlayerFeature:
             else:
                 entries = []
                 for row in connection.execute(
-                    "SELECT item_id, quantity FROM inventory_stacks WHERE user_id = ? AND quantity > 0",
+                    """
+                    SELECT item_id, grade_id, quantity
+                    FROM inventory_stacks
+                    WHERE user_id = ? AND quantity > 0
+                    """,
                     (actor,),
                 ):
                     item_id = str(row["item_id"])
                     definition = self.content.item_definitions.get(item_id)
                     if definition is None or definition.get("类别") != category_id:
                         continue
+                    grade_id = str(row["grade_id"])
+                    graded = self.content.graded_item_definition(item_id, grade_id)
                     entries.append(
                         InventoryEntry(
-                            category_id,
-                            item_id,
-                            item_id,
-                            int(row["quantity"]),
-                            int(definition.get("评分") or 0),
-                            str(definition.get("说明") or ""),
+                            category=category_id,
+                            key=item_id,
+                            name=str(graded["名称"]),
+                            quantity=int(row["quantity"]),
+                            score=int(graded["评分"]),
+                            detail=str(graded.get("说明") or ""),
+                            grade_id=grade_id,
+                            reference_price=int(graded["参考价"]),
                         )
                     )
-                entries.sort(key=lambda value: (-value.score, value.name, value.key))
+                entries.sort(
+                    key=lambda value: (
+                        -int(self.content.grade_definitions[value.grade_id]["阶序"]),
+                        -value.score,
+                        value.name,
+                    )
+                )
         total = len(entries)
         pages = max(1, math.ceil(total / PAGE_SIZE))
         current_page = min(requested_page, pages)
@@ -645,13 +917,14 @@ class PlayerFeature:
     def _technique_entry(self, value: TechniqueState) -> InventoryEntry:
         affixes = "、".join(str(item["词条"]) for item in value.affixes)
         return InventoryEntry(
-            "功法",
-            str(value.born_order),
-            f"{value.rarity_id}·{value.technique_id}",
-            1,
-            value.score,
-            affixes,
-            value.equipped_slot,
+            category="功法",
+            key=str(value.born_order),
+            name=f"{value.grade_id}·{value.technique_id}",
+            quantity=1,
+            score=value.score,
+            detail=affixes,
+            grade_id=value.grade_id,
+            equipped_slot=value.equipped_slot,
         )
 
 
@@ -696,7 +969,7 @@ def _technique(row: sqlite3.Row) -> TechniqueState:
         instance_id=str(row["instance_id"]),
         user_id=str(row["user_id"]),
         technique_id=str(row["technique_id"]),
-        rarity_id=str(row["rarity_id"]),
+        grade_id=str(row["rarity_id"]),
         affixes=tuple(dict(value) for value in json.loads(str(row["affixes_json"]))),
         born_order=int(row["born_order"]),
         equipped_slot=int(row["equipped_slot"]) if row["equipped_slot"] is not None else None,

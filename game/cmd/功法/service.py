@@ -49,7 +49,7 @@ async def _show_slots(services, user_id: str, client_id: str, manager) -> None:
         reply.line(
             f"{slot}位：",
             M.command(
-                f"{value.rarity_id}·{value.technique_id}",
+                f"{value.grade_id}·{value.technique_id}",
                 f"功法 {value.born_order}",
             ),
         )
@@ -105,12 +105,12 @@ async def _unequip(parts, services, user_id: str, client_id: str, manager) -> No
 
 def _detail(services, technique):
     definition = services.content.technique_definitions[technique.technique_id]
-    rarity = services.content.rarity_definitions[technique.rarity_id]
-    multiplier = float(rarity["威力倍率"])
+    grade = services.content.grade_definitions[technique.grade_id]
+    multiplier = float(grade["能力倍率"])
     attribute_definitions = services.content.attribute_definitions
     reply = (
         M.document()
-        .section(f"{technique.rarity_id}·{technique.technique_id}", icon="skill")
+        .section(f"{technique.grade_id}·{technique.technique_id}", icon="skill")
         .row(("编号", technique.born_order), ("评分", technique.score))
         .line(str(definition.get("说明") or ""))
     )
@@ -206,6 +206,18 @@ def _mechanism_text(
             )
             for effect in mechanism.get("效果") or ()
         )
+    if executor == "随机执行":
+        options = "；".join(
+            _mechanism_text(
+                dict(effect),
+                multiplier,
+                attribute_definitions,
+                ability_definitions=ability_definitions,
+                mechanism_definitions=mechanism_definitions,
+            )
+            for effect in mechanism.get("选项") or ()
+        )
+        return f"随机执行{int(mechanism.get('抽取数量') or 1)}项：{options}"
     if executor == "条件执行":
         conditions = _conditions_text(mechanism.get("条件") or (), ability_definitions)
         effects = "；".join(
@@ -254,10 +266,42 @@ def _mechanism_text(
                     attribute_definitions,
                 )
             )
+        if status.get("行动限制"):
+            parts.append("限制" + "、".join(str(value) for value in status["行动限制"]))
+        if status.get("效果免疫"):
+            parts.append("免疫" + "、".join(str(value) for value in status["效果免疫"]))
+        if int(status.get("层数上限") or 1) > 1:
+            parts.append(f"最多{int(status['层数上限'])}层")
         return "，".join(parts)
     if executor == "恢复资源":
         resource = str(mechanism.get("资源") or "资源")
         return f"恢复{_combat_value_text(mechanism.get('数值'), multiplier)}{resource}"
+    if executor == "消耗资源":
+        resource = str(mechanism.get("资源") or "资源")
+        return f"消耗{_combat_value_text(mechanism.get('数值'), multiplier)}{resource}"
+    if executor == "设置资源":
+        resource = str(mechanism.get("资源") or "资源")
+        return f"将{resource}设为{_combat_value_text(mechanism.get('数值'), multiplier)}"
+    if executor == "转移资源":
+        source_resource = str(mechanism.get("来源资源") or "资源")
+        target_resource = str(mechanism.get("接收资源") or source_resource)
+        return f"转移{_combat_value_text(mechanism.get('数值'), multiplier)}{source_resource}为{target_resource}"
+    if executor == "移除状态":
+        target = str(mechanism.get("状态") or mechanism.get("分类") or "状态")
+        quantity = "全部" if mechanism.get("选择全部") else str(int(mechanism.get("数量") or 1))
+        return f"移除{quantity}个{target}状态"
+    if executor == "修改状态层数":
+        action = "增加" if mechanism.get("能力") == "增加状态层数" else "消耗"
+        return f"{action}{int(mechanism.get('层数') or 1)}层{mechanism.get('状态') or '状态'}"
+    if executor == "修改状态持续":
+        action = "延长" if mechanism.get("能力") == "延长状态" else "缩短"
+        return f"{action}{mechanism.get('状态') or '状态'}{int(mechanism.get('持续数值') or 1)}次行动"
+    if executor in {"复制状态", "转移状态"}:
+        action = "复制" if executor == "复制状态" else "转移"
+        target = str(mechanism.get("状态") or mechanism.get("分类") or "状态")
+        return f"{action}{target}状态"
+    if executor == "修改行动条":
+        return f"行动准备{mechanism.get('方式') or '增加'}{_number(float(mechanism.get('数值') or 0) * multiplier)}%"
     if executor == "修改技能冷却":
         mode = str(mechanism.get("方式") or "减少")
         amount = int(mechanism.get("数值") or 0)
@@ -273,6 +317,8 @@ def _mechanism_text(
     if executor == "抵挡致命伤害":
         health = _number(float(mechanism.get("保留血气") or 1))
         return f"抵挡致命伤害并保留{health}点血气"
+    if executor == "复活":
+        return f"复起并恢复{_number(float(mechanism.get('血气百分比') or 100) * multiplier)}%血气"
     raise ValueError(f"战斗核心未定义执行器展示：{executor or '<空>'}")
 
 
@@ -280,6 +326,24 @@ def _combat_value_text(value: Any, multiplier: float) -> str:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return f"{_number(float(value) * multiplier)}点"
     spec = dict(value or {})
+    ability = str(spec.get("能力") or "读取数值")
+    if ability == "计算数值":
+        left = _combat_value_text(spec.get("左值"), multiplier)
+        right = _combat_value_text(spec.get("右值"), multiplier)
+        symbols = {
+            "相加": "+",
+            "相减": "-",
+            "相乘": "×",
+            "相除": "÷",
+            "取最小": "与其取较小值",
+            "取最大": "与其取较大值",
+            "平均": "与其取平均值",
+        }
+        return f"({left}{symbols.get(str(spec.get('方式') or '相加'), '+')}{right})"
+    if ability == "随机数值":
+        low = _combat_value_text(spec.get("最低值"), multiplier)
+        high = _combat_value_text(spec.get("最高值"), multiplier)
+        return f"{low}至{high}"
     source = str(spec.get("来源") or "固定值")
     percentage = float(spec.get("百分比", 100)) * multiplier
     if source == "固定值":
@@ -291,8 +355,19 @@ def _combat_value_text(value: Any, multiplier: float) -> str:
         "目标属性": f"目标{spec.get('属性') or '属性'}",
         "本次伤害": "本次实际伤害",
         "自身当前血气": "当前血气",
+        "自身已损失血气": "已损失血气",
         "自身当前精神": "当前精神",
         "自身已损失精神": "已损失精神",
+        "自身当前护盾": "当前护盾",
+        "目标当前血气": "目标当前血气",
+        "目标已损失血气": "目标已损失血气",
+        "目标当前精神": "目标当前精神",
+        "目标已损失精神": "目标已损失精神",
+        "目标当前护盾": "目标当前护盾",
+        "本次恢复": "本次实际恢复",
+        "本次护盾": "本次获得护盾",
+        "本次资源消耗": "本次资源消耗",
+        "状态层数": f"{spec.get('状态') or '状态'}层数",
     }
     name = source_names.get(source, source)
     result = f"{name}×{percentage / 100:.2f}"
@@ -321,6 +396,20 @@ def _conditions_text(
                 values.append(f"伤害不含标签：{tags}")
             else:
                 values.append(f"伤害含标签：{tags}")
+        elif executor == "数值条件":
+            left = _combat_value_text(condition.get("左值"), 1.0)
+            right = _combat_value_text(condition.get("右值"), 1.0)
+            values.append(f"{left}{condition.get('比较') or '等于'}{right}")
+        elif executor == "状态条件":
+            relation = str(condition.get("比较") or "存在")
+            suffix = f"{int(condition.get('层数') or 1)}层" if relation.startswith("层数") else ""
+            values.append(f"{condition.get('状态') or '状态'}{relation}{suffix}")
+        elif executor == "类型条件":
+            values.append(f"{condition.get('类型') or '类型'}为{condition.get('值') or '指定值'}")
+        elif executor == "组合条件":
+            nested = _conditions_text(condition.get("条件") or (), ability_definitions)
+            relation = str(condition.get("关系") or "全部成立")
+            values.append(f"{relation}：{nested}")
     return "且".join(values)
 
 

@@ -90,6 +90,9 @@ class StatusState:
     defense_rule: str = "无视防御"
     can_critical: bool = False
     can_block: bool = False
+    duration_unit: str = "状态承受者行动"
+    action_limits: tuple[str, ...] = ()
+    effect_immunities: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "StatusState":
@@ -114,6 +117,9 @@ class StatusState:
             defense_rule=str(value.get("防御规则") or "无视防御"),
             can_critical=bool(value.get("能否暴击", False)),
             can_block=bool(value.get("能否格挡", False)),
+            duration_unit=str(value.get("持续单位") or "状态承受者行动"),
+            action_limits=tuple(str(item) for item in value.get("行动限制") or ()),
+            effect_immunities=tuple(str(item) for item in value.get("效果免疫") or ()),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -135,6 +141,9 @@ class StatusState:
             "防御规则": self.defense_rule,
             "能否暴击": self.can_critical,
             "能否格挡": self.can_block,
+            "持续单位": self.duration_unit,
+            "行动限制": list(self.action_limits),
+            "效果免疫": list(self.effect_immunities),
         }
 
 
@@ -220,12 +229,32 @@ class BattleOutcome:
     actions: int
     events: tuple[BattleEvent, ...]
     trigger_activations: int = 0
+    left_team: tuple[CombatantResult, ...] = ()
+    right_team: tuple[CombatantResult, ...] = ()
+
+    @property
+    def left_results(self) -> tuple[CombatantResult, ...]:
+        return self.left_team or (self.left,)
+
+    @property
+    def right_results(self) -> tuple[CombatantResult, ...]:
+        return self.right_team or (self.right,)
+
+    @property
+    def winner_side(self) -> str | None:
+        left_alive = any(result.alive for result in self.left_results)
+        right_alive = any(result.alive for result in self.right_results)
+        if left_alive == right_alive:
+            return None
+        return "left" if left_alive else "right"
 
     @property
     def winner_id(self) -> str | None:
-        if self.left.alive == self.right.alive:
-            return None
-        return self.left.id if self.left.alive else self.right.id
+        if self.winner_side == "left":
+            return next(result.id for result in self.left_results if result.alive)
+        if self.winner_side == "right":
+            return next(result.id for result in self.right_results if result.alive)
+        return None
 
     @property
     def draw(self) -> bool:
@@ -293,6 +322,8 @@ class BattleContext:
     left: Fighter
     right: Fighter
     item_definitions: dict[str, dict[str, Any]]
+    left_team: tuple[Fighter, ...] = ()
+    right_team: tuple[Fighter, ...] = ()
     events: list[BattleEvent] = field(default_factory=list)
     action_number: int = 0
     engine: "BattleEngine | None" = None
@@ -304,16 +335,41 @@ class BattleContext:
     pending_fatal_guards: dict[str, tuple[str, float, Mapping[str, Any]]] = field(default_factory=dict)
     trigger_stack: set[tuple[str, str]] = field(default_factory=set)
 
+    def __post_init__(self) -> None:
+        if not self.left_team:
+            self.left_team = (self.left,)
+        if not self.right_team:
+            self.right_team = (self.right,)
+        if self.left_team[0] is not self.left or self.right_team[0] is not self.right:
+            raise ValueError("队伍首位必须与左右主参战者一致")
+
     @property
-    def fighters(self) -> tuple[Fighter, Fighter]:
-        return self.left, self.right
+    def fighters(self) -> tuple[Fighter, ...]:
+        return self.left_team + self.right_team
+
+    @property
+    def both_sides_alive(self) -> bool:
+        return any(value.alive for value in self.left_team) and any(
+            value.alive for value in self.right_team
+        )
+
+    def side_index(self, fighter: Fighter) -> int:
+        if any(fighter is value for value in self.left_team):
+            return 0
+        if any(fighter is value for value in self.right_team):
+            return 1
+        raise ValueError("参战者不属于当前战斗")
 
     def opponent_of(self, fighter: Fighter) -> Fighter:
-        if fighter is self.left:
-            return self.right
-        if fighter is self.right:
-            return self.left
-        raise ValueError("参战者不属于当前战斗")
+        if any(fighter is value for value in self.left_team):
+            candidates = tuple(value for value in self.right_team if value.alive)
+        elif any(fighter is value for value in self.right_team):
+            candidates = tuple(value for value in self.left_team if value.alive)
+        else:
+            raise ValueError("参战者不属于当前战斗")
+        if not candidates:
+            raise ValueError("对方阵营已无存活参战者")
+        return candidates[0] if len(candidates) == 1 else self.rng.choice(candidates)
 
     def fighter_by_id(self, fighter_id: str) -> Fighter | None:
         return next((fighter for fighter in self.fighters if fighter.id == fighter_id), None)

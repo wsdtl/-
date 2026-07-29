@@ -29,7 +29,7 @@ class BattleReportTest(unittest.TestCase):
         technique = {
             "实例": "report-test-1",
             "功法": "离火归元诀",
-            "品级": "凡品",
+            "品级": "黄品",
             "出生序号": 1,
             "威力倍率": 1.0,
             "词条": [],
@@ -51,7 +51,7 @@ class BattleReportTest(unittest.TestCase):
                 techniques=(technique,),
             ),
             right=enemy.battle_snapshot(),
-            item_definitions=self.content.item_definitions,
+            item_definitions=self.content.combat_item_definitions(),
             seed=seed,
             action_limit=30,
         )
@@ -143,6 +143,71 @@ class BattleReportTest(unittest.TestCase):
         raw["视觉"]["参战者颜色"] = ["red"]
         with self.assertRaisesRegex(ValueError, "战报颜色不合法"):
             BattleReportCatalog.from_mapping(raw)
+
+    def test_team_battle_report_keeps_every_participant(self) -> None:
+        attributes = dict(self.content.player["人物"]["属性"])
+        enemy = EnemyFeature(self.content).spawn("青牙山犬", seed=19)
+        left = (
+            CombatantSnapshot(
+                id="player",
+                name="甲",
+                attributes=attributes,
+                weapon_attack=10,
+            ),
+            CombatantSnapshot(
+                id="partner:宁药师",
+                name="宁药师",
+                attributes={**attributes, "攻击": 4, "防御": 3},
+                weapon_attack=10,
+                kind="伙伴修士",
+            ),
+        )
+        right = (enemy.battle_snapshot(),)
+        outcome = BattleEngine(self.content.combat).simulate_teams(
+            left=left,
+            right=right,
+            item_definitions=self.content.combat_item_definitions(),
+            seed=19,
+            action_limit=30,
+        )
+        snapshots = {value.id: value for value in (*left, *right)}
+        participants = tuple(
+            BattleReportParticipant(
+                result.id,
+                result.name,
+                "我方" if result.id in {value.id for value in left} else "敌方",
+                result.attributes,
+                float(result.attributes["血气上限"]),
+                result.health,
+                float(result.attributes["精神上限"]),
+                result.spirit,
+                statuses=result.statuses,
+                techniques=tuple(snapshots[result.id].techniques),
+                ability_definitions=self.content.atomic_ability_definitions,
+                level=result.level,
+                kind=result.kind,
+            )
+            for result in (*outcome.left_results, *outcome.right_results)
+        )
+        report = build_battle_report(
+            outcome,
+            participants,
+            catalog=self.content.battle_report,
+            seed=19,
+            generated_at="2026-07-29T12:00:00+08:00",
+        )
+        self.assertEqual(len(report["participants"]), 3)
+        self.assertIn("甲、宁药师 对阵", report["headline"])
+        self.assertEqual(
+            len({value["color"] for value in report["participants"]}),
+            3,
+        )
+        presentation, bundle = build_battle_report_presentation(
+            report,
+            self.content.battle_report,
+        )
+        self.assertEqual(len(presentation["detail"]["segments"][0]["combatants"]), 3)
+        self.assertEqual(len(bundle["participants"]["0:before"]["participants"]), 3)
 
 
 if __name__ == "__main__":

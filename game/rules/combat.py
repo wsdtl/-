@@ -31,20 +31,37 @@ class BattleEngine(MechanismRuntime):
         self._mechanism_handlers: dict[str, Callable[..., None]] = {
             "顺序执行": self._mechanism_sequence,
             "条件执行": self._mechanism_conditional,
+            "随机执行": self._mechanism_random,
             "监听事件": self._mechanism_listener,
             "引用机制": self._mechanism_reference,
             "造成伤害": self._mechanism_damage,
             "恢复资源": self._mechanism_recover_resource,
+            "消耗资源": self._mechanism_consume_resource,
+            "设置资源": self._mechanism_set_resource,
+            "转移资源": self._mechanism_transfer_resource,
             "添加状态": self._mechanism_add_status,
+            "移除状态": self._mechanism_remove_status,
+            "修改状态层数": self._mechanism_modify_status_stacks,
+            "修改状态持续": self._mechanism_modify_status_duration,
+            "复制状态": self._mechanism_copy_status,
+            "转移状态": self._mechanism_transfer_status,
+            "修改行动条": self._mechanism_modify_action_progress,
             "修改技能冷却": self._mechanism_modify_cooldown,
             "抵挡致命伤害": self._mechanism_fatal_guard,
+            "复活": self._mechanism_revive,
         }
         self._condition_handlers: dict[str, Callable[..., bool]] = {
             "概率条件": self._condition_probability,
+            "数值条件": self._condition_numeric,
+            "状态条件": self._condition_status,
+            "类型条件": self._condition_type,
+            "组合条件": self._condition_combined,
             "标签条件": self._condition_tags,
         }
         self._value_handlers: dict[str, Callable[..., float]] = {
             "读取数值": self._value_read,
+            "计算数值": self._value_calculate,
+            "随机数值": self._value_random,
         }
         self._target_handlers: dict[str, Callable[..., _Fighter]] = {
             "选择目标": self._target_select,
@@ -67,30 +84,62 @@ class BattleEngine(MechanismRuntime):
         seed: int,
         action_limit: int,
     ) -> BattleOutcome:
-        if not str(left.id).strip() or not str(right.id).strip():
+        return self.simulate_teams(
+            left=(left,),
+            right=(right,),
+            item_definitions=item_definitions,
+            seed=seed,
+            action_limit=action_limit,
+        )
+
+    def simulate_teams(
+        self,
+        *,
+        left: tuple[CombatantSnapshot, ...],
+        right: tuple[CombatantSnapshot, ...],
+        item_definitions: dict[str, dict[str, Any]],
+        seed: int,
+        action_limit: int,
+        share_left_inventory: bool = False,
+    ) -> BattleOutcome:
+        if not left or not right:
+            raise ValueError("战斗双方都必须至少有一名参战者")
+        snapshots = left + right
+        ids = [str(value.id).strip() for value in snapshots]
+        if any(not value for value in ids):
             raise ValueError("参战者 ID 不能为空")
-        if str(left.id) == str(right.id):
-            raise ValueError("两名参战者不能使用同一个 ID")
-        left_fighter = self._build_fighter(left)
-        right_fighter = self._build_fighter(right)
+        if len(ids) != len(set(ids)):
+            raise ValueError("参战者不能使用重复 ID")
+        left_fighters = tuple(self._build_fighter(value) for value in left)
+        right_fighters = tuple(self._build_fighter(value) for value in right)
+        if share_left_inventory:
+            shared_inventory = left_fighters[0].inventory
+            for fighter in left_fighters[1:]:
+                fighter.inventory = shared_inventory
+        left_fighter = left_fighters[0]
+        right_fighter = right_fighters[0]
         context = _BattleContext(
             rng=random.Random(int(seed)),
             left=left_fighter,
             right=right_fighter,
             item_definitions=item_definitions,
+            left_team=left_fighters,
+            right_team=right_fighters,
         )
         context.engine = self
         context.action_progress = {fighter.id: 0.0 for fighter in context.fighters}
+        left_names = "、".join(value.name for value in left_fighters)
+        right_names = "、".join(value.name for value in right_fighters)
         context.event(
             "战斗开始",
             left_fighter,
             right_fighter,
-            f"{left_fighter.name}与{right_fighter.name}进入战斗",
-            values={"左方": left_fighter.name, "右方": right_fighter.name},
+            f"{left_names}与{right_names}进入战斗",
+            values={"左方": left_names, "右方": right_names},
         )
 
         opening_round = True
-        while all(fighter.alive for fighter in context.fighters) and context.action_number < max(1, int(action_limit)):
+        while context.both_sides_alive and context.action_number < max(1, int(action_limit)):
             order = (
                 self._opening_order(context)
                 if opening_round
@@ -98,8 +147,10 @@ class BattleEngine(MechanismRuntime):
             )
             opening_round = False
             for actor in order:
-                if not all(fighter.alive for fighter in context.fighters):
+                if not context.both_sides_alive:
                     break
+                if not actor.alive:
+                    continue
                 target = context.opponent_of(actor)
                 context.action_number += 1
                 context.trigger_counts.clear()
@@ -112,9 +163,19 @@ class BattleEngine(MechanismRuntime):
                 )
                 self._trigger_statuses(context, actor)
                 if actor.alive:
-                    self._use_medicine(context, actor)
+                    if not self._action_restricted(actor, "使用丹药"):
+                        self._use_medicine(context, actor)
                     self._tick_cooldowns(actor)
-                    if not self._use_skill(context, actor, target):
+                    if self._action_restricted(actor, "行动"):
+                        context.event(
+                            "action_restricted",
+                            actor,
+                            actor,
+                            f"{actor.name}无法行动",
+                            values={"行动类型": "行动"},
+                            dispatch=False,
+                        )
+                    elif not self._use_skill(context, actor, target):
                         self._basic_attack(context, actor, target)
                 self._advance_statuses(context, actor)
                 context.event(
@@ -127,28 +188,32 @@ class BattleEngine(MechanismRuntime):
                 if context.action_number >= max(1, int(action_limit)):
                     break
 
-        winner = next(
-            (fighter for fighter in context.fighters if fighter.alive),
-            None,
-        )
-        draw = winner is None or all(fighter.alive for fighter in context.fighters)
+        left_alive = tuple(value for value in left_fighters if value.alive)
+        right_alive = tuple(value for value in right_fighters if value.alive)
+        draw = bool(left_alive) == bool(right_alive)
+        winners = () if draw else left_alive or right_alive
+        winner_names = "、".join(value.name for value in winners)
         context.event(
             "战斗结束",
             left_fighter,
             right_fighter,
-            "战斗未分胜负" if draw else f"{winner.name}取胜",
+            "战斗未分胜负" if draw else f"{winner_names}取胜",
             values={
                 "结果": "未分胜负" if draw else "分出胜负",
-                "胜者": "" if draw else winner.name,
+                "胜者": "" if draw else winner_names,
                 "行动数": context.action_number,
             },
         )
+        left_results = tuple(self._fighter_result(value) for value in left_fighters)
+        right_results = tuple(self._fighter_result(value) for value in right_fighters)
         return BattleOutcome(
-            left=self._fighter_result(left_fighter),
-            right=self._fighter_result(right_fighter),
+            left=left_results[0],
+            right=right_results[0],
             actions=context.action_number,
             events=tuple(context.events),
             trigger_activations=sum(context.battle_trigger_counts.values()),
+            left_team=left_results,
+            right_team=right_results,
         )
 
     def _build_fighter(self, snapshot: CombatantSnapshot) -> _Fighter:
@@ -200,7 +265,9 @@ class BattleEngine(MechanismRuntime):
             spirit=max(0.0, round(fighter.spirit, 3)),
             shield=max(0.0, round(fighter.shield, 3)),
             statuses=tuple(
-                status for status in fighter.statuses if status.remaining_turns > 0
+                status
+                for status in fighter.statuses
+                if status.remaining_turns > 0 and status.duration_unit != "整场战斗"
             ),
             cooldowns={
                 key: value for key, value in fighter.cooldowns.items() if value > 0
@@ -217,7 +284,7 @@ class BattleEngine(MechanismRuntime):
                 context.fighters,
                 key=lambda fighter: (
                     -fighter.value("速度", 100.0),
-                    0 if fighter is context.left else 1,
+                    context.side_index(fighter),
                 ),
             )
         )
@@ -248,7 +315,7 @@ class BattleEngine(MechanismRuntime):
                     (
                         ready_at,
                         -speed,
-                        0 if fighter is context.left else 1,
+                        context.side_index(fighter),
                         ordinal,
                         fighter,
                     )
@@ -271,7 +338,7 @@ class BattleEngine(MechanismRuntime):
     ) -> tuple[tuple[_Skill, ...], tuple[dict[str, Any], ...]]:
         skills: list[_Skill] = []
         passives: list[dict[str, Any]] = []
-        for instance in sorted(techniques, key=lambda value: int(value["出生序号"])):
+        for instance in sorted(techniques, key=lambda value: int(value.get("出生序号") or 0)):
             for affix in instance.get("词条") or ():
                 key = str(affix.get("属性") or "")
                 if key:
@@ -287,18 +354,20 @@ class BattleEngine(MechanismRuntime):
 
     @staticmethod
     def _assemble_attributes(instance, index, node, attributes, skills, passives) -> None:
-        del instance, index, skills, passives
+        del index, skills, passives
+        multiplier = float(instance.get("威力倍率") or 1.0)
         for key, amount in dict(node.get("属性") or {}).items():
-            attributes[str(key)] = attributes.get(str(key), 0.0) + float(amount)
+            attributes[str(key)] = attributes.get(str(key), 0.0) + float(amount) * multiplier
 
     @staticmethod
     def _assemble_active_skill(instance, index, node, attributes, skills, passives) -> None:
         del attributes, passives
+        source_name = str(instance.get("功法") or instance.get("名称") or "能力")
         skills.append(
             _Skill(
-                key=f"{instance['实例']}:{instance['功法']}:{index}",
-                name=str(node.get("名称") or instance.get("功法") or "功法"),
-                born_order=int(instance["出生序号"]),
+                key=f"{instance['实例']}:{source_name}:{index}",
+                name=str(node.get("名称") or source_name),
+                born_order=int(instance.get("出生序号") or 0),
                 multiplier=float(instance.get("威力倍率") or 1.0),
                 spirit_cost=max(0.0, float(node.get("精神消耗") or 0)),
                 cooldown_turns=max(0, int(node.get("冷却回合") or 0)),
@@ -308,6 +377,7 @@ class BattleEngine(MechanismRuntime):
 
     def _assemble_passive_skill(self, instance, index, node, attributes, skills, passives) -> None:
         del index, attributes, skills
+        source_name = str(instance.get("功法") or instance.get("名称") or "能力")
         for effect_index, raw_effect in enumerate(node.get("效果") or ()):
             effect = dict(raw_effect)
             parsed = self.catalog.parse_node(effect)
@@ -315,14 +385,14 @@ class BattleEngine(MechanismRuntime):
                 mechanism_id = str(effect.get("机制") or "")
                 definition = dict(self.catalog.require_mechanism(mechanism_id))
             else:
-                mechanism_id = f"{instance['功法']}:{node.get('名称') or '被动'}:{effect_index + 1}"
+                mechanism_id = f"{source_name}:{node.get('名称') or '被动'}:{effect_index + 1}"
                 definition = effect
             passives.append(
                 {
                     "机制": mechanism_id,
                     "节点": definition,
                     "实例": str(instance["实例"]),
-                    "功法": str(instance["功法"]),
+                    "来源": source_name,
                     "威力倍率": float(instance.get("威力倍率") or 1.0),
                 }
             )
@@ -383,7 +453,8 @@ class BattleEngine(MechanismRuntime):
     def _advance_statuses(context: _BattleContext, actor: _Fighter) -> None:
         kept: list[StatusState] = []
         for status in actor.statuses:
-            status.remaining_turns -= 1
+            if status.duration_unit == "状态承受者行动":
+                status.remaining_turns -= 1
             if status.remaining_turns > 0:
                 kept.append(status)
             else:
@@ -401,7 +472,7 @@ class BattleEngine(MechanismRuntime):
         actor: _Fighter,
         target: _Fighter,
     ) -> bool:
-        if not actor.skills:
+        if not actor.skills or self._action_restricted(actor, "技能"):
             return False
         start = actor.skill_cursor % len(actor.skills)
         for offset in range(len(actor.skills)):
@@ -458,6 +529,16 @@ class BattleEngine(MechanismRuntime):
         source: _Fighter,
         target: _Fighter,
     ) -> float:
+        if self._action_restricted(source, "普通攻击"):
+            context.event(
+                "action_restricted",
+                source,
+                source,
+                f"{source.name}无法普通攻击",
+                values={"行动类型": "普通攻击"},
+                dispatch=False,
+            )
+            return 0.0
         power = 1.0 + self._percent(source, "普通攻击威力")
         applied = self._deal_attack(
             context,
@@ -478,6 +559,13 @@ class BattleEngine(MechanismRuntime):
             tags=("普通攻击",),
         )
         return applied
+
+    @staticmethod
+    def _action_restricted(fighter: _Fighter, action: str) -> bool:
+        return any(
+            "行动" in status.action_limits or action in status.action_limits
+            for status in fighter.statuses
+        )
 
     def _deal_attack(
         self,
@@ -594,6 +682,15 @@ class BattleEngine(MechanismRuntime):
                 mechanism=context.current_mechanism,
                 dispatch=False,
             )
+            self._dispatch_event(
+                context,
+                kind="闪避后",
+                source=source,
+                target=target,
+                amount=0.0,
+                values=resolution.values(),
+                tags=tags,
+            )
             return resolution
 
         health_floor = None
@@ -639,6 +736,26 @@ class BattleEngine(MechanismRuntime):
             dispatch=False,
         )
         if actual > 0:
+            if resolution.critical:
+                self._dispatch_event(
+                    context,
+                    kind="暴击后",
+                    source=source,
+                    target=target,
+                    amount=actual,
+                    values=event_values,
+                    tags=tags,
+                )
+            if resolution.blocked:
+                self._dispatch_event(
+                    context,
+                    kind="格挡后",
+                    source=source,
+                    target=target,
+                    amount=actual,
+                    values=event_values,
+                    tags=tags,
+                )
             self._dispatch_event(
                 context,
                 kind="造成伤害后",
@@ -657,8 +774,38 @@ class BattleEngine(MechanismRuntime):
                 values=event_values,
                 tags=tags,
             )
+            if resolution.shield_broken:
+                self._dispatch_event(
+                    context,
+                    kind="护盾破碎后",
+                    source=source,
+                    target=target,
+                    amount=resolution.shield_damage,
+                    values=event_values,
+                    tags=tags,
+                )
         if guarded:
             self._apply_fatal_guard_recovery(context, target)
+        if not target.alive:
+            self._dispatch_event(
+                context,
+                kind="死亡后",
+                source=source,
+                target=target,
+                amount=actual,
+                values=event_values,
+                tags=tags,
+            )
+            if not target.alive:
+                self._dispatch_event(
+                    context,
+                    kind="击杀后",
+                    source=source,
+                    target=target,
+                    amount=actual,
+                    values=event_values,
+                    tags=tags,
+                )
         if (
             allow_reactions
             and resolution.actual_damage > 0
