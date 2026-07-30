@@ -1360,9 +1360,10 @@ def _validate_world(
         raise GameContentError(f"数据文件有问题：{WORLD_FILE} -> 世界.出生地：未知地点 {starting_location or '<空>'}")
 
     bounds = _require_object(world, "坐标边界", f"{WORLD_CONFIG_FILE} -> 世界")
-    minimum_x, maximum_x = _range(bounds.get("横轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.横轴", minimum=None)
-    minimum_y, maximum_y = _range(bounds.get("纵轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.纵轴", minimum=None)
-    region_bounds: dict[str, tuple[int, int, int, int]] = {}
+    minimum_x, maximum_x = _range(bounds.get("x轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.x轴", minimum=None)
+    minimum_y, maximum_y = _range(bounds.get("y轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.y轴", minimum=None)
+    minimum_z, maximum_z = _range(bounds.get("z轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.z轴", minimum=None)
+    region_bounds: dict[str, tuple[int, int, int, int, int, int]] = {}
     for region_id, definition in regions.items():
         region_path = f"{WORLD_CONFIG_FILE} -> 区域.{region_id}"
         region = _object(definition, region_path)
@@ -1371,13 +1372,21 @@ def _validate_world(
             if not str(region.get(key) or "").strip():
                 raise GameContentError(f"数据文件有问题：{region_path}.{key}：不能为空")
         region_range = _require_object(region, "坐标范围", region_path)
-        low_x, high_x = _range(region_range.get("横轴"), f"{region_path}.坐标范围.横轴", minimum=None)
-        low_y, high_y = _range(region_range.get("纵轴"), f"{region_path}.坐标范围.纵轴", minimum=None)
-        if low_x < minimum_x or high_x > maximum_x or low_y < minimum_y or high_y > maximum_y:
+        low_x, high_x = _range(region_range.get("x轴"), f"{region_path}.坐标范围.x轴", minimum=None)
+        low_y, high_y = _range(region_range.get("y轴"), f"{region_path}.坐标范围.y轴", minimum=None)
+        low_z, high_z = _range(region_range.get("z轴"), f"{region_path}.坐标范围.z轴", minimum=None)
+        if (
+            low_x < minimum_x
+            or high_x > maximum_x
+            or low_y < minimum_y
+            or high_y > maximum_y
+            or low_z < minimum_z
+            or high_z > maximum_z
+        ):
             raise GameContentError(f"数据文件有问题：{region_path}.坐标范围：超出世界坐标边界")
-        region_bounds[str(region_id)] = (low_x, high_x, low_y, high_y)
+        region_bounds[str(region_id)] = (low_x, high_x, low_y, high_y, low_z, high_z)
     available_functions: set[str] = set()
-    coordinates: dict[tuple[int, int], str] = {}
+    coordinates: dict[tuple[int, int, int], str] = {}
     npc_homes: dict[str, str] = {}
     for location_id, definition in locations.items():
         path = f"{WORLD_FILE} -> 地点.{location_id}"
@@ -1402,16 +1411,24 @@ def _validate_world(
         terrain_items = _expand_groups(terrain_pools, item_groups)
         if not terrain_items or any(str(items[item_id]["类别"]) != "天材地宝" for item_id in terrain_items):
             raise GameContentError(f"数据文件有问题：{path}.天材地宝池：只能包含天材地宝")
-        x, y = _coordinate(value.get("坐标"), f"{path}.坐标")
-        if not minimum_x <= x <= maximum_x or not minimum_y <= y <= maximum_y:
+        x, y, z = _coordinate(value.get("坐标"), f"{path}.坐标")
+        if (
+            not minimum_x <= x <= maximum_x
+            or not minimum_y <= y <= maximum_y
+            or not minimum_z <= z <= maximum_z
+        ):
             raise GameContentError(f"数据文件有问题：{path}.坐标：超出世界坐标边界")
-        low_x, high_x, low_y, high_y = region_bounds[region_id]
-        if not low_x <= x <= high_x or not low_y <= y <= high_y:
+        low_x, high_x, low_y, high_y, low_z, high_z = region_bounds[region_id]
+        if (
+            not low_x <= x <= high_x
+            or not low_y <= y <= high_y
+            or not low_z <= z <= high_z
+        ):
             raise GameContentError(f"数据文件有问题：{path}.坐标：超出所属区域 {region_id}")
-        previous = coordinates.get((x, y))
+        previous = coordinates.get((x, y, z))
         if previous is not None:
             raise GameContentError(f"数据文件有问题：{path}.坐标：与地点 {previous} 重复")
-        coordinates[(x, y)] = str(location_id)
+        coordinates[(x, y, z)] = str(location_id)
         npc_pool = _string_list(value.get("道侣池"), f"{path}.道侣池")
         if "修士" in functions and not npc_pool:
             raise GameContentError(f"数据文件有问题：{path}.道侣池：修士功能地点不能为空")
@@ -1840,10 +1857,14 @@ def _integer(
     return value
 
 
-def _coordinate(value: Any, path: str) -> tuple[int, int]:
-    if not isinstance(value, list) or len(value) != 2:
-        raise GameContentError(f"数据文件有问题：{path}：必须是 [横坐标, 纵坐标]")
-    return _integer(value[0], f"{path}[0]"), _integer(value[1], f"{path}[1]")
+def _coordinate(value: Any, path: str) -> tuple[int, int, int]:
+    if not isinstance(value, list) or len(value) != 3:
+        raise GameContentError(f"数据文件有问题：{path}：必须是 [x, y, z]")
+    return (
+        _integer(value[0], f"{path}[0]"),
+        _integer(value[1], f"{path}[1]"),
+        _integer(value[2], f"{path}[2]"),
+    )
 
 
 def _range(value: Any, path: str, *, minimum: int | None = 0) -> tuple[int, int]:

@@ -24,13 +24,21 @@ async def show_map(message: str, context, client_id: str, manager) -> None:
         _user_id(context),
         context.sender_name,
     )
-    (minimum_x, maximum_x), (minimum_y, maximum_y) = services.location.coordinate_bounds
+    (
+        (minimum_x, maximum_x),
+        (minimum_y, maximum_y),
+        (minimum_z, maximum_z),
+    ) = services.location.coordinate_bounds
     reply = (
         M.document()
         .section(services.location.world_name, icon="map")
         .line(services.location.world_description)
         .row(("当前地点", current.name), ("坐标", current.coordinate_text))
-        .field("坐标边界", f"横轴 {minimum_x}至{maximum_x} · 纵轴 {minimum_y}至{maximum_y}")
+        .field(
+            "坐标边界",
+            f"x轴 {minimum_x}至{maximum_x} · y轴 {minimum_y}至{maximum_y}"
+            f" · z轴 {minimum_z}至{maximum_z}",
+        )
         .section("山境一览", icon="world")
     )
     for location in services.location.all_locations():

@@ -35,7 +35,6 @@ def validate_battle_design(
     _validate_resource_metadata(definitions)
     _validate_direction_catalog(
         combination=combination,
-        balance=balance,
         directions=directions,
         group_directions=group_directions,
         groups=groups,
@@ -115,7 +114,6 @@ def _validate_resource_metadata(
     for kind in KINDS:
         for object_id, definition in definitions[kind].items():
             path = f"{kind}.{object_id}"
-            _positive_integer(definition.get("评分"), f"{path}.评分")
             for field in META_FIELDS:
                 values = _string_list(definition.get(field), f"{path}.{field}")
                 if len(values) != len(set(values)):
@@ -148,7 +146,6 @@ def _validate_resource_metadata(
 def _validate_direction_catalog(
     *,
     combination: Mapping[str, Any],
-    balance: Mapping[str, Any],
     directions: Mapping[str, Mapping[str, Any]],
     group_directions: Mapping[str, Mapping[str, str]],
     groups: Mapping[str, Mapping[str, Sequence[str]]],
@@ -163,7 +160,6 @@ def _validate_direction_catalog(
         kind: _invert_unique(group_directions[kind], kind)
         for kind in KINDS
     }
-    global_dimensions = tuple(_mapping(balance, "评分维度"))
     for direction_id, direction in directions.items():
         path = f"战斗方向.{direction_id}"
         if str(direction.get("名称") or "") != direction_id:
@@ -180,16 +176,6 @@ def _validate_direction_catalog(
         for field in ("优势场景", "弱势场景"):
             if len(_string_list(direction.get(field), f"{path}.{field}")) < 2:
                 raise ValueError(f"{path}.{field}至少需要2项")
-        model = _mapping(direction, "评分模型")
-        for field in ("主指标", "辅助指标", "惩罚项"):
-            if len(_string_list(model.get(field), f"{path}.评分模型.{field}")) < 2:
-                raise ValueError(f"{path}.评分模型.{field}至少需要2项")
-        weights = _mapping(model, "维度权重")
-        if tuple(weights) != global_dimensions:
-            raise ValueError(f"{path}.评分模型.维度权重必须覆盖八个评分维度")
-        if sum(_positive_integer(value, f"{path}.评分模型.维度权重.{key}") for key, value in weights.items()) != 100:
-            raise ValueError(f"{path}.评分模型.维度权重合计必须为100")
-
         direction_candidates: dict[str, tuple[str, ...]] = {}
         for kind in KINDS:
             group_id = inverse_groups[kind].get(direction_id)

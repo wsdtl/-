@@ -581,8 +581,6 @@ class NpcFeature:
         shield: float = 0.0,
         cooldowns: Mapping[str, int] | None = None,
         skill_cursor: int = 0,
-        charge_progress: Mapping[str, int] | None = None,
-        charging_skill: str = "",
     ) -> CombatantSnapshot:
         loadout = configure_battle_instances(
             self.content,
@@ -612,8 +610,6 @@ class NpcFeature:
             auto_medicine=auto_medicine,
             medicine_threshold=medicine_threshold,
             skill_cursor=skill_cursor,
-            charge_progress=dict(charge_progress or {}),
-            charging_skill=str(charging_skill or ""),
         )
 
     def apply_battle_results_in_connection(

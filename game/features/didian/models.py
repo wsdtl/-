@@ -16,10 +16,11 @@ class LocationSummary:
     enemies: tuple[str, ...]
     x: int
     y: int
+    z: int
 
     @property
     def coordinate_text(self) -> str:
-        return f"({self.x}, {self.y})"
+        return f"({self.x}, {self.y}, {self.z})"
 
     @property
     def label(self) -> str:
@@ -38,10 +39,11 @@ class LocationState:
     enemies: tuple[str, ...]
     x: int
     y: int
+    z: int
 
     @property
     def coordinate_text(self) -> str:
-        return f"({self.x}, {self.y})"
+        return f"({self.x}, {self.y}, {self.z})"
 
     @property
     def label(self) -> str:

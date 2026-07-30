@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 import random
-from typing import Any
+from typing import Any, Callable
 
 from .models import Fighter
 
@@ -116,6 +116,7 @@ class DamageEngine:
         source: Fighter,
         target: Fighter,
         rng: random.Random,
+        judge: Callable[[str, float, float | None], bool] | None = None,
     ) -> DamageResolution:
         raw = max(0.0, float(request.amount))
         minimum_hit = float(self.rules.get("最低命中率", 20)) / 100.0
@@ -127,7 +128,11 @@ class DamageEngine:
             maximum_hit,
         )
         hit_roll = rng.random() if request.can_miss else None
-        hit = not request.can_miss or bool(hit_roll is not None and hit_roll < hit_chance)
+        hit = not request.can_miss or (
+            judge("命中", hit_chance, hit_roll)
+            if judge is not None
+            else bool(hit_roll is not None and hit_roll < hit_chance)
+        )
         if not hit:
             empty = DamageBreakdown(
                 raw,
@@ -174,8 +179,11 @@ class DamageEngine:
         critical_roll = rng.random() if request.can_critical else None
         critical = bool(
             request.can_critical
-            and critical_roll is not None
-            and critical_roll < critical_chance
+            and (
+                judge("暴击", critical_chance, critical_roll)
+                if judge is not None
+                else critical_roll is not None and critical_roll < critical_chance
+            )
         )
         critical_multiplier = 1.0
         if critical:
@@ -226,7 +234,14 @@ class DamageEngine:
             if request.can_block and request.defense_rule != "真实"
             else None
         )
-        blocked = bool(block_roll is not None and block_roll < block_chance)
+        blocked = bool(
+            request.can_block
+            and (
+                judge("格挡", block_chance, block_roll)
+                if judge is not None
+                else block_roll is not None and block_roll < block_chance
+            )
+        )
         block_reduction = (
             self._clamp(self._percent(target, "格挡减伤"), 0.0, 0.9)
             if blocked

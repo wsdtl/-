@@ -8,6 +8,10 @@ from .damage import (
     DamageResolution as DamageResolution,
 )
 from .mechanics import MechanismRuntime as MechanismRuntime
+from .foundation import (
+    load_battle_foundation as load_battle_foundation,
+    validate_battle_foundation as validate_battle_foundation,
+)
 from .models import (
     BattleContext as BattleContext,
     BattleEvent as BattleEvent,
@@ -16,6 +20,9 @@ from .models import (
     CombatantResult as CombatantResult,
     CombatantSnapshot as CombatantSnapshot,
     Fighter as Fighter,
+    CombatObject as CombatObject,
+    EventFrame as EventFrame,
+    ActionIntent as ActionIntent,
     RuleNode as RuleNode,
     Skill as Skill,
     StatusState as StatusState,

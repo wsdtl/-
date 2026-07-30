@@ -30,6 +30,8 @@ class RuleSchemaValidator:
             "事件引用",
             "机制引用",
             "属性数值表",
+            "任意",
+            "任意数组",
         }
     )
     _FIELD_KEYS = frozenset(
@@ -90,7 +92,8 @@ class RuleSchemaValidator:
                 raise RuleSchemaError(
                     f"{ability_path}.执行器：{executor} 不能用于 {category} 类能力"
                 )
-            self._nonempty_string(definition.get("说明"), f"{ability_path}.说明")
+            if "说明" in definition:
+                self._nonempty_string(definition.get("说明"), f"{ability_path}.说明")
             fields = self._object(definition.get("字段", {}), f"{ability_path}.字段")
             for field_name, raw_spec in fields.items():
                 self._validate_field_spec(raw_spec, f"{ability_path}.字段.{field_name}")
@@ -233,6 +236,10 @@ class RuleSchemaValidator:
                 if attribute not in self.attributes:
                     raise RuleSchemaError(f"{path}.{attribute}：未知战斗属性")
                 self._number(amount, f"{path}.{attribute}", {})
+        elif field_type == "任意":
+            return
+        elif field_type == "任意数组":
+            self._list(value, path, spec)
         else:
             raise RuleSchemaError(f"{path}：规则使用了未知字段类型 {field_type}")
 

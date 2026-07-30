@@ -279,8 +279,6 @@ class ExplorationFeature:
         statuses = list(assets.player.statuses)
         cooldowns: dict[str, int] = {}
         skill_cursor = 0
-        charge_progress: dict[str, int] = {}
-        charging_skill = ""
         inventory = dict(assets.inventory)
         techniques = self.player.battle_loadout(assets)
         party_states = {
@@ -295,8 +293,6 @@ class ExplorationFeature:
                 "statuses": [dict(value) for value in partner.statuses],
                 "cooldowns": {},
                 "skill_cursor": 0,
-                "charge_progress": {},
-                "charging_skill": "",
             }
             for partner in partners
         }
@@ -347,8 +343,6 @@ class ExplorationFeature:
                 medicine_threshold=float(rules["自动用药阈值"]),
                 cooldowns=cooldowns,
                 skill_cursor=skill_cursor,
-                charge_progress=charge_progress,
-                charging_skill=charging_skill,
             )
             enemy_snapshot = enemy.battle_snapshot()
             partner_snapshots = tuple(
@@ -360,12 +354,6 @@ class ExplorationFeature:
                     shield=float(party_states[partner.npc_id]["shield"]),
                     cooldowns=dict(party_states[partner.npc_id]["cooldowns"]),
                     skill_cursor=int(party_states[partner.npc_id]["skill_cursor"]),
-                    charge_progress=dict(
-                        party_states[partner.npc_id]["charge_progress"]
-                    ),
-                    charging_skill=str(
-                        party_states[partner.npc_id]["charging_skill"]
-                    ),
                 )
                 for partner in active_partners
             )
@@ -387,8 +375,6 @@ class ExplorationFeature:
             statuses = [value.to_dict() for value in player_result.statuses]
             cooldowns = dict(player_result.cooldowns)
             skill_cursor = player_result.skill_cursor
-            charge_progress = dict(player_result.charge_progress)
-            charging_skill = player_result.charging_skill
             partner_results = {value.id: value for value in outcome.left_results[1:]}
             for partner in active_partners:
                 partner_result = partner_results[partner.combatant_id]
@@ -401,8 +387,6 @@ class ExplorationFeature:
                         "statuses": [value.to_dict() for value in partner_result.statuses],
                         "cooldowns": dict(partner_result.cooldowns),
                         "skill_cursor": partner_result.skill_cursor,
-                        "charge_progress": dict(partner_result.charge_progress),
-                        "charging_skill": partner_result.charging_skill,
                     }
                 )
             battle_result = (
@@ -442,8 +426,6 @@ class ExplorationFeature:
                     "statuses": statuses,
                     "cooldowns": cooldowns,
                     "skill_cursor": skill_cursor,
-                    "charge_progress": charge_progress,
-                    "charging_skill": charging_skill,
                     "party": [dict(party_states[value.npc_id]) for value in partners],
                     "consumed_items": dict(consumed_items),
                     "enemy_spirit_stones": enemy.spirit_stones,

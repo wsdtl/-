@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS player_locations (
     user_id TEXT PRIMARY KEY REFERENCES players(user_id) ON DELETE CASCADE,
     x INTEGER NOT NULL,
     y INTEGER NOT NULL,
+    z INTEGER NOT NULL DEFAULT 0,
     arrived_at TEXT NOT NULL
 );
 """
@@ -58,15 +59,25 @@ class LocationFeature:
         return str(self.content.world_definition["说明"])
 
     @property
-    def coordinate_bounds(self) -> tuple[tuple[int, int], tuple[int, int]]:
+    def coordinate_bounds(self) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int]]:
         bounds = self.content.world_definition["坐标边界"]
         return (
-            (int(bounds["横轴"][0]), int(bounds["横轴"][1])),
-            (int(bounds["纵轴"][0]), int(bounds["纵轴"][1])),
+            (int(bounds["x轴"][0]), int(bounds["x轴"][1])),
+            (int(bounds["y轴"][0]), int(bounds["y轴"][1])),
+            (int(bounds["z轴"][0]), int(bounds["z轴"][1])),
         )
 
     def initialize(self) -> None:
         self.database.initialize(SCHEMA)
+        with self.database.transaction(write=True) as connection:
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(player_locations)")
+            }
+            if "z" not in columns:
+                connection.execute(
+                    "ALTER TABLE player_locations ADD COLUMN z INTEGER NOT NULL DEFAULT 0"
+                )
 
     def current(self, user_id: str, display_name: str = "") -> LocationState:
         actor = require_user_id(user_id)
@@ -87,21 +98,21 @@ class LocationFeature:
         self,
         connection: sqlite3.Connection,
         user_id: str,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         actor = require_user_id(user_id)
         row = connection.execute(
-            "SELECT x, y FROM player_locations WHERE user_id = ?",
+            "SELECT x, y, z FROM player_locations WHERE user_id = ?",
             (actor,),
         ).fetchone()
         if row is None:
             location_id = str(self.content.world_definition["出生地"])
-            x, y = self._coordinates_by_id[location_id]
+            x, y, z = self._coordinates_by_id[location_id]
             connection.execute(
-                "INSERT INTO player_locations(user_id, x, y, arrived_at) VALUES (?, ?, ?, ?)",
-                (actor, x, y, self.clock()),
+                "INSERT INTO player_locations(user_id, x, y, z, arrived_at) VALUES (?, ?, ?, ?, ?)",
+                (actor, x, y, z, self.clock()),
             )
-            return x, y
-        coordinates = int(row["x"]), int(row["y"])
+            return x, y, z
+        coordinates = int(row["x"]), int(row["y"]), int(row["z"])
         if coordinates not in self._ids_by_coordinates:
             raise RuntimeError(f"人物所在坐标没有登记地点：{coordinates}")
         return coordinates
@@ -125,8 +136,8 @@ class LocationFeature:
                 return MoveResult(ALREADY_THERE, current)
             distance = self.distance(current, destination)
             connection.execute(
-                "UPDATE player_locations SET x = ?, y = ?, arrived_at = ? WHERE user_id = ?",
-                (destination.x, destination.y, self.clock(), actor),
+                "UPDATE player_locations SET x = ?, y = ?, z = ?, arrived_at = ? WHERE user_id = ?",
+                (destination.x, destination.y, destination.z, self.clock(), actor),
             )
         return MoveResult(MOVED, destination, current, distance)
 
@@ -136,7 +147,7 @@ class LocationFeature:
 
     def state(self, location_id: str) -> LocationState:
         definition = self.content.location_definitions[str(location_id)]
-        x, y = self._coordinates_by_id[str(location_id)]
+        x, y, z = self._coordinates_by_id[str(location_id)]
         return LocationState(
             str(location_id),
             str(location_id),
@@ -148,10 +159,11 @@ class LocationFeature:
             self.content.enemies_in_groups(definition["敌人池"]),
             x,
             y,
+            z,
         )
 
-    def state_at(self, x: int, y: int) -> LocationState:
-        coordinates = int(x), int(y)
+    def state_at(self, x: int, y: int, z: int) -> LocationState:
+        coordinates = int(x), int(y), int(z)
         location_id = self._ids_by_coordinates.get(coordinates)
         if location_id is None:
             raise RuntimeError(f"坐标没有登记地点：{coordinates}")
@@ -169,7 +181,11 @@ class LocationFeature:
         origin: LocationState | LocationSummary,
         destination: LocationState | LocationSummary,
     ) -> int:
-        return abs(origin.x - destination.x) + abs(origin.y - destination.y)
+        return (
+            abs(origin.x - destination.x)
+            + abs(origin.y - destination.y)
+            + abs(origin.z - destination.z)
+        )
 
     def supports_in_connection(
         self,
@@ -202,7 +218,7 @@ class LocationFeature:
 
     def _summary(self, location_id: str) -> LocationSummary:
         definition = self.content.location_definitions[str(location_id)]
-        x, y = self._coordinates_by_id[str(location_id)]
+        x, y, z = self._coordinates_by_id[str(location_id)]
         return LocationSummary(
             str(location_id),
             str(location_id),
@@ -213,12 +229,13 @@ class LocationFeature:
             self.content.enemies_in_groups(definition["敌人池"]),
             x,
             y,
+            z,
         )
 
 
-def _coordinates(definition: dict) -> tuple[int, int]:
+def _coordinates(definition: dict) -> tuple[int, int, int]:
     value = definition["坐标"]
-    return int(value[0]), int(value[1])
+    return int(value[0]), int(value[1]), int(value[2])
 
 
 __all__ = [

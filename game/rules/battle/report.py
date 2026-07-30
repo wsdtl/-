@@ -434,8 +434,8 @@ def _status_report(value: StatusState | Mapping[str, Any]) -> dict[str, Any]:
     status = value.to_dict() if isinstance(value, StatusState) else dict(value)
     return {
         "name": str(status.get("名称") or "未知状态"),
-        "category": str(status.get("类别") or status.get("分类") or "中性"),
-        "turns": max(0, int(status.get("剩余回合") or status.get("持续数值") or 0)),
+        "category": str(status.get("类别") or "中性"),
+        "turns": max(0, int(status.get("剩余行动") or 0)),
         "stacks": max(1, int(status.get("层数") or 1)),
         "source": str(status.get("来源名称") or status.get("来源") or ""),
     }

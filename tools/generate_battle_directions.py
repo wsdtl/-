@@ -8,7 +8,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data" / "content"
+DATA = ROOT / "data" / "内容"
 TECHNIQUE_DIR = DATA / "物品" / "功法"
 ENCHANTMENT_DIR = DATA / "物品" / "附魔技能书"
 GEM_DIR = DATA / "物品" / "宝石"
@@ -763,7 +763,6 @@ def _attribute_amount(attribute: str, tier: int) -> float | int:
 
 
 def _direction_definition(direction: str, engine: dict[str, Any], objective: dict[str, Any]) -> dict[str, Any]:
-    weights = _normalized_weights(objective["weights"], engine["adjustments"])
     counter = _counter_name(direction)
     special = {
         "反击": "受击或格挡后追加普通攻击",
@@ -773,7 +772,6 @@ def _direction_definition(direction: str, engine: dict[str, Any], objective: dic
         "转轮": "推进蓄势并缩减技能冷却",
     }.get(objective["key"], f"以{objective['main_metric']}积累临战优势")
     return {
-        "名称": direction,
         "定位": f"以{engine['status']}与{counter}为双核心，{objective['description']}。",
         "核心状态": f"{engine['status']}、{counter}",
         "机制构型": {
@@ -795,12 +793,6 @@ def _direction_definition(direction: str, engine: dict[str, Any], objective: dic
         "防御方式": f"通过{engine['support_metric']}与{objective['support_metric']}降低循环被打断的概率。",
         "优势场景": [engine["advantage"], objective["advantage"]],
         "弱势场景": [engine["weakness"], objective["weakness"]],
-        "评分模型": {
-            "主指标": [engine["main_metric"], objective["main_metric"]],
-            "辅助指标": [engine["support_metric"], objective["support_metric"]],
-            "惩罚项": [engine["weakness"], objective["weakness"]],
-            "维度权重": weights,
-        },
     }
 
 
@@ -823,13 +815,13 @@ def _normalized_weights(base: dict[str, int], adjustments: dict[str, int]) -> di
     return scaled
 
 
-def _write_json(path: Path, value: dict[str, Any]) -> None:
+def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _clear_generated_files() -> None:
-    expected_parent = (ROOT / "data" / "content" / "物品").resolve()
+    expected_parent = (ROOT / "data" / "内容" / "物品").resolve()
     for directory in (TECHNIQUE_DIR, ENCHANTMENT_DIR, GEM_DIR):
         resolved = directory.resolve()
         if resolved.parent != expected_parent:
@@ -837,33 +829,33 @@ def _clear_generated_files() -> None:
         for path in resolved.glob("*.json"):
             path.unlink()
     resolved_mechanisms = DIRECTION_MECHANISM_DIR.resolve()
-    if resolved_mechanisms.parent != (ROOT / "data" / "content" / "战斗机制").resolve():
+    if resolved_mechanisms.parent != (ROOT / "data" / "内容" / "战斗机制").resolve():
         raise RuntimeError(f"拒绝清理意外目录：{resolved_mechanisms}")
     if resolved_mechanisms.exists():
         for path in resolved_mechanisms.glob("*.json"):
             path.unlink()
 
 
-def _world_npcs() -> list[tuple[Path, dict[str, Any], str]]:
-    result: list[tuple[Path, dict[str, Any], str]] = []
+def _world_npcs() -> list[tuple[Path, list[dict[str, Any]], int]]:
+    result: list[tuple[Path, list[dict[str, Any]], int]] = []
     for path in sorted(WORLD_DIR.rglob("*.json"), key=lambda value: value.as_posix()):
         data = json.loads(path.read_text(encoding="utf-8"))
-        npcs = data.get("道侣")
-        if not isinstance(npcs, dict):
+        if not isinstance(data, list) or not path.stem.endswith("道侣"):
             continue
-        for npc_id in npcs:
-            result.append((path, data, str(npc_id)))
+        for index, npc in enumerate(data):
+            if not isinstance(npc, dict):
+                raise RuntimeError(f"道侣池存在非对象项：{path}")
+            result.append((path, data, index))
     return result
 
 
 def _remove_enemy_static_loadouts() -> None:
     for path in sorted(WORLD_DIR.rglob("*.json"), key=lambda value: value.as_posix()):
         data = json.loads(path.read_text(encoding="utf-8"))
-        enemies = data.get("敌人")
-        if not isinstance(enemies, dict):
+        if not isinstance(data, dict) or not path.stem.endswith("敌人"):
             continue
         changed = False
-        for enemy in enemies.values():
+        for enemy in data.values():
             if "功法" in enemy:
                 del enemy["功法"]
                 changed = True
@@ -878,7 +870,8 @@ def generate() -> None:
     if len(assignments) != expected:
         raise RuntimeError(f"世界必须正好定义{expected}名道侣，当前为{len(assignments)}名")
 
-    changed_world: dict[Path, dict[str, Any]] = {}
+    changed_world: dict[Path, list[dict[str, Any]]] = {}
+    directions: dict[str, dict[str, Any]] = {}
     direction_index = 0
     for engine in ENGINES:
         for objective in OBJECTIVES:
@@ -896,35 +889,24 @@ def generate() -> None:
             gem_group = f"物品-宝石-{direction}"
             _write_json(
                 DIRECTION_MECHANISM_DIR / f"机制-{direction}.json",
-                {"版本": f"晓楠修仙.战斗机制.{direction}.v1", "机制": mechanisms},
+                mechanisms,
             )
             _write_json(
                 TECHNIQUE_DIR / f"{technique_group}.json",
-                {
-                    "版本": f"晓楠修仙.功法.{direction}.v1",
-                    "战斗方向": _direction_definition(direction, engine, objective),
-                    "功法": _techniques(direction_index, direction, engine, objective, names, technique_mechanisms),
-                },
+                _techniques(direction_index, direction, engine, objective, names, technique_mechanisms),
             )
             _write_json(
                 ENCHANTMENT_DIR / f"{enchantment_group}.json",
-                {
-                    "版本": f"晓楠修仙.附魔.{direction}.v1",
-                    "所属方向": direction,
-                    "附魔": _enchantments(direction_index, direction, engine, objective, names, enchantment_mechanisms),
-                },
+                _enchantments(direction_index, direction, engine, objective, names, enchantment_mechanisms),
             )
             _write_json(
                 GEM_DIR / f"{gem_group}.json",
-                {
-                    "版本": f"晓楠修仙.宝石.{direction}.v1",
-                    "所属方向": direction,
-                    "宝石": _gems(direction, engine, objective, names),
-                },
+                _gems(direction, engine, objective, names),
             )
+            directions[direction] = _direction_definition(direction, engine, objective)
 
-            world_path, world_data, npc_id = assignments[direction_index - 1]
-            npc = world_data["道侣"][npc_id]
+            world_path, world_data, npc_index = assignments[direction_index - 1]
+            npc = world_data[npc_index]
             npc["修行方向"] = direction
             npc["功法池"] = [technique_group]
             npc["附魔池"] = [enchantment_group]
@@ -933,6 +915,7 @@ def generate() -> None:
 
     for path, value in changed_world.items():
         _write_json(path, value)
+    _write_json(DATA / "战斗方向.json", directions)
     _remove_enemy_static_loadouts()
     print(f"generated directions={direction_index} techniques={direction_index * 9} enchantments={direction_index * 9} gems={direction_index * 9}")
 

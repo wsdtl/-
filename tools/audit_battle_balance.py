@@ -39,17 +39,19 @@ DIMENSIONS = (
     "稳定性",
     "团队价值",
 )
+DEFAULT_BALANCE_PATH = ROOT / "tools" / "战斗校验" / "平衡.json"
 
 
 def audit(
     *,
     data_dir: Path,
+    balance_path: Path = DEFAULT_BALANCE_PATH,
     output_path: Path,
     builds_per_direction: int | None = None,
     seeds_per_match: int | None = None,
 ) -> dict[str, Any]:
     content = GameContent.load(JsonDataReader(data_dir))
-    balance = content.balance_rules
+    balance = JsonDataReader(balance_path.parent).read(balance_path.name)
     sample_rule = balance["战斗抽样"]
     build_count = int(builds_per_direction or sample_rule["每方向构筑数"])
     seed_count = int(seeds_per_match or sample_rule["每组对战种子数"])
@@ -80,7 +82,7 @@ def audit(
 
     engine = BattleEngine(content.combat)
     item_definitions = content.combat_item_definitions()
-    scenario_directions = _scenario_directions(content)
+    scenario_directions = _scenario_directions(content, balance)
     battle_values: dict[str, dict[str, list[float]]] = {
         direction_id: {dimension: [] for dimension in DIMENSIONS}
         for direction_id in directions
@@ -154,7 +156,7 @@ def audit(
     composites: list[float] = []
     for direction_id in directions:
         definition = content.direction_definitions[direction_id]
-        weights = definition["评分模型"]["维度权重"]
+        weights = balance["方向评分模型"][direction_id]["维度权重"]
         evidence = matches[direction_id]
         confidence = evidence / (evidence + 24.0)
         adjusted_dimensions = {
@@ -265,7 +267,10 @@ def _affix_value(value: Mapping[str, Any]) -> float:
     return 2.0 + max(0.0, min(1.0, ratio)) * 3.0
 
 
-def _scenario_directions(content: GameContent) -> dict[str, str]:
+def _scenario_directions(
+    content: GameContent,
+    balance: Mapping[str, Any],
+) -> dict[str, str]:
     result: dict[str, str] = {}
     used: set[str] = set()
     for dimension in DIMENSIONS:
@@ -273,9 +278,7 @@ def _scenario_directions(content: GameContent) -> dict[str, str]:
             content.direction_definitions,
             key=lambda direction_id: (
                 -int(
-                    content.direction_definitions[direction_id]["评分模型"][
-                        "维度权重"
-                    ][dimension]
+                    balance["方向评分模型"][direction_id]["维度权重"][dimension]
                 ),
                 direction_id,
             ),
@@ -422,12 +425,14 @@ def _seed(*values: Any) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=ROOT / "data")
+    parser.add_argument("--balance", type=Path, default=DEFAULT_BALANCE_PATH)
     parser.add_argument("--output", type=Path, default=ROOT / "log" / "战斗平衡审查.json")
     parser.add_argument("--builds", type=int)
     parser.add_argument("--seeds", type=int)
     args = parser.parse_args()
     report = audit(
         data_dir=args.data,
+        balance_path=args.balance,
         output_path=args.output,
         builds_per_direction=args.builds,
         seeds_per_match=args.seeds,

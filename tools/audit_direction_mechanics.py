@@ -5,11 +5,19 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MECHANISM_DIR = ROOT / "data" / "content" / "战斗机制" / "方向"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from game.core import JsonDataReader
+
+
+MECHANISM_DIR = ROOT / "data" / "内容" / "战斗机制" / "方向"
+CHECKS_PATH = ROOT / "tools" / "战斗校验" / "内容完整性.json"
 REPORT_PATH = ROOT / "log" / "战斗机制审查.json"
 
 REQUIRED_COVERAGE = {
@@ -72,6 +80,8 @@ def _walk_abilities(value: Any) -> list[str]:
 
 
 def audit() -> dict[str, Any]:
+    checks = JsonDataReader(CHECKS_PATH.parent).read(CHECKS_PATH.name)
+    expected_directions = int(checks["方向数量"])
     signatures: dict[str, str] = {}
     collisions: dict[str, list[str]] = defaultdict(list)
     coverage: Counter[str] = Counter()
@@ -80,7 +90,7 @@ def audit() -> dict[str, Any]:
     for path in sorted(MECHANISM_DIR.glob("机制-*.json"), key=lambda item: item.name):
         direction = path.stem.removeprefix("机制-")
         data = json.loads(path.read_text(encoding="utf-8"))
-        mechanisms = data.get("机制")
+        mechanisms = data
         if not isinstance(mechanisms, dict) or not mechanisms:
             raise ValueError(f"{path.name}缺少机制定义")
         normalized = [_normalize("机制", node) for node in mechanisms.values()]
@@ -96,8 +106,10 @@ def audit() -> dict[str, Any]:
         values for values in collisions.values() if len(values) > 1
     ]
     failures: list[str] = []
-    if len(signatures) != 264:
-        failures.append(f"方向数量应为264，当前为{len(signatures)}")
+    if len(signatures) != expected_directions:
+        failures.append(
+            f"方向数量应为{expected_directions}，当前为{len(signatures)}"
+        )
     if duplicate_groups:
         failures.append(f"存在{len(duplicate_groups)}组仅换名称的重复能力树")
     for ability, minimum in REQUIRED_COVERAGE.items():

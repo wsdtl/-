@@ -1,8 +1,4 @@
-"""战斗 JSON 可以绑定的最小执行语义。
-
-这里登记的是 Python 真正能够执行的底层动作，不登记任何功法、机制或
-玩家可见能力名。同一个执行器可以被多个 JSON 能力复用。
-"""
+"""JSON 原子能力可以绑定的最小执行语义。"""
 
 from __future__ import annotations
 
@@ -18,12 +14,18 @@ EXECUTOR_CATEGORIES = MappingProxyType(
         "顺序执行": frozenset({"组合"}),
         "条件执行": frozenset({"组合"}),
         "随机执行": frozenset({"组合"}),
+        "遍历目标": frozenset({"组合"}),
+        "重复执行": frozenset({"组合"}),
+        "尝试执行": frozenset({"组合"}),
+        "事务执行": frozenset({"组合"}),
         "监听事件": frozenset({"触发"}),
         "读取数值": frozenset({"数值"}),
         "计算数值": frozenset({"数值"}),
         "随机数值": frozenset({"数值"}),
+        "聚合数值": frozenset({"数值"}),
         "选择目标": frozenset({"目标"}),
         "选择技能": frozenset({"目标"}),
+        "选择状态": frozenset({"目标"}),
         "概率条件": frozenset({"条件"}),
         "数值条件": frozenset({"条件"}),
         "状态条件": frozenset({"条件"}),
@@ -33,6 +35,7 @@ EXECUTOR_CATEGORIES = MappingProxyType(
         "造成伤害": frozenset({"效果"}),
         "恢复资源": frozenset({"效果"}),
         "消耗资源": frozenset({"效果"}),
+        "支付代价": frozenset({"效果"}),
         "设置资源": frozenset({"效果"}),
         "转移资源": frozenset({"效果"}),
         "添加状态": frozenset({"效果"}),
@@ -44,12 +47,31 @@ EXECUTOR_CATEGORIES = MappingProxyType(
         "修改行动条": frozenset({"效果"}),
         "修改技能冷却": frozenset({"效果"}),
         "修改机制计量": frozenset({"效果"}),
-        "修改蓄势进度": frozenset({"效果"}),
-        "追加行动": frozenset({"效果"}),
+        "追加攻击": frozenset({"效果"}),
         "分摊伤害": frozenset({"效果"}),
         "转移伤害": frozenset({"效果"}),
         "抵挡致命伤害": frozenset({"效果"}),
         "复活": frozenset({"效果"}),
+        "修改事件数值": frozenset({"效果"}),
+        "修改事件目标": frozenset({"效果"}),
+        "修改事件标签": frozenset({"效果"}),
+        "取消事件": frozenset({"效果"}),
+        "触发技能": frozenset({"效果"}),
+        "记录战斗事实": frozenset({"效果"}),
+        "修改战斗关联": frozenset({"效果"}),
+        "修改技能": frozenset({"效果"}),
+        "复制技能": frozenset({"效果"}),
+        "修改行动意图": frozenset({"效果"}),
+        "转化事件": frozenset({"效果"}),
+        "修改判定": frozenset({"效果"}),
+        "修改战场规则": frozenset({"效果"}),
+        "保存结果": frozenset({"效果"}),
+        "切换形态": frozenset({"效果"}),
+        "创建战斗对象": frozenset({"效果"}),
+        "移除战斗对象": frozenset({"效果"}),
+        "修改归属": frozenset({"效果"}),
+        "回放效果": frozenset({"效果"}),
+        "修改战术": frozenset({"效果"}),
     }
 )
 

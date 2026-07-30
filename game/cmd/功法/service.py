@@ -148,11 +148,8 @@ def _detail(services, technique):
             reply.line("主动功法：", str(node.get("名称") or technique.technique_id))
             reply.row(
                 ("消耗精神", _number(float(node.get("精神消耗") or 0))),
-                ("冷却", f"{int(node.get('冷却回合') or 0)}回合"),
+                ("冷却", f"{int(node.get('冷却行动') or 0)}次自身行动"),
             )
-            charge_turns = int(node.get("蓄势回合") or 0)
-            if charge_turns:
-                reply.field("蓄势", f"{charge_turns}次行动")
             _append_effects(reply, node, multiplier, attribute_definitions, abilities, mechanisms)
         elif executor == "装配被动技能":
             reply.line("被动功法：", str(node.get("名称") or technique.technique_id))
@@ -329,12 +326,8 @@ def _mechanism_text(
             return f"清空{counter}"
         amount = _combat_value_text(mechanism.get("数值", 0), multiplier)
         return f"{counter}{mode}{amount}"
-    if executor == "修改蓄势进度":
-        mode = str(mechanism.get("方式") or "增加")
-        amount = int(float(mechanism.get("数值") or 0) * multiplier)
-        return f"蓄势中功法{mode}{amount}次准备"
-    if executor == "追加行动":
-        power = _number(float(mechanism.get("威力倍率", 100)) * multiplier)
+    if executor == "追加攻击":
+        power = _number(float(mechanism.get("威力倍率", 1)) * multiplier * 100)
         return f"追加一次{power}%威力普通攻击"
     if executor == "分摊伤害":
         ratio = _number(float(mechanism.get("比例") or 0) * multiplier)
@@ -397,7 +390,6 @@ def _combat_value_text(value: Any, multiplier: float) -> str:
         "本次资源消耗": "本次资源消耗",
         "状态层数": f"{spec.get('状态') or '状态'}层数",
         "机制计量": str(spec.get("计量") or "机制计量"),
-        "蓄势进度": "所选功法蓄势进度",
     }
     name = source_names.get(source, source)
     result = f"{name}×{percentage / 100:.2f}"
