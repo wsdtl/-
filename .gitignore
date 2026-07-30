@@ -3,8 +3,11 @@ __pycache__/
 .env
 .venv/
 .runtime/
+.history/
 log/
 launch/runtime/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/backups/*.db
+立绘/*
