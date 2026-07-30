@@ -72,6 +72,7 @@ async def _equip(parts, services, user_id: str, client_id: str, manager) -> None
         "invalid_slot": "功法位置只能是1至6。",
         "not_found": "没有找到这本功法。",
         "duplicate_name": "同名功法不能同时装配。",
+        "incompatible": "这本功法与当前功法、附魔或宝石无法共同运转。",
     }[status]
     await manager.send(
         M.document()
@@ -92,7 +93,11 @@ async def _unequip(parts, services, user_id: str, client_id: str, manager) -> No
         await manager.send(_error("功法位置只能是1至6。"), client_id)
         return
     status = await asyncio.to_thread(services.player.unequip_technique, user_id, slot)
-    text = "已卸下。" if status == "unequipped" else "这个位置原本就是空的。"
+    text = {
+        "unequipped": "已卸下。",
+        "empty_slot": "这个位置原本就是空的。",
+        "incompatible": "当前还有功法、附魔或宝石依赖它，暂时不能卸下。",
+    }[status]
     await manager.send(
         M.document()
         .section("功法卸下", icon="skill")
@@ -145,6 +150,9 @@ def _detail(services, technique):
                 ("消耗精神", _number(float(node.get("精神消耗") or 0))),
                 ("冷却", f"{int(node.get('冷却回合') or 0)}回合"),
             )
+            charge_turns = int(node.get("蓄势回合") or 0)
+            if charge_turns:
+                reply.field("蓄势", f"{charge_turns}次行动")
             _append_effects(reply, node, multiplier, attribute_definitions, abilities, mechanisms)
         elif executor == "装配被动技能":
             reply.line("被动功法：", str(node.get("名称") or technique.technique_id))
@@ -314,6 +322,26 @@ def _mechanism_text(
         else:
             target = f"{quantity}门冷却中功法"
         return f"{target}清空冷却" if mode == "清空" else f"{target}{mode}{amount}回合冷却"
+    if executor == "修改机制计量":
+        counter = str(mechanism.get("计量") or "机制计量")
+        mode = str(mechanism.get("方式") or "增加")
+        if mode == "清空":
+            return f"清空{counter}"
+        amount = _combat_value_text(mechanism.get("数值", 0), multiplier)
+        return f"{counter}{mode}{amount}"
+    if executor == "修改蓄势进度":
+        mode = str(mechanism.get("方式") or "增加")
+        amount = int(float(mechanism.get("数值") or 0) * multiplier)
+        return f"蓄势中功法{mode}{amount}次准备"
+    if executor == "追加行动":
+        power = _number(float(mechanism.get("威力倍率", 100)) * multiplier)
+        return f"追加一次{power}%威力普通攻击"
+    if executor == "分摊伤害":
+        ratio = _number(float(mechanism.get("比例") or 0) * multiplier)
+        return f"替同阵修士分摊{ratio}%待结算伤害"
+    if executor == "转移伤害":
+        amount = _combat_value_text(mechanism.get("数值"), multiplier)
+        return f"替同阵修士承受{amount}待结算伤害"
     if executor == "抵挡致命伤害":
         health = _number(float(mechanism.get("保留血气") or 1))
         return f"抵挡致命伤害并保留{health}点血气"
@@ -368,6 +396,8 @@ def _combat_value_text(value: Any, multiplier: float) -> str:
         "本次护盾": "本次获得护盾",
         "本次资源消耗": "本次资源消耗",
         "状态层数": f"{spec.get('状态') or '状态'}层数",
+        "机制计量": str(spec.get("计量") or "机制计量"),
+        "蓄势进度": "所选功法蓄势进度",
     }
     name = source_names.get(source, source)
     result = f"{name}×{percentage / 100:.2f}"

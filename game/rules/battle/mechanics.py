@@ -30,7 +30,7 @@ class MechanismRuntime:
             if mechanism.get("事件") != "受到致命伤害":
                 continue
             relation = str(mechanism.get("事件关系") or "自身相关")
-            if not self._event_relation_matches(relation, target, source, target):
+            if not self._event_relation_matches(relation, target, source, target, context):
                 continue
             if not self._conditions_allow(
                 context,
@@ -431,81 +431,97 @@ class MechanismRuntime:
         amount: float,
         values: Mapping[str, Any],
         tags: tuple[str, ...],
-    ) -> None:
+    ) -> dict[str, Any]:
+        event_values = dict(values)
         if kind not in self.catalog.events or context.event_depth >= 16:
-            return
-        values = {**dict(values), "事件": kind}
-        for owner in context.fighters:
-            for passive in owner.passives:
-                mechanism_id, mechanism = self._passive_node(passive)
-                if self.catalog.parse_node(mechanism).executor != "监听事件":
-                    continue
-                if mechanism.get("事件") != kind:
-                    continue
-                relation = str(mechanism.get("事件关系") or "自身相关")
-                if not self._event_relation_matches(relation, owner, source, target):
-                    continue
-                if "派生伤害" in tags and not mechanism.get("接受派生事件", False):
-                    continue
-                if not self._conditions_allow(
-                    context,
-                    source,
-                    target,
-                    mechanism.get("条件") or (),
-                    amount,
-                    values,
-                    tags,
-                ):
-                    continue
-                if not self._trigger_can_resolve(owner, mechanism):
-                    continue
-                owner_key = f"{owner.id}:{passive.get('实例') or owner.id}"
-                activation_key = (owner_key, mechanism_id)
-                if activation_key in context.trigger_stack:
-                    continue
-                per_action = mechanism.get("每次行动最多触发")
-                if per_action is not None and context.trigger_counts.get(activation_key, 0) >= int(per_action):
-                    continue
-                per_battle = mechanism.get("每场战斗最多触发")
-                if per_battle is not None and context.battle_trigger_counts.get(activation_key, 0) >= int(per_battle):
-                    continue
-                context.trigger_counts[activation_key] = context.trigger_counts.get(activation_key, 0) + 1
-                context.battle_trigger_counts[activation_key] = context.battle_trigger_counts.get(activation_key, 0) + 1
-                context.trigger_stack.add(activation_key)
-                context.event_depth += 1
-                previous = context.current_mechanism
-                context.current_mechanism = mechanism_id
-                context.event(
-                    "trigger",
-                    owner,
-                    target,
-                    f"{mechanism_id}触发",
-                    values={"机制": mechanism_id, "事件": kind},
-                    mechanism=mechanism_id,
-                    dispatch=False,
-                )
-                try:
-                    for child in mechanism.get("效果") or ():
-                        self._execute_mechanism(
-                            context,
-                            owner,
-                            target,
-                            dict(child),
-                            float(passive.get("威力倍率") or 1.0),
-                            event_amount=amount,
-                            event_values=values,
-                        )
-                finally:
-                    context.current_mechanism = previous
-                    context.event_depth -= 1
-                    context.trigger_stack.discard(activation_key)
+            return event_values
+        event_values["事件"] = kind
+        ordered_passives = sorted(
+            (
+                (int(passive["结算顺序"]), owner.id, owner, passive)
+                for owner in context.fighters
+                for passive in owner.passives
+            ),
+            key=lambda value: (value[0], value[1]),
+        )
+        for _, _, owner, passive in ordered_passives:
+            mechanism_id, mechanism = self._passive_node(passive)
+            if self.catalog.parse_node(mechanism).executor != "监听事件":
+                continue
+            if mechanism.get("事件") != kind:
+                continue
+            relation = str(mechanism.get("事件关系") or "自身相关")
+            if not self._event_relation_matches(
+                relation,
+                owner,
+                source,
+                target,
+                context,
+            ):
+                continue
+            if "派生伤害" in tags and not mechanism.get("接受派生事件", False):
+                continue
+            if not self._conditions_allow(
+                context,
+                source,
+                target,
+                mechanism.get("条件") or (),
+                amount,
+                event_values,
+                tags,
+            ):
+                continue
+            if not self._trigger_can_resolve(owner, mechanism):
+                continue
+            owner_key = f"{owner.id}:{passive.get('实例') or owner.id}"
+            activation_key = (owner_key, mechanism_id)
+            if activation_key in context.trigger_stack:
+                continue
+            per_action = mechanism.get("每次行动最多触发")
+            if per_action is not None and context.trigger_counts.get(activation_key, 0) >= int(per_action):
+                continue
+            per_battle = mechanism.get("每场战斗最多触发")
+            if per_battle is not None and context.battle_trigger_counts.get(activation_key, 0) >= int(per_battle):
+                continue
+            context.trigger_counts[activation_key] = context.trigger_counts.get(activation_key, 0) + 1
+            context.battle_trigger_counts[activation_key] = context.battle_trigger_counts.get(activation_key, 0) + 1
+            context.trigger_stack.add(activation_key)
+            context.event_depth += 1
+            previous = context.current_mechanism
+            context.current_mechanism = mechanism_id
+            context.event(
+                "trigger",
+                owner,
+                target,
+                f"{mechanism_id}触发",
+                values={"机制": mechanism_id, "事件": kind},
+                mechanism=mechanism_id,
+                dispatch=False,
+            )
+            try:
+                for child in mechanism.get("效果") or ():
+                    self._execute_mechanism(
+                        context,
+                        owner,
+                        target,
+                        dict(child),
+                        float(passive.get("威力倍率") or 1.0),
+                        event_amount=amount,
+                        event_values=event_values,
+                    )
+            finally:
+                context.current_mechanism = previous
+                context.event_depth -= 1
+                context.trigger_stack.discard(activation_key)
+        return event_values
 
-    @staticmethod
     def _event_relation_matches(
+        self,
         relation: str,
         owner: _Fighter,
         source: _Fighter,
         target: _Fighter,
+        context: _BattleContext | None = None,
     ) -> bool:
         if relation == "自身为来源":
             return source is owner
@@ -515,6 +531,10 @@ class MechanismRuntime:
             return source is owner or target is owner
         if relation == "任意":
             return True
+        if context is not None and relation == "自身与承受者同阵营":
+            return context.side_index(owner) == context.side_index(target)
+        if context is not None and relation == "自身与来源同阵营":
+            return context.side_index(owner) == context.side_index(source)
         raise ValueError(f"战斗核心未实现事件关系：{relation}")
 
     def _trigger_can_resolve(self, owner: _Fighter, mechanism: Mapping[str, Any]) -> bool:
@@ -1165,6 +1185,291 @@ class MechanismRuntime:
             dispatch=False,
         )
 
+    def _mechanism_modify_counter(
+        self,
+        context,
+        source,
+        target,
+        effect,
+        multiplier,
+        *,
+        event_amount=0.0,
+        event_values=None,
+        **_,
+    ) -> None:
+        destination = self._effect_target(source, target, effect.get("目标"))
+        counter = str(effect.get("计量") or "").strip()
+        key = (destination.id, counter)
+        before = context.mechanism_counters.get(key, 0.0)
+        mode = str(effect.get("方式") or "增加")
+        amount = self._resolve_value(
+            context,
+            effect.get("数值", 0),
+            source,
+            destination,
+            event_amount,
+            event_values or {},
+        )
+        if mode in {"增加", "减少"}:
+            amount *= multiplier
+        if mode == "增加":
+            after = before + amount
+        elif mode == "减少":
+            if before < amount and effect.get("不足时是否失败", True):
+                return
+            after = before - amount
+        elif mode == "设置":
+            after = amount
+        elif mode == "清空":
+            after = 0.0
+        else:
+            raise ValueError(f"战斗核心未实现机制计量修改方式：{mode}")
+        minimum = float(effect.get("最低值", 0))
+        maximum = float(effect.get("最高值", 100))
+        after = self._clamp(after, minimum, maximum)
+        if math.isclose(before, after, rel_tol=1e-12, abs_tol=1e-12):
+            return
+        if math.isclose(after, 0.0, abs_tol=1e-12):
+            context.mechanism_counters.pop(key, None)
+        else:
+            context.mechanism_counters[key] = after
+        context.event(
+            "mechanism_counter",
+            source,
+            destination,
+            f"{counter}由{_number(before)}变为{_number(after)}",
+            after - before,
+            values={"计量": counter, "原计量": before, "现计量": after},
+            mechanism=context.current_mechanism,
+            dispatch=False,
+        )
+
+    def _mechanism_modify_charge(
+        self,
+        context,
+        source,
+        target,
+        effect,
+        multiplier,
+        **_,
+    ) -> None:
+        destination = self._effect_target(source, target, effect.get("目标"))
+        selected = self._select_skills(context, destination, effect.get("技能"))
+        mode = str(effect.get("方式") or "增加")
+        amount = max(0, int(round(float(effect.get("数值") or 0) * multiplier)))
+        skills = {skill.key: skill for skill in destination.skills}
+        for key in selected:
+            skill = skills.get(key)
+            if skill is None or skill.charge_turns <= 0:
+                continue
+            before = destination.charge_progress.get(key, 0)
+            if mode == "增加":
+                after = before + amount
+            elif mode == "减少":
+                after = before - amount
+            elif mode == "设置":
+                after = amount
+            elif mode == "清空":
+                after = 0
+            else:
+                raise ValueError(f"战斗核心未实现蓄势修改方式：{mode}")
+            after = max(0, min(skill.charge_turns, after))
+            if after:
+                destination.charge_progress[key] = after
+            else:
+                destination.charge_progress.pop(key, None)
+                if destination.charging_skill == key:
+                    destination.charging_skill = ""
+            context.event(
+                "charge_progress",
+                source,
+                destination,
+                f"{skill.name}蓄势由{before}变为{after}",
+                after - before,
+                values={
+                    "技能": skill.name,
+                    "技能键": key,
+                    "原蓄势进度": before,
+                    "蓄势进度": after,
+                    "蓄势上限": skill.charge_turns,
+                },
+                mechanism=context.current_mechanism,
+                dispatch=False,
+            )
+
+    def _mechanism_additional_action(
+        self,
+        context,
+        source,
+        target,
+        effect,
+        multiplier,
+        **_,
+    ) -> None:
+        if not source.alive or self._action_restricted(source, "普通攻击"):
+            return
+        destination = self._effect_target(source, target, effect.get("目标"))
+        if not destination.alive or context.side_index(source) == context.side_index(destination):
+            return
+        hard_limit = max(
+            0,
+            int(self.catalog.action_rules.get("每次主行动最多追加", 3)),
+        )
+        configured_limit = max(1, int(effect.get("每次主行动最多追加") or 1))
+        limit = min(hard_limit, configured_limit)
+        count = context.additional_action_counts.get(source.id, 0)
+        if count >= limit:
+            return
+        context.additional_action_counts[source.id] = count + 1
+        power = max(0.0, float(effect.get("威力倍率", 100)) * multiplier / 100.0)
+        applied = self._deal_attack(
+            context,
+            source,
+            destination,
+            power,
+            str(effect.get("名称") or "追加攻击"),
+            damage_form="直接",
+            tags=("追加行动", "普通攻击", "派生伤害"),
+            allow_followups=False,
+        )
+        values = {
+            "行动类型": "普通攻击",
+            "实际伤害": applied,
+            "本次主行动追加次数": context.additional_action_counts[source.id],
+        }
+        context.event(
+            "普通攻击后",
+            source,
+            destination,
+            f"{source.name}完成追加攻击",
+            applied,
+            values=values,
+            tags=("追加行动", "普通攻击", "派生伤害"),
+        )
+        context.event(
+            "追加行动后",
+            source,
+            destination,
+            f"{source.name}完成追加行动",
+            applied,
+            values=values,
+            tags=("追加行动", "普通攻击", "派生伤害"),
+        )
+
+    def _mechanism_share_damage(
+        self,
+        context,
+        source,
+        target,
+        effect,
+        multiplier,
+        *,
+        event_values=None,
+        **_,
+    ) -> None:
+        values = event_values if isinstance(event_values, dict) else None
+        if values is None:
+            return
+        ratio = self._clamp(float(effect.get("比例") or 0) * multiplier / 100.0, 0.0, 1.0)
+        pending = max(0.0, float(values.get("待结算伤害", 0)))
+        self._redirect_damage(
+            context,
+            source,
+            target,
+            effect,
+            values,
+            pending * ratio,
+            damage_form="分摊",
+        )
+
+    def _mechanism_transfer_damage(
+        self,
+        context,
+        source,
+        target,
+        effect,
+        multiplier,
+        *,
+        event_amount=0.0,
+        event_values=None,
+        **_,
+    ) -> None:
+        values = event_values if isinstance(event_values, dict) else None
+        if values is None:
+            return
+        destination = self._effect_target(source, target, effect.get("目标"))
+        amount = self._resolve_value(
+            context,
+            effect.get("数值"),
+            source,
+            destination,
+            event_amount,
+            values,
+        ) * multiplier
+        self._redirect_damage(
+            context,
+            source,
+            target,
+            effect,
+            values,
+            amount,
+            damage_form="转移",
+            destination=destination,
+        )
+
+    def _redirect_damage(
+        self,
+        context: _BattleContext,
+        owner: _Fighter,
+        event_target: _Fighter,
+        effect: Mapping[str, Any],
+        event_values: dict[str, Any],
+        amount: float,
+        *,
+        damage_form: str,
+        destination: _Fighter | None = None,
+    ) -> None:
+        original_target = context.fighter_by_id(str(event_values.get("原承受者ID") or ""))
+        original_source = context.fighter_by_id(str(event_values.get("伤害来源ID") or ""))
+        destination = destination or self._effect_target(owner, event_target, effect.get("目标"))
+        if (
+            original_target is None
+            or original_source is None
+            or destination is original_target
+            or not destination.alive
+        ):
+            return
+        pending = max(0.0, float(event_values.get("待结算伤害", 0)))
+        redirected = min(pending, max(0.0, float(amount)))
+        if redirected <= 0:
+            return
+        event_values["待结算伤害"] = pending - redirected
+        key = "已分摊伤害" if damage_form == "分摊" else "已转移伤害"
+        event_values[key] = float(event_values.get(key, 0)) + redirected
+        tags = tuple(
+            dict.fromkeys(
+                (
+                    *tuple(str(value) for value in event_values.get("伤害标签", ())),
+                    f"{damage_form}伤害",
+                    "派生伤害",
+                )
+            )
+        )
+        self._apply_damage(
+            context,
+            original_source,
+            destination,
+            redirected,
+            label=str(effect.get("名称") or f"{damage_form}伤害"),
+            damage_form=damage_form,
+            defense_rule="真实",
+            can_miss=False,
+            can_critical=False,
+            can_block=False,
+            tags=tags,
+            allow_reactions=False,
+        )
+
     def _mechanism_revive(self, context, source, target, effect, multiplier, **_):
         destination = self._effect_target(source, target, effect.get("目标"))
         if destination.alive:
@@ -1255,6 +1560,8 @@ class MechanismRuntime:
             candidates = [key for key in skills if key != fighter.current_skill]
         elif scope == "当前技能":
             candidates = [fighter.current_skill] if fighter.current_skill else []
+        elif scope == "蓄势中的技能":
+            candidates = [fighter.charging_skill] if fighter.charging_skill else []
         elif scope == "指定技能":
             name = str(selector.get("名称") or "")
             candidates = [key for key, skill in skills.items() if key == name or skill.name == name]
@@ -1343,6 +1650,14 @@ class MechanismRuntime:
         elif origin == "状态层数":
             status_name = str(spec.get("状态") or "")
             result = float(sum(status.stacks for status in selected.statuses if status.name == status_name))
+        elif origin == "机制计量":
+            counter = str(spec.get("计量") or "")
+            result = float(context.mechanism_counters.get((selected.id, counter), 0.0))
+        elif origin == "蓄势进度":
+            selected_skills = self._select_skills(context, selected, spec.get("技能"))
+            result = float(
+                sum(selected.charge_progress.get(key, 0) for key in selected_skills)
+            )
         else:
             result = float(spec.get("固定值", spec.get("数值", 0)) or 0)
         if "百分比" in spec:

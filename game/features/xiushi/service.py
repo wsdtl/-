@@ -1,4 +1,4 @@
-"""地点伙伴修士的交谈、好感与同行关系。"""
+"""地点修士的交谈、结为道侣与同行关系。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Any
 from game.content import GameContent
 from game.core import Database, require_user_id, utc_now
 from game.features.didian import LocationFeature
+from game.features.loadout import configure_battle_instances, roll_loadout
 from game.features.player import ItemUseResult, PlayerFeature
 from game.rules import CombatantResult, CombatantSnapshot
 
@@ -70,7 +71,7 @@ class NpcProfile:
     favor: int
     favor_max: int
     in_party: bool
-    liked_categories: tuple[str, ...]
+    favorite_item_groups: tuple[str, ...]
     favorite_items: tuple[str, ...]
 
     @property
@@ -87,9 +88,7 @@ class NpcProfile:
 
     @property
     def preference_text(self) -> str:
-        categories = "、".join(self.liked_categories)
-        favorites = "、".join(self.favorite_items)
-        return f"喜爱{categories} · 尤喜{favorites}"
+        return "钟爱" + "、".join(self.favorite_items)
 
 
 @dataclass(frozen=True)
@@ -166,7 +165,7 @@ class NpcFeature:
         self.clock = clock
         self.seed_factory = seed_factory or (lambda: secrets.randbits(63))
         self.home_locations = self.content.npc_home_locations
-        self.favor_max = int(self.content.player["伙伴"]["好感上限"])
+        self.favor_max = int(self.content.player["道侣"]["好感上限"])
 
     def initialize(self) -> None:
         self.database.initialize(SCHEMA)
@@ -204,7 +203,7 @@ class NpcFeature:
         current = self.location.current(actor, display_name)
         target_id = str(location_id)
         resident_ids = self.content.npcs_in_groups(
-            list(self.content.location_definitions[target_id]["修士池"])
+            list(self.content.location_definitions[target_id]["道侣池"])
         )
         with self.database.transaction() as connection:
             relations = self._relations(connection, actor)
@@ -268,7 +267,7 @@ class NpcFeature:
         item_id, requested_grade = resolved
         shown_name = self.player.item_name(item_id, requested_grade) if requested_grade else item_id
         use = self.content.item_definitions[item_id].get("使用效果")
-        if not isinstance(use, dict) or use.get("类型") != "增加伙伴经验":
+        if not isinstance(use, dict) or use.get("类型") != "增加道侣经验":
             return ItemUseResult("not_usable", shown_name)
         requested_count = max(1, int(quantity))
         with self.database.transaction(write=True) as connection:
@@ -284,7 +283,7 @@ class NpcFeature:
                 return ItemUseResult(
                     "progress_locked",
                     shown_name,
-                    effect="增加伙伴经验",
+                    effect="增加道侣经验",
                     target=partner.npc_id,
                 )
             taken = self.player.take_item_in_connection(
@@ -305,7 +304,7 @@ class NpcFeature:
             "used",
             shown_name,
             requested_count,
-            effect="增加伙伴经验",
+            effect="增加道侣经验",
             experience=applied,
             levels_gained=levels,
             target=partner.npc_id,
@@ -377,8 +376,10 @@ class NpcFeature:
         if definition is None:
             return GiftResult(NOT_NEARBY)
         relationship = definition["结交"]
-        item = self.content.item_definitions[item_id]
-        if str(item["类别"]) not in relationship["喜爱类别"]:
+        favorite_items = self.content.items_in_groups(
+            list(relationship["喜爱天材地宝池"])
+        )
+        if item_id not in favorite_items:
             return GiftResult(NOT_PREFERRED)
 
         amount = max(1, int(quantity))
@@ -402,12 +403,11 @@ class NpcFeature:
                 return GiftResult(INSUFFICIENT_ITEM, profile)
 
             raw_gain = 0
-            bonus = int(relationship["偏爱加成"]) if item_id in relationship["偏爱物品"] else 0
             for full_name, count in taken.items():
                 taken_item_id, grade_id = self.player.resolve_item(full_name) or ("", "")
                 graded = self.content.graded_item_definition(taken_item_id, str(grade_id))
                 score = int(graded["评分"])
-                raw_gain += max(1, int(score * (100 + bonus) / 100 + 0.5)) * int(count)
+                raw_gain += max(1, score) * int(count)
             favor = min(self.favor_max, profile.favor + raw_gain)
             gained = favor - profile.favor
             reward_claimed = bool((relation or {}).get("reward_claimed"))
@@ -557,14 +557,18 @@ class NpcFeature:
             interactive=bool(identity["可交互"]),
             directions=(str(asset_state["方向"]),)
             if asset_state
-            else self.content.directions_in_groups(list(definition["方向池"])),
+            else (str(definition["修行方向"]),),
             level=int(asset_state.get("等级") or definition["等级"]),
             home_location=self.home_locations[npc_id],
             favor=int(state.get("favor") or 0),
             favor_max=self.favor_max,
             in_party=bool(state.get("in_party")),
-            liked_categories=tuple(str(value) for value in relationship["喜爱类别"]),
-            favorite_items=tuple(str(value) for value in relationship["偏爱物品"]),
+            favorite_item_groups=tuple(
+                str(value) for value in relationship["喜爱天材地宝池"]
+            ),
+            favorite_items=self.content.items_in_groups(
+                list(relationship["喜爱天材地宝池"])
+            ),
         )
 
     def battle_snapshot(
@@ -577,24 +581,16 @@ class NpcFeature:
         shield: float = 0.0,
         cooldowns: Mapping[str, int] | None = None,
         skill_cursor: int = 0,
+        charge_progress: Mapping[str, int] | None = None,
+        charging_skill: str = "",
     ) -> CombatantSnapshot:
-        loadout = self.content.configured_battle_techniques(
-            partner.techniques,
+        loadout = configure_battle_instances(
+            self.content,
+            techniques=partner.techniques,
+            enchantments=partner.enchantments,
+            gems=partner.gems,
             instance_prefix=partner.combatant_id,
         )
-        for kind, values in (
-            ("附魔", partner.enchantments),
-            ("宝石", partner.gems),
-        ):
-            for index, value in enumerate(values, start=1):
-                loadout.append(
-                    self.content.configured_weapon_augment(
-                        kind,
-                        str(value["名称"]),
-                        str(value["品级"]),
-                        instance_id=f"{partner.combatant_id}:{kind}:{index}",
-                    )
-                )
         weapon_attack = float(partner.weapon["攻击"]) + max(
             0,
             int(partner.weapon["等级"]) - 1,
@@ -604,7 +600,7 @@ class NpcFeature:
             name=partner.npc_id,
             attributes=partner.attributes,
             level=partner.level,
-            kind="伙伴修士",
+            kind="道侣",
             weapon_attack=weapon_attack,
             techniques=tuple(loadout),
             health=partner.health,
@@ -616,6 +612,8 @@ class NpcFeature:
             auto_medicine=auto_medicine,
             medicine_threshold=medicine_threshold,
             skill_cursor=skill_cursor,
+            charge_progress=dict(charge_progress or {}),
+            charging_skill=str(charging_skill or ""),
         )
 
     def apply_battle_results_in_connection(
@@ -628,7 +626,7 @@ class NpcFeature:
         for partner in self.party_assets_in_connection(connection, user_id):
             result = by_id.get(partner.combatant_id)
             if result is None:
-                raise RuntimeError(f"探险结算缺少伙伴状态：{partner.npc_id}")
+                raise RuntimeError(f"探险结算缺少道侣状态：{partner.npc_id}")
             partner.health = result.health
             partner.spirit = result.spirit
             partner.statuses = [value.to_dict() for value in result.statuses]
@@ -646,12 +644,12 @@ class NpcFeature:
         }
         state_by_id = {str(value["npc_id"]): value for value in states}
         if set(partners) != set(state_by_id):
-            raise RuntimeError("探险期间同行伙伴发生变化，已拒绝覆盖")
+            raise RuntimeError("探险期间同行道侣发生变化，已拒绝覆盖")
         for npc_id, partner in partners.items():
             state = state_by_id[npc_id]
             expected_revision = int(state["revision"])
             if partner.revision != expected_revision:
-                raise RuntimeError(f"探险期间伙伴资产发生变化：{npc_id}")
+                raise RuntimeError(f"探险期间道侣资产发生变化：{npc_id}")
             partner.health = float(state["health"])
             partner.spirit = float(state["spirit"])
             partner.stamina = float(state["stamina"])
@@ -710,7 +708,7 @@ class NpcFeature:
             expected = set(npc_ids)
             partners = tuple(value for value in partners if value.npc_id in expected)
             if {value.npc_id for value in partners} != expected:
-                raise RuntimeError("探险结算中的伙伴已经不在当前队伍")
+                raise RuntimeError("探险结算中的道侣已经不在当前队伍")
         for partner in partners:
             self._gain_partner_weapon_experience(partner, amount)
             self._update_partner_asset(connection, partner)
@@ -754,10 +752,8 @@ class NpcFeature:
         rng: random.Random,
     ) -> PartnerAsset:
         definition = self.content.npc_definitions[npc_id]
-        directions = self.content.directions_in_groups(list(definition["方向池"]))
-        direction_id = self.content.choose_direction(directions, rng)
-        direction = self.content.direction_definitions[direction_id]
-        aptitude_min, aptitude_max = (int(value) for value in direction["资质范围"])
+        direction_id = str(definition["修行方向"])
+        aptitude_min, aptitude_max = (int(value) for value in definition["资质范围"])
         aptitude = rng.randint(aptitude_min, aptitude_max)
         attributes = {str(key): float(value) for key, value in definition["属性"].items()}
         variation = definition["实力波动"]
@@ -768,35 +764,20 @@ class NpcFeature:
                 4,
             )
 
-        limits = self.content.player["伙伴"]
-        candidates = self.content.direction_candidates(direction_id)
-        techniques = [
-            self._roll_technique(technique_id, rng)
-            for technique_id in _sample(
-                candidates["功法"],
-                int(limits["功法位"]),
-                self.content.choose_technique,
-                rng,
-            )
-        ]
-        enchantments = [
-            self._roll_augment(augment_id, rng)
-            for augment_id in _sample(
-                candidates["附魔"],
-                int(limits["附魔位"]),
-                self.content.choose_enchantment,
-                rng,
-            )
-        ]
-        gems = [
-            self._roll_augment(augment_id, rng)
-            for augment_id in _sample(
-                candidates["宝石"],
-                int(limits["宝石位"]),
-                self.content.choose_gem,
-                rng,
-            )
-        ]
+        limits = self.content.player["道侣"]
+        candidates = self.content.npc_loadout_candidates(npc_id)
+        slot_count = int(limits["功法位"])
+        rolled = roll_loadout(
+            self.content,
+            rng,
+            candidates=candidates,
+            counts={
+                "功法": slot_count,
+                "附魔": int(limits["附魔位"]),
+                "宝石": int(limits["宝石位"]),
+            },
+            direction_id=direction_id,
+        )
         weapon_rules = self.content.player["本命武器"]
         return PartnerAsset(
             user_id=user_id,
@@ -816,32 +797,10 @@ class NpcFeature:
                 "经验": 0,
                 "攻击": float(weapon_rules["基础攻击"]),
             },
-            techniques=techniques,
-            enchantments=enchantments,
-            gems=gems,
+            techniques=[dict(value) for value in rolled.techniques],
+            enchantments=[dict(value) for value in rolled.enchantments],
+            gems=[dict(value) for value in rolled.gems],
         )
-
-    def _roll_technique(self, technique_id: str, rng: random.Random) -> dict[str, Any]:
-        definition = self.content.technique_definitions[technique_id]
-        grade_id = self.content.choose_grade(rng)
-        affix_count = int(self.content.grade_definitions[grade_id]["词条数量"])
-        affix_ids = _sample(
-            tuple(str(value) for value in definition["随机词条"]),
-            affix_count,
-            self.content.choose_affix,
-            rng,
-        )
-        return {
-            "功法": technique_id,
-            "品级": grade_id,
-            "词条": [
-                _roll_affix(affix_id, self.content.affix_definitions[affix_id], rng)
-                for affix_id in affix_ids
-            ],
-        }
-
-    def _roll_augment(self, augment_id: str, rng: random.Random) -> dict[str, Any]:
-        return {"名称": augment_id, "品级": self.content.choose_grade(rng)}
 
     def _gain_partner_experience(self, partner: PartnerAsset, amount: int) -> tuple[int, int]:
         pending = max(0, int(amount))
@@ -849,8 +808,8 @@ class NpcFeature:
         levels = 0
         rules = self.content.player["人物"]
         maximum_level = int(rules["等级上限"])
-        direction = self.content.direction_definitions[partner.direction_id]
-        low, high = (int(value) for value in direction["资质范围"])
+        definition = self.content.npc_definitions[partner.npc_id]
+        low, high = (int(value) for value in definition["资质范围"])
         ratio = 1.0 if high <= low else (partner.aptitude - low) / (high - low)
         growth_multiplier = 0.75 + max(0.0, min(1.0, ratio)) * 0.5
         while pending > 0 and partner.level < maximum_level:
@@ -902,7 +861,7 @@ class NpcFeature:
             ),
         )
         if cursor.rowcount != 1:
-            raise RuntimeError(f"伙伴状态已变化，拒绝覆盖：{partner.npc_id}")
+            raise RuntimeError(f"道侣状态已变化，拒绝覆盖：{partner.npc_id}")
         partner.revision += 1
 
     def _is_nearby(self, npc_id: str, location_id: str, relation: Mapping | None) -> bool:
@@ -974,48 +933,6 @@ class NpcFeature:
         )
 
 
-def _sample(
-    candidates: tuple[str, ...],
-    count: int,
-    chooser: Callable[[tuple[str, ...], random.Random], str],
-    rng: random.Random,
-) -> list[str]:
-    """按内容权重无放回抽取，确保同一伙伴的槽位不会重复。"""
-
-    remaining = list(dict.fromkeys(str(value) for value in candidates))
-    required = max(0, int(count))
-    if len(remaining) < required:
-        raise ValueError(f"候选池只有 {len(remaining)} 项，无法抽取 {required} 项")
-    result: list[str] = []
-    for _ in range(required):
-        selected = str(chooser(tuple(remaining), rng))
-        if selected not in remaining:
-            raise ValueError(f"加权选择器返回了候选池之外的内容：{selected}")
-        result.append(selected)
-        remaining.remove(selected)
-    return result
-
-
-def _roll_affix(
-    affix_id: str,
-    definition: Mapping[str, Any],
-    rng: random.Random,
-) -> dict[str, Any]:
-    minimum = float(definition["最小值"])
-    maximum = float(definition["最大值"])
-    if minimum.is_integer() and maximum.is_integer():
-        value: int | float = rng.randint(int(minimum), int(maximum))
-    else:
-        value = round(rng.uniform(minimum, maximum), 4)
-    return {
-        "词条": str(affix_id),
-        "属性": str(definition["属性"]),
-        "数值": value,
-        "最小值": minimum,
-        "最大值": maximum,
-    }
-
-
 def _partner_state(partner: PartnerAsset) -> dict[str, Any]:
     return {
         "方向": partner.direction_id,
@@ -1043,7 +960,7 @@ def _partner_asset(row: Mapping[str, Any]) -> PartnerAsset:
     state = json.loads(str(row["state_json"]))
     loadout = json.loads(str(row["loadout_json"]))
     if not isinstance(state, dict) or not isinstance(loadout, dict):
-        raise ValueError("伙伴资产数据损坏")
+        raise ValueError("道侣资产数据损坏")
     return PartnerAsset(
         user_id=str(row["user_id"]),
         npc_id=str(row["npc_id"]),

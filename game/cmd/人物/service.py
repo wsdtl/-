@@ -47,14 +47,14 @@ async def show_status(message: str, context, client_id: str, manager) -> None:
     )
     if partners:
         reply.field(
-            "同行伙伴",
+            "同行道侣",
             "、".join(
                 f"{value.npc_id} Lv{value.level} · {value.direction_id}"
                 for value in partners
             ),
         )
     else:
-        reply.field("同行伙伴", "无")
+        reply.field("同行道侣", "无")
     reply = (
         reply.line(
             M.command("地点", "地点"),

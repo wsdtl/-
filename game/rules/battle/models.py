@@ -197,6 +197,8 @@ class CombatantSnapshot:
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
     skill_cursor: int = 0
+    charge_progress: Mapping[str, int] = field(default_factory=dict)
+    charging_skill: str = ""
 
 
 @dataclass(frozen=True)
@@ -216,6 +218,8 @@ class CombatantResult:
     inventory: Mapping[str, int]
     consumed_items: Mapping[str, int]
     skill_cursor: int
+    charge_progress: Mapping[str, int] = field(default_factory=dict)
+    charging_skill: str = ""
 
     @property
     def alive(self) -> bool:
@@ -279,6 +283,8 @@ class Fighter:
     consumed_items: dict[str, int] = field(default_factory=dict)
     skill_cursor: int = 0
     current_skill: str = ""
+    charge_progress: dict[str, int] = field(default_factory=dict)
+    charging_skill: str = ""
     level: int = 1
     kind: str = "修士"
 
@@ -310,9 +316,11 @@ class Skill:
     key: str
     name: str
     born_order: int
+    release_order: int
     multiplier: float
     spirit_cost: float
     cooldown_turns: int
+    charge_turns: int = 0
     effects: tuple[Mapping[str, Any], ...] = ()
 
 
@@ -331,6 +339,8 @@ class BattleContext:
     battle_trigger_counts: dict[tuple[str, str], int] = field(default_factory=dict)
     event_depth: int = 0
     action_progress: dict[str, float] = field(default_factory=dict)
+    mechanism_counters: dict[tuple[str, str], float] = field(default_factory=dict)
+    additional_action_counts: dict[str, int] = field(default_factory=dict)
     current_mechanism: str = ""
     pending_fatal_guards: dict[str, tuple[str, float, Mapping[str, Any]]] = field(default_factory=dict)
     trigger_stack: set[tuple[str, str]] = field(default_factory=set)

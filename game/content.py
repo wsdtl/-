@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from game.core import JsonDataError, JsonDataReader, rarity_weighted_choice
+from game.core import JsonDataError, JsonDataReader, inverse_weighted_choice
+from game.content_validation import validate_battle_design
 from game.rules.battle.catalog import BattleReportCatalog
 from game.rules.battle.executors import EXECUTOR_CATEGORIES
 from game.rules.battle.schema import RuleSchemaError, RuleSchemaValidator
@@ -18,6 +19,8 @@ ATTRIBUTES_FILE = "rules/战斗/属性.json"
 RESOURCES_FILE = "rules/战斗/资源.json"
 COMBAT_FLOW_FILE = "rules/战斗/流程.json"
 ATOMIC_ABILITIES_FILE = "rules/战斗/原子能力.json"
+COMBINATION_RULES_FILE = "rules/战斗/组合规则.json"
+BALANCE_RULES_FILE = "rules/战斗/平衡规则.json"
 BATTLE_REPORT_FILE = "rules/战斗/战报.json"
 COMBAT_CONTENT_FILE = "content/战斗机制"
 MECHANISMS_FILE = COMBAT_CONTENT_FILE
@@ -27,13 +30,10 @@ TECHNIQUES_FILE = f"{ITEMS_FILE}/功法"
 ENCHANTMENTS_FILE = f"{ITEMS_FILE}/附魔技能书"
 GEMS_FILE = f"{ITEMS_FILE}/宝石"
 WEAPON_AUGMENTS_FILE = ITEMS_FILE
-DIRECTIONS_FILE = "content/角色方向"
-PARTNER_NPCS_FILE = "content/角色/伙伴修士"
-HOSTILE_CULTIVATORS_FILE = "content/敌人/修士"
-BEASTS_FILE = "content/敌人/灵兽"
-NPCS_FILE = PARTNER_NPCS_FILE
-ENEMIES_FILE = f"{HOSTILE_CULTIVATORS_FILE} 与 {BEASTS_FILE}"
-WORLD_FILE = "content/世界/青岚山境.json"
+NPCS_FILE = "content/世界"
+WORLD_FILE = "content/世界"
+WORLD_CONFIG_FILE = f"{WORLD_FILE}/地图规则.json"
+ENEMIES_FILE = WORLD_FILE
 
 
 class GameContentError(ValueError):
@@ -50,7 +50,6 @@ class GameContent:
     techniques: dict[str, Any]
     items: dict[str, Any]
     weapon_augments: dict[str, Any]
-    directions: dict[str, Any]
     npcs: dict[str, Any]
     enemies: dict[str, Any]
     world: dict[str, Any]
@@ -61,10 +60,13 @@ class GameContent:
             reader.validate_unique_filenames()
         except JsonDataError as exc:
             raise GameContentError(str(exc)) from exc
+        world_catalog = _read_world_catalog(reader)
         attributes = _read_versioned(reader, ATTRIBUTES_FILE)
         resources = _read_versioned(reader, RESOURCES_FILE)
         flow = _read_versioned(reader, COMBAT_FLOW_FILE)
         abilities = _read_versioned(reader, ATOMIC_ABILITIES_FILE)
+        combination = _read_versioned(reader, COMBINATION_RULES_FILE)
+        balance = _read_versioned(reader, BALANCE_RULES_FILE)
         combat_content = _read_multi_section_catalog(
             reader,
             directory=COMBAT_CONTENT_FILE,
@@ -82,11 +84,13 @@ class GameContent:
             reader,
             directory=ENCHANTMENTS_FILE,
             sections=("附魔",),
+            group_direction_field="所属方向",
         )
         gems = _read_multi_section_catalog(
             reader,
             directory=GEMS_FILE,
             sections=("宝石",),
+            group_direction_field="所属方向",
         )
         weapon_augments = {
             "版本": "目录展开",
@@ -95,6 +99,10 @@ class GameContent:
             "分组": {
                 "附魔": enchantments["分组"]["附魔"],
                 "宝石": gems["分组"]["宝石"],
+            },
+            "分组方向": {
+                "附魔": enchantments["分组元数据"]["附魔"],
+                "宝石": gems["分组元数据"]["宝石"],
             },
         }
         items = _read_item_catalog(reader, weapon_augments)
@@ -113,6 +121,8 @@ class GameContent:
                 "行动规则": _require_object(flow, "行动规则", COMBAT_FLOW_FILE),
                 "事件": flow.get("事件"),
                 "原子能力": _require_object(abilities, "原子能力", ATOMIC_ABILITIES_FILE),
+                "组合规则": _require_object(combination, "组合规则", COMBINATION_RULES_FILE),
+                "平衡规则": _require_object(balance, "平衡规则", BALANCE_RULES_FILE),
                 "机制": _require_object(mechanisms, "机制", MECHANISMS_FILE),
                 "词条": _require_object(affixes, "词条", AFFIXES_FILE),
             },
@@ -120,18 +130,18 @@ class GameContent:
             techniques=_read_technique_catalog(reader),
             items=items,
             weapon_augments=weapon_augments,
-            directions=_read_multi_section_catalog(
-                reader,
-                directory=DIRECTIONS_FILE,
-                sections=("方向",),
-            ),
-            npcs=_read_grouped_catalog(
-                reader,
-                directory=PARTNER_NPCS_FILE,
-                section="伙伴修士",
-            ),
-            enemies=_read_enemy_catalog(reader),
-            world=_read_versioned(reader, WORLD_FILE),
+            npcs={
+                "版本": "目录展开",
+                "道侣": world_catalog["道侣"],
+                "分组": world_catalog["分组"]["道侣"],
+            },
+            enemies=_read_enemy_catalog(world_catalog),
+            world={
+                "版本": "目录展开",
+                "世界": world_catalog["世界"],
+                "区域": world_catalog["区域"],
+                "地点": world_catalog["地点"],
+            },
         )
         _validate(content)
         return content
@@ -145,6 +155,14 @@ class GameContent:
         return self.techniques["分组"]
 
     @property
+    def direction_definitions(self) -> dict[str, dict[str, Any]]:
+        return self.techniques["战斗方向"]
+
+    @property
+    def technique_group_directions(self) -> dict[str, str]:
+        return self.techniques["分组方向"]
+
+    @property
     def enchantment_groups(self) -> dict[str, tuple[str, ...]]:
         return self.weapon_augments["分组"]["附魔"]
 
@@ -153,8 +171,20 @@ class GameContent:
         return self.weapon_augments["分组"]["宝石"]
 
     @property
-    def direction_groups(self) -> dict[str, tuple[str, ...]]:
-        return self.directions["分组"]["方向"]
+    def enchantment_group_directions(self) -> dict[str, str]:
+        return self.weapon_augments["分组方向"]["附魔"]
+
+    @property
+    def gem_group_directions(self) -> dict[str, str]:
+        return self.weapon_augments["分组方向"]["宝石"]
+
+    @property
+    def combination_rules(self) -> dict[str, Any]:
+        return self.combat["组合规则"]
+
+    @property
+    def balance_rules(self) -> dict[str, Any]:
+        return self.combat["平衡规则"]
 
     @property
     def grade_definitions(self) -> dict[str, dict[str, Any]]:
@@ -193,10 +223,6 @@ class GameContent:
         return self.weapon_augments["宝石"]
 
     @property
-    def direction_definitions(self) -> dict[str, dict[str, Any]]:
-        return self.directions["方向"]
-
-    @property
     def item_groups(self) -> dict[str, tuple[str, ...]]:
         return self.items["分组"]
 
@@ -206,7 +232,7 @@ class GameContent:
 
     @property
     def npc_definitions(self) -> dict[str, dict[str, Any]]:
-        return self.npcs["伙伴修士"]
+        return self.npcs["道侣"]
 
     @property
     def npc_groups(self) -> dict[str, tuple[str, ...]]:
@@ -216,7 +242,7 @@ class GameContent:
     def npc_home_locations(self) -> dict[str, str]:
         result: dict[str, str] = {}
         for location_id, definition in self.location_definitions.items():
-            for npc_id in self.npcs_in_groups(list(definition["修士池"])):
+            for npc_id in self.npcs_in_groups(list(definition["道侣池"])):
                 result[npc_id] = str(location_id)
         return result
 
@@ -240,6 +266,10 @@ class GameContent:
     def location_definitions(self) -> dict[str, dict[str, Any]]:
         return self.world["地点"]
 
+    @property
+    def region_definitions(self) -> dict[str, dict[str, Any]]:
+        return self.world["区域"]
+
     def npcs_in_groups(self, groups: list[str]) -> tuple[str, ...]:
         return _expand_groups(groups, self.npc_groups)
 
@@ -258,11 +288,8 @@ class GameContent:
     def gems_in_groups(self, groups: list[str]) -> tuple[str, ...]:
         return _expand_groups(groups, self.gem_groups)
 
-    def directions_in_groups(self, groups: list[str]) -> tuple[str, ...]:
-        return _expand_groups(groups, self.direction_groups)
-
-    def direction_candidates(self, direction_id: str) -> dict[str, tuple[str, ...]]:
-        definition = self.direction_definitions[str(direction_id)]
+    def npc_loadout_candidates(self, npc_id: str) -> dict[str, tuple[str, ...]]:
+        definition = self.npc_definitions[str(npc_id)]
         return {
             "功法": self.techniques_in_groups(list(definition["功法池"])),
             "附魔": self.enchantments_in_groups(list(definition["附魔池"])),
@@ -286,9 +313,6 @@ class GameContent:
 
     def choose_gem(self, gem_ids: tuple[str, ...], rng: Any) -> str:
         return _weighted_choice(gem_ids, self.gem_definitions, rng, "宝石")
-
-    def choose_direction(self, direction_ids: tuple[str, ...], rng: Any) -> str:
-        return _weighted_choice(direction_ids, self.direction_definitions, rng, "方向")
 
     def choose_affix(self, affix_ids: tuple[str, ...], rng: Any) -> str:
         return _weighted_choice(affix_ids, self.affix_definitions, rng, "词条")
@@ -315,6 +339,8 @@ class GameContent:
             scaled_use = dict(use)
             if "恢复量" in use:
                 scaled_use["恢复量"] = round(float(use["恢复量"]) * multiplier, 4)
+            if "经验" in use:
+                scaled_use["经验"] = max(1, int(float(use["经验"]) * multiplier + 0.5))
             item["使用效果"] = scaled_use
         item.update(
             {
@@ -445,11 +471,11 @@ def _validate(content: GameContent) -> None:
     items = _require_object(content.items, "物品", ITEMS_FILE)
     enchantments = _require_object(content.weapon_augments, "附魔", WEAPON_AUGMENTS_FILE)
     gems = _require_object(content.weapon_augments, "宝石", WEAPON_AUGMENTS_FILE)
-    directions = _require_object(content.directions, "方向", DIRECTIONS_FILE)
     categories = _string_list(content.items.get("物品类别"), f"{ITEMS_FILE} -> 物品类别")
-    npcs = _require_object(content.npcs, "伙伴修士", NPCS_FILE)
+    npcs = _require_object(content.npcs, "道侣", NPCS_FILE)
     enemies = _require_object(content.enemies, "敌人", ENEMIES_FILE)
-    world = _require_object(content.world, "世界", WORLD_FILE)
+    world = _require_object(content.world, "世界", WORLD_CONFIG_FILE)
+    regions = _require_object(content.world, "区域", WORLD_CONFIG_FILE)
     locations = _require_object(content.world, "地点", WORLD_FILE)
 
     validator = _validate_combat(content.combat, attributes, affixes, abilities, mechanisms)
@@ -459,27 +485,47 @@ def _validate(content: GameContent) -> None:
     _validate_techniques(techniques, grades, affixes, validator)
     _validate_weapon_augments(enchantments, gems, validator)
     _validate_items(items, categories, enchantments, gems)
-    _validate_directions(
-        directions,
-        content.technique_groups,
-        content.enchantment_groups,
-        content.gem_groups,
-        _require_object(content.player, "伙伴", PLAYER_FILE),
-    )
+    try:
+        validate_battle_design(
+            combination=content.combination_rules,
+            balance=content.balance_rules,
+            grades=grades,
+            directions=content.direction_definitions,
+            group_directions={
+                "功法": content.technique_group_directions,
+                "附魔": content.enchantment_group_directions,
+                "宝石": content.gem_group_directions,
+            },
+            groups={
+                "功法": content.technique_groups,
+                "附魔": content.enchantment_groups,
+                "宝石": content.gem_groups,
+            },
+            definitions={
+                "功法": techniques,
+                "附魔": enchantments,
+                "宝石": gems,
+            },
+        )
+    except ValueError as exc:
+        raise GameContentError(f"数据文件有问题：{exc}") from exc
     _validate_npcs(
         npcs,
         items,
-        categories,
+        content.item_groups,
         grades,
         attributes,
         content.combat,
-        content.direction_groups,
+        content.technique_groups,
+        content.enchantment_groups,
+        content.gem_groups,
+        content.technique_group_directions,
+        content.enchantment_group_directions,
+        content.gem_group_directions,
+        _require_object(content.player, "道侣", PLAYER_FILE),
     )
     _validate_enemies(
         enemies,
-        techniques,
-        grades,
-        affixes,
         attributes,
         content.combat,
         int(character["等级上限"]),
@@ -489,10 +535,13 @@ def _validate(content: GameContent) -> None:
     )
     _validate_world(
         world,
+        regions,
         locations,
         content.npc_groups,
         content.enemy_groups,
         content.enemy_definitions,
+        content.item_groups,
+        content.item_definitions,
     )
 
     starter_items = content.player.get("初始物品") or {}
@@ -572,6 +621,12 @@ def _validate_combat(
     baseline = _positive(action_rules.get("标准速度"), f"{COMBAT_FLOW_FILE} -> 行动规则.标准速度")
     minimum = _positive(action_rules.get("最低有效速度"), f"{COMBAT_FLOW_FILE} -> 行动规则.最低有效速度")
     _number(action_rules.get("最高行动效率"), f"{COMBAT_FLOW_FILE} -> 行动规则.最高行动效率", minimum=1.000001)
+    _integer(
+        action_rules.get("每次主行动最多追加"),
+        f"{COMBAT_FLOW_FILE} -> 行动规则.每次主行动最多追加",
+        minimum=0,
+        maximum=10,
+    )
     if minimum > baseline:
         raise GameContentError(f"数据文件有问题：{COMBAT_FLOW_FILE} -> 行动规则：最低有效速度不能高于标准速度")
 
@@ -633,7 +688,22 @@ def _validate_techniques(
         value = _object(definition, path)
         if not str(technique_id).strip():
             raise GameContentError(f"数据文件有问题：{path}：功法名不能为空")
-        _allow_only(value, path, {"说明", "权重", "随机词条", "组成"})
+        _allow_only(
+            value,
+            path,
+            {
+                "说明",
+                "权重",
+                "评分",
+                "职责",
+                "提供标签",
+                "需要标签",
+                "禁止标签",
+                "互斥组",
+                "随机词条",
+                "组成",
+            },
+        )
         if not str(value.get("说明") or "").strip():
             raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
         _integer(value.get("权重"), f"{path}.权重", minimum=1)
@@ -674,7 +744,20 @@ def _validate_weapon_augments(
         for augment_id, definition in values.items():
             path = f"{WEAPON_AUGMENTS_FILE} -> {section}.{augment_id}"
             value = _object(definition, path)
-            _allow_only(value, path, {"说明", "权重", "评分", "组成"})
+            _allow_only(
+                value,
+                path,
+                {
+                    "说明",
+                    "权重",
+                    "评分",
+                    "提供标签",
+                    "需要标签",
+                    "禁止标签",
+                    "互斥组",
+                    "组成",
+                },
+            )
             if not str(value.get("说明") or "").strip():
                 raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
             _integer(value.get("权重"), f"{path}.权重", minimum=1)
@@ -693,58 +776,6 @@ def _validate_weapon_augments(
                 raise GameContentError(f"数据文件有问题：{exc}") from exc
 
 
-def _validate_directions(
-    directions: dict[str, Any],
-    technique_groups: dict[str, tuple[str, ...]],
-    enchantment_groups: dict[str, tuple[str, ...]],
-    gem_groups: dict[str, tuple[str, ...]],
-    partner_rules: dict[str, Any],
-) -> None:
-    _allow_only(
-        partner_rules,
-        f"{PLAYER_FILE} -> 伙伴",
-        {"功法位", "附魔位", "宝石位", "好感上限"},
-    )
-    _integer(
-        partner_rules.get("好感上限"),
-        f"{PLAYER_FILE} -> 伙伴.好感上限",
-        minimum=1,
-    )
-    limits = {
-        "功法池": _integer(partner_rules.get("功法位"), f"{PLAYER_FILE} -> 伙伴.功法位", minimum=1),
-        "附魔池": _integer(partner_rules.get("附魔位"), f"{PLAYER_FILE} -> 伙伴.附魔位", minimum=1),
-        "宝石池": _integer(partner_rules.get("宝石位"), f"{PLAYER_FILE} -> 伙伴.宝石位", minimum=1),
-    }
-    catalogs = {
-        "功法池": technique_groups,
-        "附魔池": enchantment_groups,
-        "宝石池": gem_groups,
-    }
-    if not directions:
-        raise GameContentError(f"数据文件有问题：{DIRECTIONS_FILE} -> 方向：不能为空")
-    for direction_id, definition in directions.items():
-        path = f"{DIRECTIONS_FILE} -> 方向.{direction_id}"
-        value = _object(definition, path)
-        _allow_only(value, path, {"说明", "权重", "资质范围", "功法池", "附魔池", "宝石池"})
-        if not str(value.get("说明") or "").strip():
-            raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
-        _integer(value.get("权重"), f"{path}.权重", minimum=1)
-        _range(value.get("资质范围"), f"{path}.资质范围", minimum=1)
-        for pool_name, groups in catalogs.items():
-            pool_files = _string_list(value.get(pool_name), f"{path}.{pool_name}")
-            unknown = set(pool_files) - set(groups)
-            if unknown:
-                raise GameContentError(
-                    f"数据文件有问题：{path}.{pool_name}：引用不存在的 JSON 文件 "
-                    + "、".join(sorted(unknown))
-                )
-            pool = _expand_groups(pool_files, groups)
-            if len(pool) < limits[pool_name]:
-                raise GameContentError(
-                    f"数据文件有问题：{path}.{pool_name}：展开后至少需要 {limits[pool_name]} 项"
-                )
-
-
 def _validate_items(
     items: dict[str, Any],
     categories: list[str],
@@ -756,7 +787,6 @@ def _validate_items(
         "丹药",
         "附魔技能书",
         "宝石",
-        "灵兽材料",
         "天材地宝",
         "修行器物",
     }
@@ -848,7 +878,7 @@ def _validate_items(
                 if use_value.get("类型") not in {
                     "增加人物经验",
                     "增加本命武器经验",
-                    "增加伙伴经验",
+                    "增加道侣经验",
                 }:
                     raise GameContentError(f"数据文件有问题：{path}.使用效果.类型：未知修行器物效果")
                 _integer(use_value.get("经验"), f"{path}.使用效果.经验", minimum=1)
@@ -875,22 +905,40 @@ def _validate_items(
 def _validate_npcs(
     npcs: dict[str, Any],
     items: dict[str, Any],
-    item_categories: list[str],
+    item_groups: dict[str, tuple[str, ...]],
     grades: dict[str, Any],
     attribute_definitions: dict[str, Any],
     combat: dict[str, Any],
-    direction_groups: dict[str, tuple[str, ...]],
+    technique_groups: dict[str, tuple[str, ...]],
+    enchantment_groups: dict[str, tuple[str, ...]],
+    gem_groups: dict[str, tuple[str, ...]],
+    technique_group_directions: dict[str, str],
+    enchantment_group_directions: dict[str, str],
+    gem_group_directions: dict[str, str],
+    partner_rules: dict[str, Any],
 ) -> None:
     if not npcs:
-        raise GameContentError(f"数据文件有问题：{NPCS_FILE} -> 伙伴修士：不能为空")
+        raise GameContentError(f"数据文件有问题：{NPCS_FILE} -> 道侣：不能为空")
     required = set(
         _string_list(
             combat.get("参战者必需属性"),
             f"{ATTRIBUTES_FILE} -> 参战者必需属性",
         )
     )
+    _allow_only(
+        partner_rules,
+        f"{PLAYER_FILE} -> 道侣",
+        {"功法位", "附魔位", "宝石位", "好感上限"},
+    )
+    _integer(partner_rules.get("好感上限"), f"{PLAYER_FILE} -> 道侣.好感上限", minimum=1)
+    pools = {
+        "功法池": (technique_groups, technique_group_directions, _integer(partner_rules.get("功法位"), f"{PLAYER_FILE} -> 道侣.功法位", minimum=1)),
+        "附魔池": (enchantment_groups, enchantment_group_directions, _integer(partner_rules.get("附魔位"), f"{PLAYER_FILE} -> 道侣.附魔位", minimum=1)),
+        "宝石池": (gem_groups, gem_group_directions, _integer(partner_rules.get("宝石位"), f"{PLAYER_FILE} -> 道侣.宝石位", minimum=1)),
+    }
+    direction_owners: dict[str, str] = {}
     for npc_id, definition in npcs.items():
-        path = f"{NPCS_FILE} -> 伙伴修士.{npc_id}"
+        path = f"{NPCS_FILE} -> 道侣.{npc_id}"
         value = _object(definition, path)
         _allow_only(
             value,
@@ -902,7 +950,11 @@ def _validate_npcs(
                 "等级",
                 "实力波动",
                 "属性",
-                "方向池",
+                "修行方向",
+                "资质范围",
+                "功法池",
+                "附魔池",
+                "宝石池",
                 "结交",
             },
         )
@@ -919,69 +971,75 @@ def _validate_npcs(
         if not str(value.get("说明") or "").strip():
             raise GameContentError(f"数据文件有问题：{path}.说明：不能为空")
         _integer(value.get("权重"), f"{path}.权重", minimum=1)
-        direction_pool = _string_list(value.get("方向池"), f"{path}.方向池")
-        unknown_directions = set(direction_pool) - set(direction_groups)
-        if unknown_directions:
+        direction_id = str(value.get("修行方向") or "").strip()
+        if not direction_id:
+            raise GameContentError(f"数据文件有问题：{path}.修行方向：不能为空")
+        previous_owner = direction_owners.get(direction_id)
+        if previous_owner is not None:
             raise GameContentError(
-                f"数据文件有问题：{path}.方向池：引用不存在的 JSON 文件 "
-                + "、".join(sorted(unknown_directions))
+                f"数据文件有问题：{path}.修行方向：{direction_id} 已属于道侣 {previous_owner}"
             )
-        if not _expand_groups(direction_pool, direction_groups):
-            raise GameContentError(f"数据文件有问题：{path}.方向池：展开后不能为空")
+        direction_owners[direction_id] = str(npc_id)
+        _range(value.get("资质范围"), f"{path}.资质范围", minimum=1)
+        for pool_name, (groups, group_directions, limit) in pools.items():
+            group_ids = _string_list(value.get(pool_name), f"{path}.{pool_name}")
+            if len(group_ids) != 1:
+                raise GameContentError(f"数据文件有问题：{path}.{pool_name}：必须且只能引用一个 JSON 文件")
+            unknown = set(group_ids) - set(groups)
+            if unknown:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.{pool_name}：引用不存在的 JSON 文件 "
+                    + "、".join(sorted(unknown))
+                )
+            group_id = group_ids[0]
+            if group_directions.get(group_id) != direction_id:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.{pool_name}：{group_id}.json 不属于方向 {direction_id}"
+                )
+            if len(groups[group_id]) < 9:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.{pool_name}：{group_id}.json 至少需要 9 项"
+                )
+            if len(_expand_groups(group_ids, groups)) < limit:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.{pool_name}：展开后至少需要 {limit} 项"
+                )
         relationship = _require_object(value, "结交", path)
         relationship_path = f"{path}.结交"
         _allow_only(
             relationship,
             relationship_path,
             {
-                "喜爱类别",
-                "偏爱物品",
-                "偏爱加成",
+                "喜爱天材地宝池",
                 "圆满回礼",
                 "入队话语",
                 "离队话语",
             },
         )
-        liked_categories = _string_list(
-            relationship.get("喜爱类别"),
-            f"{relationship_path}.喜爱类别",
+        favorite_groups = _string_list(
+            relationship.get("喜爱天材地宝池"),
+            f"{relationship_path}.喜爱天材地宝池",
         )
-        if not liked_categories:
-            raise GameContentError(f"数据文件有问题：{relationship_path}.喜爱类别：不能为空")
-        unknown_categories = set(liked_categories) - set(item_categories)
-        if unknown_categories or "功法" in liked_categories:
+        if len(favorite_groups) != 1:
             raise GameContentError(
-                f"数据文件有问题：{relationship_path}.喜爱类别：不可赠送类别 "
-                + "、".join(sorted(unknown_categories or {"功法"}))
+                f"数据文件有问题：{relationship_path}.喜爱天材地宝池："
+                "必须且只能引用一个地形池"
             )
-        favorite_items = _string_list(
-            relationship.get("偏爱物品"),
-            f"{relationship_path}.偏爱物品",
-        )
-        if not favorite_items:
-            raise GameContentError(f"数据文件有问题：{relationship_path}.偏爱物品：不能为空")
-        unknown_items = set(favorite_items) - set(items)
-        if unknown_items:
+        unknown_groups = set(favorite_groups) - set(item_groups)
+        if unknown_groups:
             raise GameContentError(
-                f"数据文件有问题：{relationship_path}.偏爱物品：未知物品 "
-                + "、".join(sorted(unknown_items))
+                f"数据文件有问题：{relationship_path}.喜爱天材地宝池："
+                "引用不存在的物品 JSON " + "、".join(sorted(unknown_groups))
             )
-        mismatched_items = {
-            item_id
+        favorite_items = _expand_groups(favorite_groups, item_groups)
+        if not favorite_items or any(
+            str(items[item_id]["类别"]) != "天材地宝"
             for item_id in favorite_items
-            if str(items[item_id]["类别"]) not in liked_categories
-        }
-        if mismatched_items:
+        ):
             raise GameContentError(
-                f"数据文件有问题：{relationship_path}.偏爱物品：类别不在喜爱类别中 "
-                + "、".join(sorted(mismatched_items))
+                f"数据文件有问题：{relationship_path}.喜爱天材地宝池："
+                "池内只能包含天材地宝"
             )
-        _integer(
-            relationship.get("偏爱加成"),
-            f"{relationship_path}.偏爱加成",
-            minimum=0,
-            maximum=500,
-        )
         reward = _require_object(relationship, "圆满回礼", relationship_path)
         reward_path = f"{relationship_path}.圆满回礼"
         _allow_only(reward, reward_path, {"物品", "品级", "数量"})
@@ -997,7 +1055,7 @@ def _validate_npcs(
                 raise GameContentError(f"数据文件有问题：{relationship_path}.{line_key}：不能为空")
         level = _integer(value.get("等级"), f"{path}.等级", minimum=1)
         if level != 1:
-            raise GameContentError(f"数据文件有问题：{path}.等级：伙伴候选必须从 1 级开始")
+            raise GameContentError(f"数据文件有问题：{path}.等级：道侣候选必须从 1 级开始")
         attributes = _require_object(value, "属性", path)
         missing = required - set(attributes)
         if missing:
@@ -1010,7 +1068,6 @@ def _validate_npcs(
             attributes,
             attribute_definitions,
         )
-
 
 def _validate_weapon(value: dict[str, Any], path: str) -> None:
     weapon = _require_object(value, "本命武器", path)
@@ -1091,15 +1148,12 @@ def _validate_loot_pool(
             f"数据文件有问题：{path}.物品池：引用不存在的物品 JSON "
             + "、".join(sorted(unknown))
         )
-    if not _expand_groups(pool_files, item_groups):
+    if pool_files and not _expand_groups(pool_files, item_groups):
         raise GameContentError(f"数据文件有问题：{path}.物品池：展开后不能为空")
 
 
 def _validate_enemies(
     enemies: dict[str, Any],
-    techniques: dict[str, Any],
-    grades: dict[str, Any],
-    affixes: dict[str, Any],
     attribute_definitions: dict[str, Any],
     combat: dict[str, Any],
     maximum_level: int,
@@ -1144,7 +1198,6 @@ def _validate_enemies(
                 "每级成长",
                 "掉落",
                 "本命武器",
-                "功法",
                 "战斗策略",
                 "交锋所得",
             },
@@ -1179,10 +1232,9 @@ def _validate_enemies(
                     f"数据文件有问题：{path}.每级成长：敌对修士必须复用人物每级成长"
                 )
             _validate_weapon(value, path)
-            _validate_equipped_techniques(value, path, techniques, grades, affixes)
             _validate_combat_strategy(value, path)
         else:
-            forbidden = {"本命武器", "功法", "战斗策略"}.intersection(value)
+            forbidden = {"本命武器", "战斗策略"}.intersection(value)
             if forbidden:
                 raise GameContentError(
                     f"数据文件有问题：{path}：{value['类别']}不能配置 "
@@ -1287,66 +1339,104 @@ def _validate_activities(seclusion: dict[str, Any], exploration: dict[str, Any])
 
 def _validate_world(
     world: dict[str, Any],
+    regions: dict[str, Any],
     locations: dict[str, Any],
     npc_groups: dict[str, tuple[str, ...]],
     enemy_groups: dict[str, tuple[str, ...]],
     enemies: dict[str, dict[str, Any]],
+    item_groups: dict[str, tuple[str, ...]],
+    items: dict[str, dict[str, Any]],
 ) -> None:
     if not str(world.get("名称") or "").strip():
-        raise GameContentError(f"数据文件有问题：{WORLD_FILE} -> 世界.名称：不能为空")
+        raise GameContentError(f"数据文件有问题：{WORLD_CONFIG_FILE} -> 世界.名称：不能为空")
     if not str(world.get("说明") or "").strip():
-        raise GameContentError(f"数据文件有问题：{WORLD_FILE} -> 世界.说明：不能为空")
+        raise GameContentError(f"数据文件有问题：{WORLD_CONFIG_FILE} -> 世界.说明：不能为空")
+    if not regions:
+        raise GameContentError(f"数据文件有问题：{WORLD_CONFIG_FILE} -> 区域：不能为空")
     if not locations:
         raise GameContentError(f"数据文件有问题：{WORLD_FILE} -> 地点：不能为空")
     starting_location = str(world.get("出生地") or "")
     if starting_location not in locations:
         raise GameContentError(f"数据文件有问题：{WORLD_FILE} -> 世界.出生地：未知地点 {starting_location or '<空>'}")
 
-    bounds = _require_object(world, "坐标边界", f"{WORLD_FILE} -> 世界")
-    minimum_x, maximum_x = _range(bounds.get("横轴"), f"{WORLD_FILE} -> 世界.坐标边界.横轴", minimum=None)
-    minimum_y, maximum_y = _range(bounds.get("纵轴"), f"{WORLD_FILE} -> 世界.坐标边界.纵轴", minimum=None)
+    bounds = _require_object(world, "坐标边界", f"{WORLD_CONFIG_FILE} -> 世界")
+    minimum_x, maximum_x = _range(bounds.get("横轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.横轴", minimum=None)
+    minimum_y, maximum_y = _range(bounds.get("纵轴"), f"{WORLD_CONFIG_FILE} -> 世界.坐标边界.纵轴", minimum=None)
+    region_bounds: dict[str, tuple[int, int, int, int]] = {}
+    for region_id, definition in regions.items():
+        region_path = f"{WORLD_CONFIG_FILE} -> 区域.{region_id}"
+        region = _object(definition, region_path)
+        _allow_only(region, region_path, {"类别", "坐标范围", "说明"})
+        for key in ("类别", "说明"):
+            if not str(region.get(key) or "").strip():
+                raise GameContentError(f"数据文件有问题：{region_path}.{key}：不能为空")
+        region_range = _require_object(region, "坐标范围", region_path)
+        low_x, high_x = _range(region_range.get("横轴"), f"{region_path}.坐标范围.横轴", minimum=None)
+        low_y, high_y = _range(region_range.get("纵轴"), f"{region_path}.坐标范围.纵轴", minimum=None)
+        if low_x < minimum_x or high_x > maximum_x or low_y < minimum_y or high_y > maximum_y:
+            raise GameContentError(f"数据文件有问题：{region_path}.坐标范围：超出世界坐标边界")
+        region_bounds[str(region_id)] = (low_x, high_x, low_y, high_y)
     available_functions: set[str] = set()
     coordinates: dict[tuple[int, int], str] = {}
     npc_homes: dict[str, str] = {}
     for location_id, definition in locations.items():
         path = f"{WORLD_FILE} -> 地点.{location_id}"
         value = _object(definition, path)
-        for key in ("地貌", "说明"):
+        for key in ("所属区域", "地点类型", "地形", "说明"):
             if not str(value.get(key) or "").strip():
                 raise GameContentError(f"数据文件有问题：{path}.{key}：不能为空")
+        region_id = str(value["所属区域"])
+        if region_id not in region_bounds:
+            raise GameContentError(f"数据文件有问题：{path}.所属区域：未知区域 {region_id}")
         functions = _string_list(value.get("可用功能"), f"{path}.可用功能")
         unknown = set(functions) - {"闭关", "探险", "修士"}
         if unknown:
             raise GameContentError(f"数据文件有问题：{path}.可用功能：未知功能 " + "、".join(sorted(unknown)))
         available_functions.update(functions)
+        terrain_pools = _string_list(value.get("天材地宝池"), f"{path}.天材地宝池")
+        if len(terrain_pools) != 1:
+            raise GameContentError(f"数据文件有问题：{path}.天材地宝池：必须且只能配置一个地形资源池")
+        terrain_pool = terrain_pools[0]
+        if terrain_pool not in item_groups:
+            raise GameContentError(f"数据文件有问题：{path}.天材地宝池：没有物品文件 {terrain_pool}.json")
+        terrain_items = _expand_groups(terrain_pools, item_groups)
+        if not terrain_items or any(str(items[item_id]["类别"]) != "天材地宝" for item_id in terrain_items):
+            raise GameContentError(f"数据文件有问题：{path}.天材地宝池：只能包含天材地宝")
         x, y = _coordinate(value.get("坐标"), f"{path}.坐标")
         if not minimum_x <= x <= maximum_x or not minimum_y <= y <= maximum_y:
             raise GameContentError(f"数据文件有问题：{path}.坐标：超出世界坐标边界")
+        low_x, high_x, low_y, high_y = region_bounds[region_id]
+        if not low_x <= x <= high_x or not low_y <= y <= high_y:
+            raise GameContentError(f"数据文件有问题：{path}.坐标：超出所属区域 {region_id}")
         previous = coordinates.get((x, y))
         if previous is not None:
             raise GameContentError(f"数据文件有问题：{path}.坐标：与地点 {previous} 重复")
         coordinates[(x, y)] = str(location_id)
-        npc_pool = _string_list(value.get("修士池"), f"{path}.修士池")
+        npc_pool = _string_list(value.get("道侣池"), f"{path}.道侣池")
         if "修士" in functions and not npc_pool:
-            raise GameContentError(f"数据文件有问题：{path}.修士池：修士功能地点不能为空")
+            raise GameContentError(f"数据文件有问题：{path}.道侣池：修士功能地点不能为空")
         if npc_pool and "修士" not in functions:
-            raise GameContentError(f"数据文件有问题：{path}.修士池：必须先在可用功能中启用修士")
+            raise GameContentError(f"数据文件有问题：{path}.道侣池：必须先在可用功能中启用修士")
         for group_id in npc_pool:
             if group_id not in npc_groups:
                 raise GameContentError(
-                    f"数据文件有问题：{path}.修士池：没有角色文件 {group_id}.json"
+                    f"数据文件有问题：{path}.道侣池：没有道侣文件 {group_id}.json"
                 )
-            expected_group = f"伙伴修士-{location_id}"
+            if not npc_groups[group_id]:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.道侣池：{group_id}.json 资源池不能为空"
+                )
+            expected_group = f"{location_id}道侣"
             if group_id != expected_group:
                 raise GameContentError(
-                    f"数据文件有问题：{path}.修士池：伙伴修士必须按原始地点放入 "
+                    f"数据文件有问题：{path}.道侣池：道侣必须按原始地点放入 "
                     f"{expected_group}.json"
                 )
             for npc_id in npc_groups[group_id]:
                 previous_home = npc_homes.get(npc_id)
                 if previous_home is not None:
                     raise GameContentError(
-                        f"数据文件有问题：{path}.修士池：{npc_id} 已属于地点 {previous_home}"
+                        f"数据文件有问题：{path}.道侣池：{npc_id} 已属于地点 {previous_home}"
                     )
                 npc_homes[npc_id] = str(location_id)
         enemy_pool = _string_list(value.get("敌人池"), f"{path}.敌人池")
@@ -1359,15 +1449,15 @@ def _validate_world(
                 raise GameContentError(
                     f"数据文件有问题：{path}.敌人池：没有敌人文件 {group_id}.json"
                 )
-            cultivators = [
-                enemy_id
-                for enemy_id in enemy_groups[group_id]
-                if str(enemies[enemy_id]["类别"]) == "修士"
-            ]
-            if cultivators:
+            if not enemy_groups[group_id]:
                 raise GameContentError(
-                    f"数据文件有问题：{path}.敌人池：普通地点不能引用敌对修士 "
-                    + "、".join(cultivators)
+                    f"数据文件有问题：{path}.敌人池：{group_id}.json 资源池不能为空"
+                )
+            expected_group = f"{location_id}敌人"
+            if group_id != expected_group:
+                raise GameContentError(
+                    f"数据文件有问题：{path}.敌人池：探险敌人必须按地点放入 "
+                    f"{expected_group}.json"
                 )
     for required in ("闭关", "探险", "修士"):
         if required not in available_functions:
@@ -1380,9 +1470,17 @@ def _validate_world(
     }
     if unplaced_npcs:
         raise GameContentError(
-            f"数据文件有问题：{WORLD_FILE} -> 地点：伙伴修士没有原始地点 "
+            f"数据文件有问题：{WORLD_FILE} -> 地点：道侣没有原始地点 "
             + "、".join(sorted(unplaced_npcs))
         )
+
+
+def _read_world_catalog(reader: JsonDataReader) -> dict[str, Any]:
+    return _read_multi_section_catalog(
+        reader,
+        directory=WORLD_FILE,
+        sections=("世界", "区域", "地点", "道侣", "敌人"),
+    )
 
 
 def _read_versioned(reader: JsonDataReader, path: str) -> dict[str, Any]:
@@ -1395,15 +1493,25 @@ def _read_technique_catalog(reader: JsonDataReader) -> dict[str, Any]:
     techniques: dict[str, Any] = {}
     technique_sources: dict[str, str] = {}
     groups: dict[str, tuple[str, ...]] = {}
+    directions: dict[str, dict[str, Any]] = {}
+    group_directions: dict[str, str] = {}
     for file_path, raw in reader.read_directory(TECHNIQUES_FILE):
         value = _object(raw, file_path)
         _require_version(value, file_path)
-        if set(value) != {"版本", "功法"}:
+        if set(value) != {"版本", "战斗方向", "功法"}:
             raise GameContentError(
-                f"数据文件有问题：{file_path}：功法文件只能包含版本和功法"
+                f"数据文件有问题：{file_path}：功法文件必须包含版本、战斗方向和功法"
             )
+        direction = _require_object(value, "战斗方向", file_path)
+        direction_id = str(direction.get("名称") or "").strip()
+        if not direction_id:
+            raise GameContentError(f"数据文件有问题：{file_path}.战斗方向.名称：不能为空")
+        if direction_id in directions:
+            raise GameContentError(f"数据目录有问题：{file_path}：战斗方向重复 {direction_id}")
         values = _require_object(value, "功法", file_path)
         group_id = file_path.rsplit("/", 1)[-1].removesuffix(".json")
+        directions[direction_id] = {**direction, "功法池": group_id}
+        group_directions[group_id] = direction_id
         groups[group_id] = tuple(str(key) for key in values)
         _merge_unique(
             techniques,
@@ -1416,6 +1524,8 @@ def _read_technique_catalog(reader: JsonDataReader) -> dict[str, Any]:
         "版本": "目录展开",
         "功法": techniques,
         "分组": groups,
+        "战斗方向": directions,
+        "分组方向": group_directions,
     }
 
 
@@ -1515,13 +1625,19 @@ def _read_multi_section_catalog(
     *,
     directory: str,
     sections: tuple[str, ...],
+    group_direction_field: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     result = {section: {} for section in sections}
     sources = {section: {} for section in sections}
     groups: dict[str, dict[str, tuple[str, ...]]] = {
         section: {} for section in sections
     }
+    group_directions: dict[str, dict[str, str]] = {
+        section: {} for section in sections
+    }
     allowed = {"版本", *sections}
+    if group_direction_field is not None:
+        allowed.add(group_direction_field)
     for file_path, raw in reader.read_directory(directory):
         value = _object(raw, file_path)
         _require_version(value, file_path)
@@ -1531,10 +1647,19 @@ def _read_multi_section_catalog(
             raise GameContentError(
                 f"数据文件有问题：{file_path}：没有可识别的 " + "、".join(sections)
             )
+        direction_id = ""
+        if group_direction_field is not None:
+            direction_id = str(value.get(group_direction_field) or "").strip()
+            if not direction_id:
+                raise GameContentError(
+                    f"数据文件有问题：{file_path}.{group_direction_field}：不能为空"
+                )
         for section in present:
             values = _require_object(value, section, file_path)
             group_id = file_path.rsplit("/", 1)[-1].removesuffix(".json")
             groups[section][group_id] = tuple(str(key) for key in values)
+            if group_direction_field is not None:
+                group_directions[section][group_id] = direction_id
             _merge_unique(
                 result[section],
                 sources[section],
@@ -1543,6 +1668,7 @@ def _read_multi_section_catalog(
                 section,
             )
     result["分组"] = groups
+    result["分组元数据"] = group_directions
     return result
 
 
@@ -1576,44 +1702,15 @@ def _read_grouped_catalog(
     return {"版本": "目录展开", section: definitions, "分组": groups}
 
 
-def _read_enemy_catalog(reader: JsonDataReader) -> dict[str, Any]:
-    """把敌对修士和灵兽汇入统一参战对象表，同时保留资源分支。"""
+def _read_enemy_catalog(world_catalog: dict[str, Any]) -> dict[str, Any]:
+    """从世界目录汇总各地点敌人池。"""
 
-    definitions: dict[str, Any] = {}
-    sources: dict[str, str] = {}
-    groups: dict[str, tuple[str, ...]] = {}
+    definitions = dict(world_catalog["敌人"])
+    groups = dict(world_catalog["分组"]["敌人"])
     group_kinds: dict[str, str] = {}
-    catalogs = (
-        (
-            "敌对修士",
-            _read_grouped_catalog(
-                reader,
-                directory=HOSTILE_CULTIVATORS_FILE,
-                section="敌对修士",
-            ),
-        ),
-        (
-            "灵兽",
-            _read_grouped_catalog(
-                reader,
-                directory=BEASTS_FILE,
-                section="灵兽",
-            ),
-        ),
-    )
-    for section, catalog in catalogs:
-        for group_id, object_ids in catalog["分组"].items():
-            if group_id in groups:
-                raise GameContentError(f"数据目录有问题：战斗资源文件名重复 {group_id}.json")
-            groups[group_id] = tuple(object_ids)
-            group_kinds[group_id] = section
-        _merge_unique(
-            definitions,
-            sources,
-            catalog[section],
-            HOSTILE_CULTIVATORS_FILE if section == "敌对修士" else BEASTS_FILE,
-            section,
-        )
+    for group_id, object_ids in groups.items():
+        kinds = {str(definitions[object_id].get("类别") or "") for object_id in object_ids}
+        group_kinds[group_id] = "敌对修士" if kinds == {"修士"} else "灵兽"
     return {
         "版本": "目录展开",
         "敌人": definitions,
@@ -1658,7 +1755,7 @@ def _weighted_choice(
     if not object_ids:
         raise GameContentError(f"{kind}整合池不能为空")
     weights = [int(definitions[object_id]["权重"]) for object_id in object_ids]
-    return str(rarity_weighted_choice(rng, object_ids, weights))
+    return str(inverse_weighted_choice(rng, object_ids, weights))
 
 
 def _require_version(value: dict[str, Any], path: str) -> None:

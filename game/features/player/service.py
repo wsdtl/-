@@ -9,7 +9,8 @@ import sqlite3
 from typing import Any
 
 from game.content import GameContent
-from game.core import Database, rarity_weighted_choice, require_user_id, utc_now
+from game.core import Database, inverse_weighted_choice, require_user_id, utc_now
+from game.rules.loadout import compatibility_issues
 
 from .models import (
     AssetState,
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS techniques (
     instance_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES players(user_id) ON DELETE CASCADE,
     technique_id TEXT NOT NULL,
-    rarity_id TEXT NOT NULL,
+    grade_id TEXT NOT NULL,
     affixes_json TEXT NOT NULL,
     born_order INTEGER NOT NULL,
     equipped_slot INTEGER CHECK (equipped_slot BETWEEN 1 AND 6),
@@ -289,6 +290,26 @@ class PlayerFeature:
                     "能力": [dict(value) for value in definition.get("组成") or ()],
                 }
             )
+        return result
+
+    def battle_loadout(self, assets: AssetState) -> list[dict[str, Any]]:
+        issues = self._loadout_issues(assets.techniques, assets.weapon)
+        if issues:
+            raise ValueError("当前战斗构筑不合法：" + "；".join(issues))
+        result = self.battle_techniques(assets.techniques)
+        for kind, values in (
+            ("附魔", assets.weapon.enchantments),
+            ("宝石", assets.weapon.gems),
+        ):
+            for index, value in enumerate(values, start=1):
+                result.append(
+                    self.content.configured_weapon_augment(
+                        kind,
+                        str(value["名称"]),
+                        str(value["品级"]),
+                        instance_id=f"player:{assets.player.user_id}:{kind}:{index}",
+                    )
+                )
         return result
 
     def update_player_in_connection(
@@ -552,12 +573,14 @@ class PlayerFeature:
             ).fetchone()[0]
         )
         instance_id = f"technique:{user_id}:{born_order}"
-        score = int(grade["评分"]) + sum(_affix_score(value) for value in affixes)
+        score = int(float(technique_definition["评分"]) * float(grade["能力倍率"]) + 0.5) + sum(
+            _affix_score(value) for value in affixes
+        )
         acquired_at = utc_now()
         connection.execute(
             """
             INSERT INTO techniques (
-                instance_id, user_id, technique_id, rarity_id,
+                instance_id, user_id, technique_id, grade_id,
                 affixes_json, born_order, equipped_slot, score, acquired_at
             ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
             """,
@@ -607,6 +630,31 @@ class PlayerFeature:
             ).fetchone()
             if duplicate is not None:
                 return "duplicate_name"
+            techniques = self.techniques_in_connection(connection, actor)
+            weapon = self.load_weapon_in_connection(connection, actor)
+            current_issues = set(self._loadout_issues(techniques, weapon))
+            projected = [
+                value
+                for value in techniques
+                if value.instance_id != technique.instance_id
+                and value.equipped_slot != target_slot
+            ]
+            projected.append(
+                TechniqueState(
+                    technique.instance_id,
+                    technique.user_id,
+                    technique.technique_id,
+                    technique.grade_id,
+                    technique.affixes,
+                    technique.born_order,
+                    target_slot,
+                    technique.score,
+                    technique.acquired_at,
+                )
+            )
+            projected_issues = set(self._loadout_issues(projected, weapon))
+            if projected_issues - current_issues:
+                return "incompatible"
             connection.execute(
                 "UPDATE techniques SET equipped_slot = NULL WHERE user_id = ? AND equipped_slot = ?",
                 (actor, target_slot),
@@ -620,11 +668,57 @@ class PlayerFeature:
     def unequip_technique(self, user_id: str, slot: int) -> str:
         actor = require_user_id(user_id)
         with self.database.transaction(write=True) as connection:
+            techniques = self.techniques_in_connection(connection, actor)
+            target = next(
+                (value for value in techniques if value.equipped_slot == int(slot)),
+                None,
+            )
+            if target is None:
+                return "empty_slot"
+            weapon = self.load_weapon_in_connection(connection, actor)
+            current_issues = set(self._loadout_issues(techniques, weapon))
+            projected = [
+                value for value in techniques if value.instance_id != target.instance_id
+            ]
+            projected_issues = set(self._loadout_issues(projected, weapon))
+            if projected_issues - current_issues:
+                return "incompatible"
             cursor = connection.execute(
                 "UPDATE techniques SET equipped_slot = NULL WHERE user_id = ? AND equipped_slot = ?",
                 (actor, int(slot)),
             )
         return "unequipped" if cursor.rowcount else "empty_slot"
+
+    def _loadout_issues(
+        self,
+        techniques: list[TechniqueState],
+        weapon: WeaponState,
+    ) -> tuple[str, ...]:
+        selected = {
+            "功法": tuple(
+                (
+                    value.technique_id,
+                    self.content.technique_definitions[value.technique_id],
+                )
+                for value in techniques
+                if value.equipped_slot is not None
+            ),
+            "附魔": tuple(
+                (
+                    str(value["名称"]),
+                    self.content.enchantment_definitions[str(value["名称"])],
+                )
+                for value in weapon.enchantments
+            ),
+            "宝石": tuple(
+                (
+                    str(value["名称"]),
+                    self.content.gem_definitions[str(value["名称"])],
+                )
+                for value in weapon.gems
+            ),
+        }
+        return compatibility_issues(selected)
 
     def set_auto_medicine(self, user_id: str, enabled: bool) -> PlayerState:
         actor = require_user_id(user_id)
@@ -650,7 +744,7 @@ class PlayerFeature:
         if not isinstance(use, dict):
             return ItemUseResult("not_usable", display_name)
         effect_type = str(use.get("类型") or "")
-        if effect_type == "增加伙伴经验":
+        if effect_type == "增加道侣经验":
             return ItemUseResult(
                 "partner_required",
                 display_name,
@@ -969,7 +1063,7 @@ def _technique(row: sqlite3.Row) -> TechniqueState:
         instance_id=str(row["instance_id"]),
         user_id=str(row["user_id"]),
         technique_id=str(row["technique_id"]),
-        grade_id=str(row["rarity_id"]),
+        grade_id=str(row["grade_id"]),
         affixes=tuple(dict(value) for value in json.loads(str(row["affixes_json"]))),
         born_order=int(row["born_order"]),
         equipped_slot=int(row["equipped_slot"]) if row["equipped_slot"] is not None else None,
@@ -984,7 +1078,7 @@ def _weighted_choice(
 ) -> str:
     ids = tuple(definitions)
     weights = [int(definitions[key]["权重"]) for key in ids]
-    return str(rarity_weighted_choice(rng, ids, weights))
+    return str(inverse_weighted_choice(rng, ids, weights))
 
 
 def _weighted_sample(

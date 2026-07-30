@@ -80,14 +80,14 @@ async def start(
         if result.status == PARTNER_NO_HEALTH:
             reply = _message(
                 "探险",
-                f"同行伙伴{result.blocked_partner}血气已经耗尽，请先闭关恢复或让其离队。",
+                f"同行道侣{result.blocked_partner}血气已经耗尽，请先闭关恢复或让其离队。",
             )
             await manager.send(reply, client_id)
             return
         if result.status == PARTNER_INSUFFICIENT_STAMINA:
             reply = _message(
                 "探险",
-                f"同行伙伴{result.blocked_partner}体力不足10点，请先闭关恢复或让其离队。",
+                f"同行道侣{result.blocked_partner}体力不足10点，请先闭关恢复或让其离队。",
             )
             await manager.send(reply, client_id)
             return

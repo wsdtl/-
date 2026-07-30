@@ -131,6 +131,13 @@ class ExplorationFeature:
 
             current_location = self.location.current_in_connection(connection, actor)
             enemy_pool = self.location.enemy_pool_in_connection(connection, actor)
+            terrain_item_pool = self.content.items_in_groups(
+                list(
+                    self.content.location_definitions[current_location.location_id][
+                        "天材地宝池"
+                    ]
+                )
+            )
             if "探险" not in current_location.functions or not enemy_pool:
                 return ExplorationStart(
                     LOCATION_UNAVAILABLE,
@@ -159,7 +166,13 @@ class ExplorationFeature:
                     )
 
             seed = int(self.seed_factory())
-            rounds = self._plan_rounds(assets, partners, seed, enemy_pool)
+            rounds = self._plan_rounds(
+                assets,
+                partners,
+                seed,
+                enemy_pool,
+                terrain_item_pool,
+            )
             connection.execute(
                 """
                 INSERT INTO exploration_states(
@@ -254,9 +267,11 @@ class ExplorationFeature:
         partners: tuple[PartnerAsset, ...],
         seed: int,
         enemy_pool: tuple[str, ...],
+        terrain_item_pool: tuple[str, ...],
     ) -> list[dict[str, Any]]:
         rules = self.rules
         rng = random.Random(seed)
+        terrain_rng = random.Random(seed ^ 0x5445525241494E)
         health = assets.player.health
         spirit = assets.player.spirit
         shield = 0.0
@@ -264,8 +279,10 @@ class ExplorationFeature:
         statuses = list(assets.player.statuses)
         cooldowns: dict[str, int] = {}
         skill_cursor = 0
+        charge_progress: dict[str, int] = {}
+        charging_skill = ""
         inventory = dict(assets.inventory)
-        techniques = self.player.battle_techniques(assets.techniques)
+        techniques = self.player.battle_loadout(assets)
         party_states = {
             partner.npc_id: {
                 "npc_id": partner.npc_id,
@@ -278,6 +295,8 @@ class ExplorationFeature:
                 "statuses": [dict(value) for value in partner.statuses],
                 "cooldowns": {},
                 "skill_cursor": 0,
+                "charge_progress": {},
+                "charging_skill": "",
             }
             for partner in partners
         }
@@ -328,6 +347,8 @@ class ExplorationFeature:
                 medicine_threshold=float(rules["自动用药阈值"]),
                 cooldowns=cooldowns,
                 skill_cursor=skill_cursor,
+                charge_progress=charge_progress,
+                charging_skill=charging_skill,
             )
             enemy_snapshot = enemy.battle_snapshot()
             partner_snapshots = tuple(
@@ -339,6 +360,12 @@ class ExplorationFeature:
                     shield=float(party_states[partner.npc_id]["shield"]),
                     cooldowns=dict(party_states[partner.npc_id]["cooldowns"]),
                     skill_cursor=int(party_states[partner.npc_id]["skill_cursor"]),
+                    charge_progress=dict(
+                        party_states[partner.npc_id]["charge_progress"]
+                    ),
+                    charging_skill=str(
+                        party_states[partner.npc_id]["charging_skill"]
+                    ),
                 )
                 for partner in active_partners
             )
@@ -360,6 +387,8 @@ class ExplorationFeature:
             statuses = [value.to_dict() for value in player_result.statuses]
             cooldowns = dict(player_result.cooldowns)
             skill_cursor = player_result.skill_cursor
+            charge_progress = dict(player_result.charge_progress)
+            charging_skill = player_result.charging_skill
             partner_results = {value.id: value for value in outcome.left_results[1:]}
             for partner in active_partners:
                 partner_result = partner_results[partner.combatant_id]
@@ -372,6 +401,8 @@ class ExplorationFeature:
                         "statuses": [value.to_dict() for value in partner_result.statuses],
                         "cooldowns": dict(partner_result.cooldowns),
                         "skill_cursor": partner_result.skill_cursor,
+                        "charge_progress": dict(partner_result.charge_progress),
+                        "charging_skill": partner_result.charging_skill,
                     }
                 )
             battle_result = (
@@ -381,6 +412,15 @@ class ExplorationFeature:
                 if outcome.draw
                 else "defeat"
             )
+            terrain_drops: dict[str, int] = {}
+            if battle_result == "victory":
+                terrain_item_id = self.content.choose_item(terrain_item_pool, terrain_rng)
+                terrain_grade_id = self.content.choose_grade(terrain_rng)
+                terrain_item = self.content.graded_item_definition(
+                    terrain_item_id,
+                    terrain_grade_id,
+                )
+                terrain_drops[str(terrain_item["名称"])] = 1
             consumed_items: Counter[str] = Counter()
             for combatant in outcome.left_results:
                 consumed_items.update(
@@ -402,10 +442,13 @@ class ExplorationFeature:
                     "statuses": statuses,
                     "cooldowns": cooldowns,
                     "skill_cursor": skill_cursor,
+                    "charge_progress": charge_progress,
+                    "charging_skill": charging_skill,
                     "party": [dict(party_states[value.npc_id]) for value in partners],
                     "consumed_items": dict(consumed_items),
                     "enemy_spirit_stones": enemy.spirit_stones,
                     "enemy_drops": enemy.defeated_items(outcome.right.inventory),
+                    "terrain_drops": terrain_drops,
                     "weapon_experience": _roll_range(
                         random.Random(enemy_seed ^ battle_seed),
                         self.content.enemy_definitions[enemy_id]["交锋所得"]["本命武器经验"],
@@ -476,6 +519,8 @@ class ExplorationFeature:
             stones += int(value["enemy_spirit_stones"])
             weapon_exp += int(value["weapon_experience"])
             for item_id, quantity in value["enemy_drops"].items():
+                drops[str(item_id)] += int(quantity)
+            for item_id, quantity in value.get("terrain_drops", {}).items():
                 drops[str(item_id)] += int(quantity)
 
         for item_id, quantity in consumed.items():

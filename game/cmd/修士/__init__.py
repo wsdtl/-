@@ -62,7 +62,7 @@ async def leave_npc(
     await service.leave(message, message_context, client_id, manager)
 
 
-@MessageHandler.handler(cmd="伙伴", priority=100, block=True)
+@MessageHandler.handler(cmd="道侣", priority=100, block=True)
 async def party_npcs(
     *,
     message: str = "",

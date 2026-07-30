@@ -1,4 +1,4 @@
-"""伙伴修士的查看、交谈、送礼与同行回复。"""
+"""地点修士的查看、交谈、结为道侣与同行回复。"""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ async def show_npc(message: str, context, client_id: str, manager) -> None:
                 " · ",
                 "同行中" if npc.in_party else npc.stance,
             )
-        reply.line(M.command("同行伙伴", "伙伴"), " | ", M.command("返回地点", "地点"))
+        reply.line(M.command("同行道侣", "道侣"), " | ", M.command("返回地点", "地点"))
         await manager.send(reply.build(), client_id)
         return
 
@@ -76,7 +76,7 @@ async def show_npc(message: str, context, client_id: str, manager) -> None:
 
 async def show_party(message: str, context, client_id: str, manager) -> None:
     if str(message or "").strip():
-        await manager.send(_error("用法：伙伴"), client_id)
+        await manager.send(_error("用法：道侣"), client_id)
         return
     services = current_game_services()
     profiles, assets = await asyncio.gather(
@@ -88,9 +88,9 @@ async def show_party(message: str, context, client_id: str, manager) -> None:
         asyncio.to_thread(services.npc.party_assets, _user_id(context)),
     )
     party = {value.npc_id: value for value in assets}
-    reply = M.document().section("同行伙伴", icon="player")
+    reply = M.document().section("同行道侣", icon="player")
     if not profiles:
-        reply.line("当前没有同行伙伴。")
+        reply.line("当前没有同行道侣。")
     for npc in profiles:
         partner = party[npc.npc_id]
         reply.section(npc.npc_id, icon="player").row(
@@ -201,18 +201,18 @@ async def invite(message: str, context, client_id: str, manager) -> None:
         assert result.partner is not None
         reply = (
             M.document()
-            .section("伙伴入队", icon="player")
+            .section("道侣入队", icon="player")
             .line("“", result.line, "”")
             .line(result.profile.npc_id, "已加入队伍，现随你同行。")
         )
         _append_partner_asset(reply, result.partner)
-        reply.line(M.command("查看伙伴", "伙伴"), " | ", M.command("继续行路", "前往"))
+        reply.line(M.command("查看道侣", "道侣"), " | ", M.command("继续行路", "前往"))
         reply = reply.build()
     elif result.status == FAVOR_REQUIRED:
         assert result.profile is not None
         reply = _error(f"好感尚未圆满：{result.profile.favor_text}。")
     elif result.status == ALREADY_IN_PARTY:
-        reply = _error("这名伙伴已经在队伍中。")
+        reply = _error("这名道侣已经在队伍中。")
     elif result.status == NOT_NEARBY:
         reply = _error("当前位置没有这名修士。")
     else:
@@ -236,10 +236,10 @@ async def leave(message: str, context, client_id: str, manager) -> None:
         assert result.profile is not None
         reply = (
             M.document()
-            .section("伙伴离队", icon="player")
+            .section("道侣离队", icon="player")
             .line("“", result.line, "”")
             .line(result.profile.npc_id, "已离开队伍，返回", result.profile.home_location, "。")
-            .line(M.command("查看伙伴", "伙伴"), " | ", M.command("查看地图", "地图"))
+            .line(M.command("查看道侣", "道侣"), " | ", M.command("查看地图", "地图"))
             .build()
         )
     elif result.status == NOT_IN_PARTY:

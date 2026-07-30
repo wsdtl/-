@@ -140,10 +140,11 @@ class LocationFeature:
         return LocationState(
             str(location_id),
             str(location_id),
-            str(definition["地貌"]),
+            str(definition["地点类型"]),
+            str(definition["地形"]),
             str(definition["说明"]),
             tuple(str(value) for value in definition["可用功能"]),
-            self.content.npcs_in_groups(definition["修士池"]),
+            self.content.npcs_in_groups(definition["道侣池"]),
             self.content.enemies_in_groups(definition["敌人池"]),
             x,
             y,
@@ -186,7 +187,7 @@ class LocationFeature:
     ) -> tuple[str, ...]:
         location_id = self.current_in_connection(connection, user_id).location_id
         return self.content.npcs_in_groups(
-            self.content.location_definitions[location_id]["修士池"]
+            self.content.location_definitions[location_id]["道侣池"]
         )
 
     def enemy_pool_in_connection(
@@ -205,9 +206,10 @@ class LocationFeature:
         return LocationSummary(
             str(location_id),
             str(location_id),
-            str(definition["地貌"]),
+            str(definition["地点类型"]),
+            str(definition["地形"]),
             tuple(str(value) for value in definition["可用功能"]),
-            self.content.npcs_in_groups(definition["修士池"]),
+            self.content.npcs_in_groups(definition["道侣池"]),
             self.content.enemies_in_groups(definition["敌人池"]),
             x,
             y,

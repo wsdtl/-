@@ -9,7 +9,8 @@ from dataclasses import dataclass
 class LocationSummary:
     location_id: str
     name: str
-    kind: str
+    location_type: str
+    terrain: str
     functions: tuple[str, ...]
     npcs: tuple[str, ...]
     enemies: tuple[str, ...]
@@ -29,7 +30,8 @@ class LocationSummary:
 class LocationState:
     location_id: str
     name: str
-    kind: str
+    location_type: str
+    terrain: str
     description: str
     functions: tuple[str, ...]
     npcs: tuple[str, ...]

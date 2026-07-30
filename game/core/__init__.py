@@ -7,7 +7,7 @@ from .utils import (
     require_user_id as require_user_id,
     utc_now as utc_now,
 )
-from .weighted_pool import rarity_weighted_choice as rarity_weighted_choice
+from .weighted_pool import inverse_weighted_choice as inverse_weighted_choice
 
 
 CORE_VERSION = "xiaonan.minimal-core.v1"

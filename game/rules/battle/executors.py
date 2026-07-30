@@ -43,6 +43,11 @@ EXECUTOR_CATEGORIES = MappingProxyType(
         "转移状态": frozenset({"效果"}),
         "修改行动条": frozenset({"效果"}),
         "修改技能冷却": frozenset({"效果"}),
+        "修改机制计量": frozenset({"效果"}),
+        "修改蓄势进度": frozenset({"效果"}),
+        "追加行动": frozenset({"效果"}),
+        "分摊伤害": frozenset({"效果"}),
+        "转移伤害": frozenset({"效果"}),
         "抵挡致命伤害": frozenset({"效果"}),
         "复活": frozenset({"效果"}),
     }

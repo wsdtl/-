@@ -47,6 +47,11 @@ class BattleEngine(MechanismRuntime):
             "转移状态": self._mechanism_transfer_status,
             "修改行动条": self._mechanism_modify_action_progress,
             "修改技能冷却": self._mechanism_modify_cooldown,
+            "修改机制计量": self._mechanism_modify_counter,
+            "修改蓄势进度": self._mechanism_modify_charge,
+            "追加行动": self._mechanism_additional_action,
+            "分摊伤害": self._mechanism_share_damage,
+            "转移伤害": self._mechanism_transfer_damage,
             "抵挡致命伤害": self._mechanism_fatal_guard,
             "复活": self._mechanism_revive,
         }
@@ -154,6 +159,7 @@ class BattleEngine(MechanismRuntime):
                 target = context.opponent_of(actor)
                 context.action_number += 1
                 context.trigger_counts.clear()
+                context.additional_action_counts.clear()
                 context.event(
                     "行动开始",
                     actor,
@@ -251,6 +257,11 @@ class BattleEngine(MechanismRuntime):
             auto_medicine=bool(snapshot.auto_medicine),
             medicine_threshold=max(0.0, min(1.0, float(snapshot.medicine_threshold))),
             skill_cursor=max(0, int(snapshot.skill_cursor)),
+            charge_progress={
+                str(key): max(0, int(value))
+                for key, value in dict(snapshot.charge_progress).items()
+            },
+            charging_skill=str(snapshot.charging_skill or ""),
         )
 
     @staticmethod
@@ -275,6 +286,10 @@ class BattleEngine(MechanismRuntime):
             inventory={key: value for key, value in fighter.inventory.items() if value > 0},
             consumed_items=dict(fighter.consumed_items),
             skill_cursor=fighter.skill_cursor,
+            charge_progress={
+                key: value for key, value in fighter.charge_progress.items() if value > 0
+            },
+            charging_skill=fighter.charging_skill,
         )
 
     @staticmethod
@@ -350,6 +365,8 @@ class BattleEngine(MechanismRuntime):
                 if handler is None:
                     raise ValueError(f"战斗核心未实现装配执行器：{executor or '<空>'}")
                 handler(instance, index, node, attributes, skills, passives)
+        skills.sort(key=lambda value: value.release_order)
+        passives.sort(key=lambda value: int(value["结算顺序"]))
         return tuple(skills), tuple(passives)
 
     @staticmethod
@@ -368,9 +385,11 @@ class BattleEngine(MechanismRuntime):
                 key=f"{instance['实例']}:{source_name}:{index}",
                 name=str(node.get("名称") or source_name),
                 born_order=int(instance.get("出生序号") or 0),
+                release_order=int(node["释放顺序"]),
                 multiplier=float(instance.get("威力倍率") or 1.0),
                 spirit_cost=max(0.0, float(node.get("精神消耗") or 0)),
                 cooldown_turns=max(0, int(node.get("冷却回合") or 0)),
+                charge_turns=max(0, int(node.get("蓄势回合") or 0)),
                 effects=tuple(dict(value) for value in node.get("效果") or ()),
             )
         )
@@ -393,6 +412,7 @@ class BattleEngine(MechanismRuntime):
                     "节点": definition,
                     "实例": str(instance["实例"]),
                     "来源": source_name,
+                    "结算顺序": int(node["结算顺序"]),
                     "威力倍率": float(instance.get("威力倍率") or 1.0),
                 }
             )
@@ -474,54 +494,136 @@ class BattleEngine(MechanismRuntime):
     ) -> bool:
         if not actor.skills or self._action_restricted(actor, "技能"):
             return False
-        start = actor.skill_cursor % len(actor.skills)
-        for offset in range(len(actor.skills)):
-            index = (start + offset) % len(actor.skills)
-            skill = actor.skills[index]
+
+        if actor.charging_skill:
+            charging = next(
+                (skill for skill in actor.skills if skill.key == actor.charging_skill),
+                None,
+            )
+            if charging is None or charging.charge_turns <= 0:
+                actor.charging_skill = ""
+            elif actor.charge_progress.get(charging.key, 0) < charging.charge_turns:
+                self._advance_charge(context, actor, target, charging)
+                return True
+            elif actor.cooldowns.get(charging.key, 0) <= 0:
+                spirit_cost = self._skill_spirit_cost(actor, charging)
+                if actor.spirit >= spirit_cost:
+                    self._cast_skill(context, actor, target, charging, spirit_cost)
+                    return True
+                context.event(
+                    "charge_wait",
+                    actor,
+                    actor,
+                    f"{charging.name}蓄势已成，精神不足",
+                    values={"技能": charging.name, "所需精神": spirit_cost},
+                    dispatch=False,
+                )
+                return True
+            else:
+                return True
+
+        for skill in actor.skills:
             if actor.cooldowns.get(skill.key, 0) > 0:
                 continue
-            cost_rate = 1.0 - self._percent(actor, "精神消耗修正")
-            spirit_cost = max(0.0, skill.spirit_cost * max(0.0, cost_rate))
+            spirit_cost = self._skill_spirit_cost(actor, skill)
             if actor.spirit < spirit_cost:
                 continue
-            actor.skill_cursor = (index + 1) % len(actor.skills)
-            actor.spirit -= spirit_cost
-            context.event(
-                "skill",
-                actor,
-                target,
-                f"施展{skill.name}，消耗{_number(spirit_cost)}点精神",
-                spirit_cost,
-                values={"技能": skill.name, "资源消耗": spirit_cost},
-                dispatch=False,
-            )
-            actor.current_skill = skill.key
-            try:
-                for effect in skill.effects:
-                    self._execute_mechanism(
-                        context,
-                        actor,
-                        target,
-                        dict(effect),
-                        skill.multiplier,
-                        event_amount=0.0,
-                        event_values={},
-                    )
-                reduction = min(0.8, max(-5.0, self._percent(actor, "冷却缩减")))
-                cooldown = max(0, math.ceil(skill.cooldown_turns * (1.0 - reduction)))
-                if cooldown:
-                    actor.cooldowns[skill.key] = cooldown
-                context.event(
-                    "技能施放后",
-                    actor,
-                    target,
-                    f"{skill.name}施放完成",
-                    values={"技能": skill.name, "技能键": skill.key},
-                )
-            finally:
-                actor.current_skill = ""
+            if skill.charge_turns > 0:
+                actor.charging_skill = skill.key
+                self._advance_charge(context, actor, target, skill)
+                return True
+            self._cast_skill(context, actor, target, skill, spirit_cost)
             return True
         return False
+
+    def _skill_spirit_cost(self, actor: _Fighter, skill: _Skill) -> float:
+        cost_rate = 1.0 - self._percent(actor, "精神消耗修正")
+        return max(0.0, skill.spirit_cost * max(0.0, cost_rate))
+
+    def _advance_charge(
+        self,
+        context: _BattleContext,
+        actor: _Fighter,
+        target: _Fighter,
+        skill: _Skill,
+    ) -> None:
+        before = actor.charge_progress.get(skill.key, 0)
+        after = min(skill.charge_turns, before + 1)
+        actor.charge_progress[skill.key] = after
+        values = {
+            "技能": skill.name,
+            "技能键": skill.key,
+            "原蓄势进度": before,
+            "蓄势进度": after,
+            "蓄势上限": skill.charge_turns,
+        }
+        context.event(
+            "蓄势后",
+            actor,
+            target,
+            f"{actor.name}为{skill.name}蓄势（{after}/{skill.charge_turns}）",
+            after,
+            values=values,
+        )
+        current = actor.charge_progress.get(skill.key, 0)
+        if current >= skill.charge_turns:
+            values["蓄势进度"] = current
+            context.event(
+                "蓄势完成后",
+                actor,
+                target,
+                f"{skill.name}蓄势完成",
+                current,
+                values=values,
+            )
+
+    def _cast_skill(
+        self,
+        context: _BattleContext,
+        actor: _Fighter,
+        target: _Fighter,
+        skill: _Skill,
+        spirit_cost: float,
+    ) -> None:
+        actor.skill_cursor = 0
+        actor.spirit -= spirit_cost
+        context.event(
+            "skill",
+            actor,
+            target,
+            f"施展{skill.name}，消耗{_number(spirit_cost)}点精神",
+            spirit_cost,
+            values={"技能": skill.name, "资源消耗": spirit_cost},
+            dispatch=False,
+        )
+        actor.current_skill = skill.key
+        try:
+            for effect in skill.effects:
+                self._execute_mechanism(
+                    context,
+                    actor,
+                    target,
+                    dict(effect),
+                    skill.multiplier,
+                    event_amount=0.0,
+                    event_values={},
+                )
+            reduction = min(0.8, max(-5.0, self._percent(actor, "冷却缩减")))
+            cooldown = max(0, math.ceil(skill.cooldown_turns * (1.0 - reduction)))
+            if cooldown:
+                actor.cooldowns[skill.key] = cooldown
+            context.event(
+                "技能施放后",
+                actor,
+                target,
+                f"{skill.name}施放完成",
+                values={"技能": skill.name, "技能键": skill.key},
+            )
+        finally:
+            actor.current_skill = ""
+            actor.charge_progress.pop(skill.key, None)
+            if actor.charging_skill == skill.key:
+                actor.charging_skill = ""
 
     def _basic_attack(
         self,
@@ -693,6 +795,38 @@ class BattleEngine(MechanismRuntime):
             )
             return resolution
 
+        pre_damage_values: dict[str, Any] = {}
+        if damage_form not in {"分摊", "转移"} and resolution.breakdown.limited > 0:
+            pre_damage_values = {
+                **resolution.values(),
+                "待结算伤害": resolution.breakdown.limited,
+                "伤害来源ID": source.id,
+                "原承受者ID": target.id,
+                "伤害标签": list(tags),
+            }
+            pre_damage_values = self._dispatch_event(
+                context,
+                kind="造成伤害前",
+                source=source,
+                target=target,
+                amount=resolution.breakdown.limited,
+                values=pre_damage_values,
+                tags=tags,
+            )
+            pending = min(
+                resolution.breakdown.limited,
+                max(
+                    0.0,
+                    float(
+                        pre_damage_values.get(
+                            "待结算伤害",
+                            resolution.breakdown.limited,
+                        )
+                    ),
+                ),
+            )
+            resolution = self.damage.with_limited_damage(resolution, pending)
+
         health_floor = None
         if resolution.defeated:
             context.event(
@@ -724,6 +858,9 @@ class BattleEngine(MechanismRuntime):
         critical_text = "暴击，" if resolution.critical else ""
         block_text = "格挡，" if resolution.blocked else ""
         event_values = resolution.values()
+        for key in ("已分摊伤害", "已转移伤害"):
+            if key in pre_damage_values:
+                event_values[key] = pre_damage_values[key]
         context.event(
             "damage",
             source,

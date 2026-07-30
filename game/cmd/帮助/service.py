@@ -90,7 +90,7 @@ async def show_help(message: str, *, user_id: str, client_id: str, manager) -> N
             .line(
                 M.command("附近修士", "修士"),
                 " | ",
-                M.command("同行伙伴", "伙伴"),
+                M.command("同行道侣", "道侣"),
             )
             .section("天道", icon="admin")
             .line(M.command("管理台", "web"))

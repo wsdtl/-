@@ -25,10 +25,15 @@ class BattleReportTest(unittest.TestCase):
         cls.content = GameContent.load(JsonDataReader(ROOT / "data"))
 
     def test_report_uses_backend_actor_colors_and_enemy_final_state(self) -> None:
-        technique_definition = self.content.technique_definitions["离火归元诀"]
+        technique_id = next(
+            technique_id
+            for technique_id, definition in self.content.technique_definitions.items()
+            if definition["职责"] == "主动"
+        )
+        technique_definition = self.content.technique_definitions[technique_id]
         technique = {
             "实例": "report-test-1",
-            "功法": "离火归元诀",
+            "功法": technique_id,
             "品级": "黄品",
             "出生序号": 1,
             "威力倍率": 1.0,
@@ -159,7 +164,7 @@ class BattleReportTest(unittest.TestCase):
                 name="宁药师",
                 attributes={**attributes, "攻击": 4, "防御": 3},
                 weapon_attack=10,
-                kind="伙伴修士",
+                kind="道侣",
             ),
         )
         right = (enemy.battle_snapshot(),)

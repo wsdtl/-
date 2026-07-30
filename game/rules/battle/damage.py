@@ -301,6 +301,36 @@ class DamageEngine:
         )
 
     @staticmethod
+    def with_limited_damage(
+        resolution: DamageResolution,
+        amount: float,
+    ) -> DamageResolution:
+        """用伤害前机制裁定后的最终伤害重建资源变化。"""
+
+        limited = max(0.0, min(float(amount), resolution.breakdown.limited))
+        shield_damage = (
+            0.0
+            if resolution.request.bypass_shield
+            else min(resolution.shield_before, limited)
+        )
+        shield_after = max(0.0, resolution.shield_before - shield_damage)
+        pending_health = max(0.0, limited - shield_damage)
+        health_damage = min(max(0.0, resolution.health_before), pending_health)
+        health_after = max(0.0, resolution.health_before - health_damage)
+        overkill = max(0.0, pending_health - health_damage)
+        return replace(
+            resolution,
+            defeated=resolution.health_before > 0 and health_after <= 0,
+            shield_broken=resolution.shield_before > 0 and shield_after <= 0,
+            shield_damage=shield_damage,
+            health_damage=health_damage,
+            overkill=overkill,
+            health_after=health_after,
+            shield_after=shield_after,
+            breakdown=replace(resolution.breakdown, limited=limited),
+        )
+
+    @staticmethod
     def _percent(target: Fighter, attribute: str, default: float = 0.0) -> float:
         if attribute not in target.attributes and not any(
             attribute in status.modifiers for status in target.statuses

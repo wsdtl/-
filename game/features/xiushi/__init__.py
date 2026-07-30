@@ -1,4 +1,4 @@
-"""伙伴修士的资料、结交与同行组件。"""
+"""地点修士的资料、结为道侣与同行组件。"""
 
 from .service import (
     ALREADY_IN_PARTY as ALREADY_IN_PARTY,

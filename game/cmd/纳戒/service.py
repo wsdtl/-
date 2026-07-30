@@ -51,7 +51,7 @@ async def show_inventory(message: str, context, client_id: str, manager) -> None
         else:
             definition = services.content.item_definitions[entry.key]
             if isinstance(definition.get("使用效果"), dict):
-                if definition["使用效果"].get("类型") == "增加伙伴经验":
+                if definition["使用效果"].get("类型") == "增加道侣经验":
                     name = M.command(entry.name, f"使用物品 {entry.name} ", submit=False)
                 else:
                     name = M.command(entry.name, f"使用物品 {entry.name}")
@@ -108,8 +108,8 @@ async def use_item(message: str, context, client_id: str, manager) -> None:
             "not_usable": f"{result.item_name}当前不能直接使用。",
             "insufficient": f"{result.item_name}数量不足。",
             "already_full": f"{result.item_name}对应的状态已经圆满。",
-            "partner_required": "使用同修器物时需要指定一名已结交伙伴。",
-            "target_not_found": f"没有找到已结交伙伴“{result.target}”。",
+            "partner_required": "使用同修器物时需要指定一名已结交道侣。",
+            "target_not_found": f"没有找到已结交道侣“{result.target}”。",
             "progress_locked": f"{result.target}当前不能继续获得经验。",
         }[result.status]
     reply = (
@@ -141,7 +141,7 @@ def _partner_item_request(text: str, services) -> tuple[str, str, int] | None:
         return None
     item_id, _ = resolved
     use = services.content.item_definitions[item_id].get("使用效果")
-    if not isinstance(use, dict) or use.get("类型") != "增加伙伴经验":
+    if not isinstance(use, dict) or use.get("类型") != "增加道侣经验":
         return None
     if len(parts) < 2:
         return parts[0], "", 1

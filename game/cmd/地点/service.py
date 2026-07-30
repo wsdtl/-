@@ -89,11 +89,9 @@ async def show_location(message: str, context, client_id: str, manager) -> None:
     reply = (
         M.document()
         .section(target.name, icon="navigation")
-        .row(("坐标", target.coordinate_text), ("地貌", target.kind))
-        .row(
-            ("可用功能", _functions(target.functions)),
-            ("距当前位置", "当前所在" if distance == 0 else f"{distance}格"),
-        )
+        .row(("坐标", target.coordinate_text), ("地点类型", target.location_type))
+        .row(("地形", target.terrain), ("可用功能", _functions(target.functions)))
+        .row(("距当前位置", "当前所在" if distance == 0 else f"{distance}格"), ("周边资源", "天材地宝"))
         .line(target.description)
     )
     if target.location_id == current.location_id:
@@ -164,7 +162,8 @@ async def move(message: str, context, client_id: str, manager) -> None:
             .line("已从", result.previous.name, "行至", result.current.name, "。")
             .line(result.current.description)
             .row(("坐标", result.current.coordinate_text), ("移动距离", f"{result.distance}格"))
-            .row(("地貌", result.current.kind), ("可用功能", _functions(result.current.functions)))
+            .row(("地点类型", result.current.location_type), ("地形", result.current.terrain))
+            .row(("可用功能", _functions(result.current.functions)))
         )
         _append_function_commands(reply, result.current.functions)
         _append_npc_commands(reply, tuple(value.npc_id for value in nearby))

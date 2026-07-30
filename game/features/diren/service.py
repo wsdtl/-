@@ -7,6 +7,12 @@ import random
 from typing import Any, Mapping
 
 from game.content import GameContent
+from game.features.loadout import (
+    configure_battle_instances,
+    direction_candidates,
+    global_candidates,
+    roll_loadout,
+)
 from game.rules import CombatantSnapshot
 
 
@@ -15,9 +21,14 @@ class EnemyInstance:
     instance_id: str
     enemy_id: str
     kind: str
+    rank: str
     level: int
     attributes: dict[str, float]
     weapon_attack: float
+    direction_id: str | None
+    technique_ids: tuple[str, ...]
+    enchantment_ids: tuple[str, ...]
+    gem_ids: tuple[str, ...]
     techniques: tuple[dict[str, Any], ...]
     spirit_stones: int
     inventory: dict[str, int]
@@ -53,12 +64,22 @@ class EnemyFeature:
     def __init__(self, content: GameContent) -> None:
         self.content = content
 
-    def spawn(self, enemy_id: str, *, seed: int) -> EnemyInstance:
+    def spawn(
+        self,
+        enemy_id: str,
+        *,
+        seed: int,
+        rank: str = "普通",
+    ) -> EnemyInstance:
         key = str(enemy_id)
         definition = self.content.enemy_definitions[key]
         rng = random.Random(int(seed))
         grade_rng = random.Random(int(seed) ^ 0x6A09E667F3BCC909)
+        loadout_rng = random.Random(int(seed) ^ 0xBB67AE8584CAA73B)
         kind = str(definition["类别"])
+        enemy_rank = str(rank)
+        if enemy_rank not in {"普通", "首领"}:
+            raise ValueError(f"未知敌方修士构筑：{enemy_rank}")
         level = _roll_range(rng, definition["等级"])
         growth = (
             self.content.player["人物"]["每级成长"]
@@ -78,12 +99,45 @@ class EnemyFeature:
             )
             strategy = definition["战斗策略"]
             weapon_attack = float(definition["本命武器"]["攻击"])
-            techniques = tuple(
-                self.content.configured_battle_techniques(
-                    definition["功法"],
-                    instance_prefix=f"enemy:{key}:{seed}",
+            loadout_rule = self.content.combination_rules["敌方修士构筑"][
+                enemy_rank
+            ]
+            scope = str(loadout_rule["候选范围"])
+            if scope == "随机方向":
+                direction_id: str | None = loadout_rng.choice(
+                    tuple(self.content.direction_definitions)
                 )
+                candidates = direction_candidates(self.content, direction_id)
+            elif scope == "全池":
+                direction_id = None
+                candidates = global_candidates(
+                    self.content,
+                    loadout_rng,
+                    theme_limit=int(loadout_rule["战术数量上限"]),
+                )
+            else:
+                raise ValueError(f"未知敌方修士候选范围：{scope}")
+            rolled = roll_loadout(
+                self.content,
+                loadout_rng,
+                candidates=candidates,
+                counts={
+                    "功法": int(loadout_rule["功法位"]),
+                    "附魔": int(loadout_rule["附魔位"]),
+                    "宝石": int(loadout_rule["宝石位"]),
+                },
+                direction_id=direction_id,
             )
+            techniques = configure_battle_instances(
+                self.content,
+                techniques=rolled.techniques,
+                enchantments=rolled.enchantments,
+                gems=rolled.gems,
+                instance_prefix=f"enemy:{key}:{seed}",
+            )
+            technique_ids = tuple(str(value["功法"]) for value in rolled.techniques)
+            enchantment_ids = tuple(str(value["名称"]) for value in rolled.enchantments)
+            gem_ids = tuple(str(value["名称"]) for value in rolled.gems)
             fixed_drops: dict[str, int] = {}
             auto_medicine = rng.random() < float(strategy["用药概率"])
             medicine_threshold = float(strategy["用药阈值"])
@@ -96,6 +150,10 @@ class EnemyFeature:
             )
             inventory = {}
             weapon_attack = 0.0
+            direction_id = None
+            technique_ids = ()
+            enchantment_ids = ()
+            gem_ids = ()
             techniques = ()
             auto_medicine = False
             medicine_threshold = 0.0
@@ -104,9 +162,14 @@ class EnemyFeature:
             instance_id=f"enemy:{key}:{seed}",
             enemy_id=key,
             kind=kind,
+            rank=enemy_rank,
             level=level,
             attributes=attributes,
             weapon_attack=weapon_attack,
+            direction_id=direction_id,
+            technique_ids=technique_ids,
+            enchantment_ids=enchantment_ids,
+            gem_ids=gem_ids,
             techniques=techniques,
             spirit_stones=spirit_stones,
             inventory=inventory,
@@ -133,7 +196,10 @@ def _roll_item_pool(
     definition: dict[str, Any],
     content: GameContent,
 ) -> tuple[int, dict[str, int]]:
-    item_ids = content.items_in_groups(list(definition["物品池"]))
+    pool_files = list(definition["物品池"])
+    if not pool_files:
+        return _roll_range(rng, definition["灵石"]), {}
+    item_ids = content.items_in_groups(pool_files)
     item_id = content.choose_item(item_ids, rng)
     grade_id = content.choose_grade(grade_rng)
     item = content.graded_item_definition(item_id, grade_id)
