@@ -9,9 +9,9 @@ import math
 import random
 from typing import Any, Callable
 
-from .battle.damage import DamageEngine, DamageRequest, DamageResolution
-from .battle.mechanics import MechanismRuntime
-from .battle.models import (
+from .damage import DamageEngine, DamageRequest, DamageResolution
+from .mechanics import MechanismRuntime
+from .models import (
     ActionIntent,
     BattleContext,
     BattleOutcome,

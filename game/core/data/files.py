@@ -79,30 +79,10 @@ class JsonDataCatalog:
 
 
 class JsonDataReader:
-    """按需读取单个文件或一个分类目录，不预载、不缓存。"""
+    """启动时一次性严格解析全部正式 JSON。"""
 
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).expanduser().resolve()
-
-    def read(self, relative_path: str | Path) -> Any:
-        raw_path = str(relative_path or "").strip()
-        if not raw_path:
-            raise JsonDataError("JSON 文件必须使用 data 内的相对路径")
-        requested = Path(raw_path)
-        if requested.is_absolute():
-            raise JsonDataError("JSON 文件必须使用 data 内的相对路径")
-        if requested.suffix.lower() != ".json":
-            requested = requested.with_suffix(".json")
-
-        path = (self.root / requested).resolve()
-        try:
-            path.relative_to(self.root)
-        except ValueError as exc:
-            raise JsonDataError("JSON 文件不能超出 data 目录") from exc
-        if not path.is_file():
-            raise JsonDataError(f"数据文件不存在：{requested.as_posix()}")
-
-        return self._read_path(path, requested.as_posix())
 
     def load_catalog(self) -> JsonDataCatalog:
         """一次解析正式数据目录，并建立路径注册表和内容文件名注册表。"""
@@ -147,40 +127,6 @@ class JsonDataReader:
             content_by_file=MappingProxyType(content_by_file),
         )
 
-    def validate_unique_filenames(self) -> None:
-        """确保可被资源池引用的内容 JSON 文件名全局唯一。"""
-
-        sources: dict[str, Path] = {}
-        content_root = self.root / "内容"
-        if not content_root.is_dir():
-            raise JsonDataError("数据目录不存在：内容")
-        for path in sorted(content_root.rglob("*.json"), key=lambda value: value.as_posix().casefold()):
-            key = path.name.casefold()
-            if key in sources:
-                first = sources[key].relative_to(self.root).as_posix()
-                second = path.relative_to(self.root).as_posix()
-                raise JsonDataError(
-                    f"数据目录有问题：JSON 文件名重复 {path.name}：{first} 与 {second}"
-                )
-            sources[key] = path
-
-    def read_directory(self, relative_path: str | Path) -> tuple[tuple[str, Any], ...]:
-        """递归读取分类目录中的全部 JSON，并在返回时抹平目录层级。"""
-
-        directory = self._resolve_directory(relative_path)
-        files = sorted(
-            (path for path in directory.rglob("*.json") if path.is_file()),
-            key=lambda path: path.relative_to(directory).as_posix().casefold(),
-        )
-        if not files:
-            requested = directory.relative_to(self.root).as_posix()
-            raise JsonDataError(f"数据目录没有 JSON 文件：{requested}")
-        result = []
-        for path in files:
-            relative = path.relative_to(self.root).as_posix()
-            result.append((relative, self._read_path(path, relative)))
-        return tuple(result)
-
     @staticmethod
     def _read_path(path: Path, display_path: str) -> Any:
         try:
@@ -188,23 +134,6 @@ class JsonDataReader:
             return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
         except (OSError, json.JSONDecodeError, JsonDataError) as exc:
             raise JsonDataError(f"数据文件读取失败：{display_path}：{exc}") from exc
-
-    def _resolve_directory(self, relative_path: str | Path) -> Path:
-        raw_path = str(relative_path or "").strip()
-        if not raw_path:
-            raise JsonDataError("JSON 目录必须使用 data 内的相对路径")
-        requested = Path(raw_path)
-        if requested.is_absolute():
-            raise JsonDataError("JSON 目录必须使用 data 内的相对路径")
-        directory = (self.root / requested).resolve()
-        try:
-            directory.relative_to(self.root)
-        except ValueError as exc:
-            raise JsonDataError("JSON 目录不能超出 data 目录") from exc
-        if not directory.is_dir():
-            raise JsonDataError(f"数据目录不存在：{requested.as_posix()}")
-        return directory
-
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}

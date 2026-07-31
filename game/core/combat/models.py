@@ -12,7 +12,7 @@ import random
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from game.rules.combat import BattleEngine
+    from .engine import BattleEngine
 
 
 @dataclass(frozen=True)

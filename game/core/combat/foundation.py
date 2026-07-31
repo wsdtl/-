@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
-from game.core import JsonDataReader
+from game.core.data import JsonDataService
 
 from .executors import EXECUTOR_CATEGORIES
 from .schema import RuleSchemaValidator
@@ -23,19 +22,17 @@ RULE_PATHS = {
     "行动规则": "规则/战斗/行动.json",
     "状态反应": "规则/战斗/状态反应.json",
 }
-MECHANISM_DIRECTORY = "内容/战斗机制"
-
-
 def load_battle_foundation(
-    data_root: str | Path,
+    data: JsonDataService,
     *,
     mechanisms: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    reader = JsonDataReader(data_root)
-    result = {name: reader.read(path) for name, path in DEFINITION_PATHS.items()}
-    result.update({name: reader.read(path) for name, path in RULE_PATHS.items()})
+    if not data.status().loaded:
+        raise RuntimeError("JSON 数据微服务必须先于战斗微服务启动")
+    result = {name: data.read(path) for name, path in DEFINITION_PATHS.items()}
+    result.update({name: data.read(path) for name, path in RULE_PATHS.items()})
     if mechanisms is None:
-        mechanism_nodes, mechanism_names = load_battle_mechanisms(reader)
+        mechanism_nodes, mechanism_names = load_battle_mechanisms(data)
     else:
         mechanism_nodes = {str(key): dict(value) for key, value in mechanisms.items()}
         mechanism_names = {str(key): str(key) for key in mechanism_nodes}
@@ -46,40 +43,35 @@ def load_battle_foundation(
 
 
 def load_battle_mechanisms(
-    reader: JsonDataReader,
+    data: JsonDataService,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     """把编号机制实体投影为核心所需的编号到能力节点映射。"""
 
     nodes: dict[str, dict[str, Any]] = {}
     names: dict[str, str] = {}
     name_sources: dict[str, str] = {}
-    for relative_path, value in reader.read_directory(MECHANISM_DIRECTORY):
-        if not isinstance(value, list):
-            raise ValueError(f"{relative_path}根值必须是机制数组")
-        for index, raw in enumerate(value):
-            path = f"{relative_path}[{index}]"
-            entry = _mapping(raw, path)
-            unknown = set(entry) - {"编号", "名称", "节点"}
-            if unknown:
-                raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
-            identity = str(entry.get("编号") or "").strip()
-            name = str(entry.get("名称") or "").strip()
-            node = _mapping(entry.get("节点"), f"{path}.节点")
-            if not identity:
-                raise ValueError(f"{path}.编号不能为空")
-            if not name:
-                raise ValueError(f"{path}.名称不能为空")
-            if identity in nodes:
-                raise ValueError(f"机制编号重复：{identity}")
-            if name in name_sources:
-                raise ValueError(
-                    f"机制名称重复：{name}，位于 {name_sources[name]} 与 {path}"
-                )
-            nodes[identity] = dict(node)
-            names[identity] = name
-            name_sources[name] = path
+    for identity, raw in data.entities("机制").items():
+        path = f"机制[{identity}]"
+        entry = _mapping(raw, path)
+        unknown = set(entry) - {"编号", "名称", "节点"}
+        if unknown:
+            raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
+        declared_identity = str(entry.get("编号") or "").strip()
+        name = str(entry.get("名称") or "").strip()
+        node = _mapping(entry.get("节点"), f"{path}.节点")
+        if declared_identity != identity:
+            raise ValueError(f"{path}.编号与数据索引不一致")
+        if not name:
+            raise ValueError(f"{path}.名称不能为空")
+        if name in name_sources:
+            raise ValueError(
+                f"机制名称重复：{name}，位于 {name_sources[name]} 与 {path}"
+            )
+        nodes[identity] = dict(node)
+        names[identity] = name
+        name_sources[name] = path
     if not nodes:
-        raise ValueError(f"{MECHANISM_DIRECTORY}没有机制")
+        raise ValueError("JSON 数据微服务没有登记战斗机制")
     return nodes, names
 
 
