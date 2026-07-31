@@ -843,6 +843,74 @@ class BattleFoundationTest(unittest.TestCase):
         self.assertEqual(engine._next_action_order(context), (fast,))
         self.assertGreater(context.action_progress["slow"], 0)
 
+    def test_personal_action_profile_scales_against_multiple_enemies_without_exceeding_its_cap(self):
+        engine = self.engine()
+        boss = self.fighter("boss", "镇域修士")
+        boss.battle_profile = {
+            "行动效率上限": 3,
+            "寡敌应变": {
+                "每名额外敌人行动效率": 0.2,
+                "行动效率增量上限": 0.6,
+            },
+        }
+        enemies = tuple(
+            self.fighter(f"enemy-{index}", f"敌人{index}", side=1)
+            for index in range(4)
+        )
+        solo_context = self.context(engine, (boss,), (enemies[0],))
+        team_context = self.context(engine, (boss,), enemies)
+
+        solo = engine._action_efficiency(solo_context, boss)
+        against_team = engine._action_efficiency(team_context, boss)
+
+        self.assertAlmostEqual(solo, 1.0)
+        self.assertAlmostEqual(against_team, 1.6)
+        self.assertLessEqual(against_team, 3)
+
+    def test_battle_profile_limits_control_stacking_and_duration(self):
+        engine = self.engine()
+        source = self.fighter("source", "控场者")
+        target_fighter = self.fighter("target", "天灾修士", side=1)
+        target_fighter.battle_profile = {
+            "同时承受控制上限": 1,
+            "控制持续上限": 1,
+        }
+        context = self.context(engine, (source,), (target_fighter,))
+        first = {
+            "能力": "添加状态",
+            "目标": target("当前目标"),
+            "状态": {
+                "名称": "定身",
+                "类别": "负面",
+                "标签": ["控制"],
+                "是否控制": True,
+                "控制基础命中率": 100,
+                "剩余行动": 6,
+                "行动限制": ["行动"],
+            },
+        }
+        second = deepcopy(first)
+        second["状态"]["名称"] = "封脉"
+
+        self.assertTrue(engine._execute_mechanism(context, source, target_fighter, first))
+        self.assertEqual(target_fighter.statuses[0].remaining_turns, 1)
+        self.assertFalse(engine._execute_mechanism(context, source, target_fighter, second))
+        failure = next(event for event in reversed(context.events) if event.kind == "添加状态失败后")
+        self.assertEqual(failure.values["原因"], "控制承载已满")
+
+    def test_battle_profile_rejects_unknown_or_inert_fields(self):
+        engine = self.engine()
+        attributes = {"血气上限": 100, "精神上限": 0, "攻击": 1, "速度": 100}
+        with self.assertRaisesRegex(ValueError, "战斗规格存在未知字段"):
+            engine._build_fighter(
+                CombatantSnapshot(
+                    "fighter",
+                    "修士",
+                    attributes,
+                    battle_profile={"首领光环": 1},
+                )
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

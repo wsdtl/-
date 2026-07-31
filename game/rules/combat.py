@@ -234,6 +234,7 @@ class BattleEngine(MechanismRuntime):
             kind=str(snapshot.kind or "修士"), owner_id=str(snapshot.owner_id),
             controller_id=str(snapshot.controller_id or snapshot.id), form=str(snapshot.form or "本相"),
             forms=copy.deepcopy(dict(snapshot.forms)), tags=set(snapshot.tags), tactic=copy.deepcopy(list(snapshot.tactic)),
+            battle_profile=self._normalize_battle_profile(snapshot.battle_profile),
         )
 
     @staticmethod
@@ -262,7 +263,7 @@ class BattleEngine(MechanismRuntime):
         for fighter in context.fighters:
             if not fighter.alive or not fighter.can_act:
                 continue
-            efficiency = self._action_efficiency(fighter.value("速度", 100))
+            efficiency = self._action_efficiency(context, fighter)
             before = context.action_progress.get(fighter.id, 0)
             total = before + efficiency
             count = math.floor(total + 1e-9)
@@ -272,13 +273,53 @@ class BattleEngine(MechanismRuntime):
         ready.sort(key=lambda value: value[:4])
         return tuple(value[4] for value in ready)
 
-    def _action_efficiency(self, speed):
+    def _action_efficiency(self, context, fighter):
         rules = self.catalog.action_rules
         baseline = max(0.0001, float(rules.get("标准速度", 100)))
         minimum = max(0.0001, float(rules.get("最低有效速度", 25)))
-        limit = max(1.000001, float(rules.get("最高行动效率", 2)))
-        effective = max(minimum, float(speed))
-        return limit * effective / (effective + (limit - 1) * baseline)
+        global_limit = max(1.000001, float(rules.get("最高行动效率", 2)))
+        limit = max(1.000001, float(fighter.battle_profile.get("行动效率上限", global_limit)))
+        effective = max(minimum, fighter.value("速度", 100))
+        efficiency = limit * effective / (effective + (limit - 1) * baseline)
+
+        response = dict(fighter.battle_profile.get("寡敌应变") or {})
+        extra_enemies = max(0, len(context.enemies_of(fighter)) - 1)
+        response_per_enemy = max(0.0, float(response.get("每名额外敌人行动效率", 0)))
+        response_limit = max(0.0, float(response.get("行动效率增量上限", 0)))
+        response_bonus = min(extra_enemies * response_per_enemy, response_limit)
+        return min(limit, efficiency + response_bonus)
+
+    @staticmethod
+    def _normalize_battle_profile(value):
+        profile = copy.deepcopy(dict(value or {}))
+        allowed = {"行动效率上限", "寡敌应变", "同时承受控制上限", "控制持续上限"}
+        unknown = set(profile) - allowed
+        if unknown:
+            raise ValueError("战斗规格存在未知字段：" + "、".join(sorted(str(item) for item in unknown)))
+        if "行动效率上限" in profile:
+            limit = profile["行动效率上限"]
+            if isinstance(limit, bool) or not isinstance(limit, (int, float)) or limit <= 1:
+                raise ValueError("战斗规格.行动效率上限必须是大于 1 的数字")
+        for field in ("同时承受控制上限", "控制持续上限"):
+            if field in profile:
+                limit = profile[field]
+                if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+                    raise ValueError(f"战斗规格.{field}必须是正整数")
+        response = profile.get("寡敌应变")
+        if response is not None:
+            if not isinstance(response, Mapping):
+                raise ValueError("战斗规格.寡敌应变必须是字典")
+            response = dict(response)
+            expected = {"每名额外敌人行动效率", "行动效率增量上限"}
+            unknown = set(response) - expected
+            if unknown:
+                raise ValueError("战斗规格.寡敌应变存在未知字段：" + "、".join(sorted(str(item) for item in unknown)))
+            for field in expected:
+                number = response.get(field, 0)
+                if isinstance(number, bool) or not isinstance(number, (int, float)) or number < 0:
+                    raise ValueError(f"战斗规格.寡敌应变.{field}必须是非负数字")
+            profile["寡敌应变"] = response
+        return profile
 
     def _technique_rules(self, techniques, attributes):
         skills, passives = [], []

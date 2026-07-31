@@ -215,6 +215,7 @@ class Fighter:
     base_form_skills: list[Skill] | None = None
     tags: set[str] = field(default_factory=set)
     tactic: list[Mapping[str, Any]] = field(default_factory=list)
+    battle_profile: dict[str, Any] = field(default_factory=dict)
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -342,6 +343,7 @@ class CombatantSnapshot:
     forms: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
+    battle_profile: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

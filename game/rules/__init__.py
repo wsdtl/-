@@ -9,3 +9,7 @@ from .battle.models import (
     CombatantSnapshot as CombatantSnapshot,
     StatusState as StatusState,
 )
+from .character import (
+    resolve_level_tier as resolve_level_tier,
+    resolve_tiered_character as resolve_tiered_character,
+)

@@ -7,6 +7,8 @@ import unittest
 
 from game.core import JsonDataError, JsonDataReader, content_section
 from game.content_loading import GameDataLoader
+from game.rules import BattleEngine, CombatantSnapshot, resolve_tiered_character
+from game.rules.battle import load_battle_foundation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +25,95 @@ def _fields(value):
 
 
 class JsonDataReaderTests(unittest.TestCase):
+    def test_character_and_gameplay_rules_use_cohesive_domains(self) -> None:
+        catalog = JsonDataReader(ROOT / "data").load_catalog()
+        character = catalog.read("规则/角色/人物.json")
+
+        self.assertEqual(character["成长规则"], "修士")
+        self.assertEqual(character["本命武器规则"], "本命武器")
+        self.assertEqual(character["构筑规则"], "构筑")
+        for field in ("成长规则", "本命武器规则", "构筑规则"):
+            reference = character[field]
+            self.assertIsInstance(
+                catalog.read(f"规则/角色/{reference}.json"),
+                dict,
+            )
+
+        partner = catalog.read("规则/角色/道侣.json")
+        weapon = catalog.read("规则/角色/本命武器.json")
+        loadouts = catalog.read("规则/角色/构筑.json")
+        self.assertNotIn("同行构筑", partner)
+        self.assertNotIn("附魔位", weapon)
+        self.assertNotIn("宝石位", weapon)
+        self.assertEqual(loadouts["人物"], {"功法位": 6, "附魔位": 6, "宝石位": 6})
+        self.assertEqual(loadouts["道侣"], {"功法位": 6, "附魔位": 6, "宝石位": 6})
+        self.assertEqual(loadouts["灵兽"], {"功法位": 3, "附魔位": 3, "宝石位": 3})
+
+        next_level = 1
+        expected_slots = (2, 3, 4, 6, 9, 12)
+        expected_speed_growth = (0, 0.1, 0.2, 0.4, 0.7, 1)
+        for slots, tier in zip(expected_slots, loadouts["敌方修士"]["阶梯"]):
+            low, high = tier["等级范围"]
+            self.assertEqual(low, next_level)
+            self.assertEqual(
+                (tier["功法位"], tier["附魔位"], tier["宝石位"]),
+                (slots, slots, slots),
+            )
+            next_level = high + 1
+        for expected, tier in zip(expected_speed_growth, loadouts["敌方修士"]["阶梯"]):
+            self.assertEqual(tier["成长修正"]["每级"].get("速度", 0), expected)
+            for field in tier["成长修正"].get("固定", {}):
+                self.assertIn(field, catalog.read("定义/战斗/属性.json"))
+        self.assertEqual(
+            loadouts["敌方修士"]["阶梯"][-1]["战斗规格"],
+            {
+                "行动效率上限": 4,
+                "寡敌应变": {
+                    "每名额外敌人行动效率": 0.25,
+                    "行动效率增量上限": 1.5,
+                },
+                "同时承受控制上限": 1,
+                "控制持续上限": 1,
+            },
+        )
+        self.assertEqual(next_level, 101)
+        self.assertEqual(
+            catalog.read("规则/战斗/构筑.json")["装配上限"],
+            {"功法": 12, "附魔": 12, "宝石": 12},
+        )
+
+        resolved = resolve_tiered_character(
+            rule=loadouts["敌方修士"],
+            level=100,
+            base_attributes={
+                name: float(definition["默认值"])
+                for name, definition in catalog.read("定义/战斗/属性.json").items()
+            },
+            standard_growth=catalog.read("规则/角色/修士.json")["属性成长"]["每级"],
+        )
+        self.assertEqual(resolved["阶梯"], "天灾")
+        self.assertEqual(resolved["构筑"], {"功法位": 12, "附魔位": 12, "宝石位": 12})
+        self.assertEqual(resolved["属性"]["速度"], 199)
+        self.assertEqual(resolved["属性"]["控制抵抗率"], 30)
+        self.assertEqual(resolved["属性"]["韧性"], 50)
+        self.assertEqual(resolved["战斗规格"]["行动效率上限"], 4)
+        fighter = BattleEngine(load_battle_foundation(ROOT / "data"))._build_fighter(
+            CombatantSnapshot(
+                "enemy",
+                "天灾修士",
+                resolved["属性"],
+                level=resolved["等级"],
+                battle_profile=resolved["战斗规格"],
+            )
+        )
+        self.assertEqual(fighter.value("速度"), 199)
+        self.assertEqual(fighter.battle_profile["同时承受控制上限"], 1)
+
+        self.assertIsInstance(catalog.read("规则/玩法/闭关.json"), dict)
+        self.assertIsInstance(catalog.read("规则/玩法/探险.json"), dict)
+        for obsolete in ("初始", "成长", "修行"):
+            self.assertFalse((ROOT / "data" / "规则" / obsolete).exists())
+
     def test_catalog_registers_scopes_and_supports_both_pool_modes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

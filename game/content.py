@@ -45,10 +45,27 @@ class GameContent:
             str(name): float(definition["默认值"])
             for name, definition in attributes.items()
         }
-        initial = reader.read("规则/初始/人物.json")
-        cultivation = reader.read("规则/成长/修士.json")
-        weapon = reader.read("规则/成长/本命武器.json")
-        partner = reader.read("规则/道侣.json")
+        character_rule_directory = "规则/角色"
+        initial = reader.read(f"{character_rule_directory}/人物.json")
+        cultivation = _read_referenced_rule(
+            reader,
+            character_rule_directory,
+            initial,
+            "成长规则",
+        )
+        weapon = _read_referenced_rule(
+            reader,
+            character_rule_directory,
+            initial,
+            "本命武器规则",
+        )
+        loadouts = _read_referenced_rule(
+            reader,
+            character_rule_directory,
+            initial,
+            "构筑规则",
+        )
+        partner = reader.read(f"{character_rule_directory}/道侣.json")
         player_attributes = {**attribute_defaults, **dict(initial.get("属性覆盖") or {})}
         initial_items = {
             str(value["编号"]): int(value["数量"])
@@ -63,15 +80,15 @@ class GameContent:
                 "突破间隔": int(cultivation["突破间隔"]),
                 "每级成长": dict(cultivation["属性成长"]["每级"]),
                 "经验": dict(cultivation["经验"]),
+                "构筑": dict(loadouts["人物"]),
             },
             "本命武器": dict(weapon),
             "道侣": {
                 **dict(partner),
-                **{
-                    f"{kind}位": int(count)
-                    for kind, count in dict(partner["同行构筑"]).items()
-                },
+                "构筑": dict(loadouts["道侣"]),
             },
+            "灵兽": {"构筑": dict(loadouts["灵兽"])},
+            "敌方修士": {"构筑": dict(loadouts["敌方修士"])},
             "初始物品": initial_items,
         }
 
@@ -122,8 +139,8 @@ class GameContent:
         return cls(
             player=player_rules,
             activities={
-                "闭关": reader.read("规则/修行/闭关.json"),
-                "探险": reader.read("规则/修行/探险.json"),
+                "闭关": reader.read("规则/玩法/闭关.json"),
+                "探险": reader.read("规则/玩法/探险.json"),
             },
             grades={"品级": grades},
             combat=combat,
@@ -378,6 +395,18 @@ class GameContent:
             return str(self.atomic_ability_definitions[ability]["执行器"])
         except KeyError as exc:
             raise GameContentError(f"未知原子能力：{ability or '<空>'}") from exc
+
+
+def _read_referenced_rule(
+    reader: JsonDataReader,
+    directory: str,
+    source: Mapping[str, Any],
+    field: str,
+) -> Any:
+    reference = str(source.get(field) or "").strip()
+    if not reference or "/" in reference or "\\" in reference or reference.endswith(".json"):
+        raise GameContentError(f"{field}必须使用同目录 JSON 文件名且省略后缀")
+    return reader.read(f"{directory}/{reference}.json")
 
 
 def _groups_for(groups: Mapping[str, Mapping[str, Sequence[str]]], section: str):

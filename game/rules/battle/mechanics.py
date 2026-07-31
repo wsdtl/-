@@ -652,6 +652,15 @@ class MechanismRuntime:
             elif "控制" in immunities and is_control:
                 failure = "控制免疫"
             if not failure and is_control:
+                control_limit = int(destination.battle_profile.get("同时承受控制上限", 0))
+                active_controls = sum(
+                    1
+                    for status in destination.statuses
+                    if "控制" in status.tags or bool(status.action_limits)
+                )
+                if control_limit and active_controls >= control_limit:
+                    failure = "控制承载已满"
+            if not failure and is_control:
                 base = float(definition.get("控制基础命中率", 100)) / 100.0
                 chance = self._clamp(base + self._percent(source, "控制命中率") - self._percent(destination, "控制抵抗率"), 0.0, 1.0)
                 if not self._judgement(context, "控制", chance):
@@ -665,7 +674,9 @@ class MechanismRuntime:
             definition["属性"] = {str(k): float(v) * multiplier for k, v in dict(definition.get("属性") or {}).items()}
             if is_control and str(definition.get("持续单位") or "状态承受者行动") != "整场战斗":
                 duration = max(1, int(definition.get("剩余行动", 1)))
-                definition["剩余行动"] = max(1, math.ceil(duration * (1.0 - self._clamp(self._percent(destination, "韧性"), 0.0, 0.9))))
+                duration = max(1, math.ceil(duration * (1.0 - self._clamp(self._percent(destination, "韧性"), 0.0, 0.9))))
+                duration_limit = int(destination.battle_profile.get("控制持续上限", 0))
+                definition["剩余行动"] = min(duration, duration_limit) if duration_limit else duration
             status = StatusState.from_dict(definition)
             existing = next((item for item in destination.statuses if item.name == status.name and (definition.get("叠加范围", "同名共享") == "同名共享" or item.source == source.id)), None)
             mode = str(definition.get("重复方式") or "刷新持续")
