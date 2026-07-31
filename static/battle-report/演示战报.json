@@ -682,9 +682,7 @@
               "color": "#747d8c",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "战斗开始",
@@ -721,9 +719,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -949,9 +945,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -1450,9 +1444,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -1678,9 +1670,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -1969,9 +1959,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -2197,9 +2185,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -2383,9 +2369,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -2611,9 +2595,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -2839,9 +2821,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -3067,9 +3047,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -3442,9 +3420,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -3670,9 +3646,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -3919,9 +3893,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -4147,9 +4119,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -4480,9 +4450,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -4708,9 +4676,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -5041,9 +5007,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -5269,9 +5233,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -5623,9 +5585,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -5872,9 +5832,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -6184,9 +6142,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -6412,9 +6368,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -6724,9 +6678,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -6952,10 +6904,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system",
-              "damage"
-            ],
+            "categories": ["system", "damage"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",

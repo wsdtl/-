@@ -23,7 +23,6 @@ FORBIDDEN_FIELDS = {
     "所属方向",
     "评分",
     "评分模型",
-    "权重",
     "职责",
     "提供标签",
     "需要标签",
@@ -134,9 +133,20 @@ class CombatObjectLibraryTest(unittest.TestCase):
                 {value["编号"] for value in values},
                 {f"{prefix}{index:04d}" for index in range(1, count + 1)},
             )
-            self.assertTrue(all(set(value) == {"编号", "名称", "能力"} for value in values))
+            self.assertTrue(all(set(value) == {"编号", "名称", "权重", "能力"} for value in values))
             names.extend(value["名称"] for value in values)
         self.assertEqual(len(names), len(set(names)))
+
+    def test_entity_weights_are_positive_and_globally_unique(self) -> None:
+        values = self.techniques + self.enchantments + self.gems
+        weights = [value["权重"] for value in values]
+        self.assertTrue(
+            all(
+                isinstance(weight, int) and not isinstance(weight, bool) and weight > 0
+                for weight in weights
+            )
+        )
+        self.assertEqual(len(weights), len(set(weights)))
 
     def test_formal_entities_have_no_balance_pool_or_legacy_fields(self) -> None:
         for value in self.techniques + self.enchantments + self.gems:

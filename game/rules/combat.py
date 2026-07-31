@@ -192,7 +192,11 @@ class BattleEngine(MechanismRuntime):
             context.event("行动跳过后", actor, actor, f"{actor.name}未能行动", values={"行动者": actor.id, "行动类型": intent.action})
         elif intent.action == "技能":
             skill = self._skill_by_key(actor, intent.skill_key)
-            if not self._cast_skill(context, actor, actual_target, skill):
+            uses_before = skill.uses if skill is not None else 0
+            succeeded = self._cast_skill(context, actor, actual_target, skill)
+            if skill is not None and skill.uses > uses_before:
+                self._advance_skill_cursor(actor, skill)
+            if not succeeded:
                 self._basic_attack(context, actor, actual_target)
         else:
             self._basic_attack(context, actor, actual_target)
@@ -208,8 +212,30 @@ class BattleEngine(MechanismRuntime):
             skills = self._select_skills(context, actor, rule.get("技能"))
             action = str(rule.get("行动") or ("技能" if skills else "普通攻击"))
             return ActionIntent(actor.id, action, targets[0].id, skills[0] if skills else "")
-        skill = next((value for value in actor.skills if self._skill_available(actor, value) and actor.spirit >= self._skill_spirit_cost(actor, value)), None)
+        skill = self._next_skill_from_cursor(actor)
         return ActionIntent(actor.id, "技能" if skill else "普通攻击", default_target.id, skill.key if skill else "")
+
+    def _next_skill_from_cursor(self, actor: Fighter) -> Skill | None:
+        if not actor.skills:
+            return None
+        start = actor.skill_cursor % len(actor.skills)
+        for offset in range(len(actor.skills)):
+            skill = actor.skills[(start + offset) % len(actor.skills)]
+            if self._skill_available(actor, skill) and actor.spirit >= self._skill_spirit_cost(actor, skill):
+                return skill
+        return None
+
+    @staticmethod
+    def _advance_skill_cursor(actor: Fighter, skill: Skill) -> None:
+        if not actor.skills:
+            actor.skill_cursor = 0
+            return
+        index = next(
+            (index for index, candidate in enumerate(actor.skills) if candidate.key == skill.key),
+            None,
+        )
+        if index is not None:
+            actor.skill_cursor = (index + 1) % len(actor.skills)
 
     def _build_fighter(self, snapshot: CombatantSnapshot) -> Fighter:
         attributes = self._normalize_attributes(snapshot.attributes)
@@ -331,8 +357,16 @@ class BattleEngine(MechanismRuntime):
                 if handler is None:
                     raise ValueError(f"战斗核心未实现装配执行器：{executor}")
                 handler(instance, index, node, attributes, skills, passives)
-        skills.sort(key=lambda value: value.release_order)
-        passives.sort(key=lambda value: int(value.get("结算顺序", 0)))
+        skills.sort(key=self._skill_order_key)
+        passives.sort(
+            key=lambda value: (
+                int(value.get("结算顺序", 1)),
+                int(value.get("装配位序", 0)),
+                str(value.get("物品编号") or ""),
+                int(value.get("能力序号", 0)),
+                int(value.get("效果序号", 0)),
+            )
+        )
         return tuple(skills), tuple(passives)
 
     @staticmethod
@@ -346,9 +380,11 @@ class BattleEngine(MechanismRuntime):
     def _assemble_active_skill(instance, index, node, attributes, skills, passives):
         del attributes, passives
         source_name = str(instance.get("功法") or instance.get("名称") or "能力")
+        source_id = str(instance.get("编号") or source_name)
         skills.append(Skill(
             key=f"{instance.get('实例', source_name)}:{index}", name=str(node.get("名称") or source_name),
             born_order=int(instance.get("出生序号", 0)), release_order=int(node.get("释放顺序", index + 1)),
+            source_id=source_id, ability_order=index,
             multiplier=float(instance.get("威力倍率", 1)), spirit_cost=max(0.0, float(node.get("精神消耗", 0))),
             cooldown_actions=max(0, int(node.get("冷却行动", 0))), effects=tuple(copy.deepcopy(node.get("效果") or ())),
             tags=tuple(str(value) for value in node.get("标签") or ()), costs=tuple(copy.deepcopy(node.get("额外代价") or ())),
@@ -359,8 +395,18 @@ class BattleEngine(MechanismRuntime):
     def _assemble_passive_skill(instance, index, node, attributes, skills, passives):
         del attributes, skills
         source_name = str(instance.get("功法") or instance.get("名称") or "能力")
+        source_id = str(instance.get("编号") or source_name)
+        born_order = int(instance.get("出生序号", 0))
         for effect_index, raw in enumerate(node.get("效果") or ()):
-            passives.append({"机制": f"{source_name}:{index}:{effect_index}", "结算顺序": int(node.get("结算顺序", 0)), "节点": copy.deepcopy(dict(raw))})
+            passives.append({
+                "机制": f"{source_name}:{index}:{effect_index}",
+                "结算顺序": int(node.get("结算顺序", 1)),
+                "装配位序": born_order,
+                "物品编号": source_id,
+                "能力序号": index,
+                "效果序号": effect_index,
+                "节点": copy.deepcopy(dict(raw)),
+            })
 
     def _normalize_attributes(self, values):
         result = {}

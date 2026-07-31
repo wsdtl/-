@@ -132,7 +132,7 @@ def _validate_action_rules(
     expected = {
         "标准速度", "最低有效速度", "最高行动效率", "技能冷却", "每次主行动最多追加攻击",
         "事件链深度上限", "能力链深度上限", "触发技能嵌套上限", "每方召唤物上限",
-        "战斗构造物上限", "行动开始恢复",
+        "战斗构造物上限", "行动开始恢复", "主动技能轮转", "被动技能结算",
     }
     unknown = set(value) - expected
     missing = expected - set(value)
@@ -155,6 +155,27 @@ def _validate_action_rules(
     expected_cooldown = {"单位": "自身行动", "推进时点": "行动开始、技能选择前", "每次推进": 1, "缩减取整": "向上取整"}
     if cooldown != expected_cooldown:
         raise ValueError("行动规则.技能冷却必须明确使用自身行动推进")
+    rotation = _mapping(value["主动技能轮转"], "行动规则.主动技能轮转")
+    if set(rotation) != {"排序", "选择方式", "成功后", "无可用技能"}:
+        raise ValueError("行动规则.主动技能轮转必须明确同序技能的稳定轮转方式")
+    rotation_order = _strings(rotation["排序"], "行动规则.主动技能轮转.排序")
+    if set(rotation_order) != {"释放顺序", "装配位序", "物品编号", "能力序号"} or len(rotation_order) != 4:
+        raise ValueError("行动规则.主动技能轮转.排序必须完整且不可重复")
+    if (
+        rotation.get("选择方式") != "从技能游标循环查找"
+        or rotation.get("成功后") != "移动到已释放技能后一位"
+        or rotation.get("无可用技能") != "普通攻击"
+    ):
+        raise ValueError("行动规则.主动技能轮转包含核心无法执行的方式")
+    passive_order = _mapping(value["被动技能结算"], "行动规则.被动技能结算")
+    if set(passive_order) != {"排序"}:
+        raise ValueError("行动规则.被动技能结算必须明确同序监听的稳定裁决顺序")
+    passive_fields = _strings(passive_order["排序"], "行动规则.被动技能结算.排序")
+    if set(passive_fields) != {
+        "监听优先级降序", "结算顺序升序", "参战位序",
+        "装配位序", "物品编号", "能力序号",
+    } or len(passive_fields) != 6:
+        raise ValueError("行动规则.被动技能结算.排序必须完整且不可重复")
     recovery = _mapping(value["行动开始恢复"], "行动规则.行动开始恢复")
     for resource, attribute in recovery.items():
         if resource not in resources:

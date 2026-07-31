@@ -597,9 +597,7 @@
               "color": "#747d8c",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "战斗开始",
@@ -636,9 +634,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -864,9 +860,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -1365,9 +1359,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -1593,9 +1585,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -1884,9 +1874,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -2112,9 +2100,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -2298,9 +2284,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -2526,9 +2510,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -2754,9 +2736,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -2982,9 +2962,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -3357,9 +3335,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -3585,9 +3561,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -3834,9 +3808,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -4062,9 +4034,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -4395,9 +4365,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -4623,9 +4591,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -4956,9 +4922,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -5184,9 +5148,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -5538,9 +5500,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -5787,9 +5747,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -6099,9 +6057,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -6327,9 +6283,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -6639,9 +6593,7 @@
               "color": "#008f75",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system"
-            ],
+            "categories": ["system"],
             "summary_events": [
               {
                 "kind": "行动决策前",
@@ -6867,10 +6819,7 @@
               "color": "#df3654",
               "foreground": "#ffffff"
             },
-            "categories": [
-              "system",
-              "damage"
-            ],
+            "categories": ["system", "damage"],
             "summary_events": [
               {
                 "kind": "技能冷却变化后",
@@ -7302,9 +7251,7 @@
             "color": "#747d8c",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -7347,17 +7294,13 @@
                 {
                   "key": "左方",
                   "label": "左方",
-                  "value": [
-                    "player"
-                  ],
+                  "value": ["player"],
                   "display": "player"
                 },
                 {
                   "key": "右方",
                   "label": "右方",
-                  "value": [
-                    "demo-opponent"
-                  ],
+                  "value": ["demo-opponent"],
                   "display": "demo-opponent"
                 },
                 {
@@ -7424,9 +7367,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -9162,9 +9103,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -12682,9 +12621,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -14420,9 +14357,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -15822,9 +15757,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -17560,9 +17493,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -18494,9 +18425,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -20232,9 +20161,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -21328,9 +21255,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -23066,9 +22991,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -24792,9 +24715,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -26530,9 +26451,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -27704,9 +27623,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -29442,9 +29359,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -31588,9 +31503,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -33326,9 +33239,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -35472,9 +35383,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -37210,9 +37119,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -39428,9 +39335,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -41424,9 +41329,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -43498,9 +43401,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -45236,9 +45137,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -47310,9 +47209,7 @@
             "color": "#008f75",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system"
-          ],
+          "categories": ["system"],
           "facts": [
             {
               "label": "序列",
@@ -49048,10 +48945,7 @@
             "color": "#df3654",
             "foreground": "#ffffff"
           },
-          "categories": [
-            "system",
-            "damage"
-          ],
+          "categories": ["system", "damage"],
           "facts": [
             {
               "label": "序列",
@@ -66368,9 +66262,7 @@
           "event_count": 368,
           "trigger_count": 0,
           "winner_id": "player",
-          "winner_ids": [
-            "player"
-          ],
+          "winner_ids": ["player"],
           "seed": 20260728
         },
         "view_modes": [
@@ -66537,14 +66429,8 @@
                 "fixed_attributes": {}
               }
             ],
-            "moves": [
-              "基础攻击"
-            ],
-            "mechanisms": [
-              "600010",
-              "600027",
-              "601155"
-            ],
+            "moves": ["基础攻击"],
+            "mechanisms": ["600010", "600027", "601155"],
             "statuses": [],
             "initial_statuses": [],
             "extra": {}
@@ -66630,9 +66516,7 @@
               }
             ],
             "techniques": [],
-            "moves": [
-              "基础攻击"
-            ],
+            "moves": ["基础攻击"],
             "mechanisms": [],
             "statuses": [],
             "initial_statuses": [],
@@ -66671,16 +66555,12 @@
             "details": [
               {
                 "label": "左方",
-                "value": [
-                  "player"
-                ],
+                "value": ["player"],
                 "display": "player"
               },
               {
                 "label": "右方",
-                "value": [
-                  "demo-opponent"
-                ],
+                "value": ["demo-opponent"],
                 "display": "demo-opponent"
               },
               {
@@ -66949,9 +66829,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -67017,9 +66895,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -67085,9 +66961,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -67158,9 +67032,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -67231,9 +67103,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -67480,9 +67350,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -67729,9 +67597,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -67983,9 +67849,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -68237,9 +68101,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -68584,9 +68446,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -68662,10 +68522,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -68736,10 +68593,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -68820,11 +68674,7 @@
             "amount": -16,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -70111,10 +69961,7 @@
             "amount": 12,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "消耗",
-              "血气"
-            ],
+            "tags": ["消耗", "血气"],
             "steps": [],
             "details": [
               {
@@ -70185,10 +70032,7 @@
             "amount": 12,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "消耗",
-              "血气"
-            ],
+            "tags": ["消耗", "血气"],
             "steps": [],
             "details": [
               {
@@ -70269,11 +70113,7 @@
             "amount": -12,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "减少",
-              "消耗",
-              "血气"
-            ],
+            "tags": ["减少", "消耗", "血气"],
             "steps": [],
             "details": [
               {
@@ -70354,9 +70194,7 @@
             "amount": 26.25,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [],
             "details": [
               {
@@ -70422,9 +70260,7 @@
             "amount": 26.25,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [],
             "details": [
               {
@@ -70495,9 +70331,7 @@
             "amount": 26.25,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [],
             "details": [
               {
@@ -70568,9 +70402,7 @@
             "amount": 24.533,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [
               {
                 "label": "原始",
@@ -70817,9 +70649,7 @@
             "amount": 24.533,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [
               {
                 "label": "原始",
@@ -71066,9 +70896,7 @@
             "amount": 24.533,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [
               {
                 "label": "原始",
@@ -71320,9 +71148,7 @@
             "amount": 24.533,
             "amount_text": "",
             "mechanism": "600010",
-            "tags": [
-              "血祭"
-            ],
+            "tags": ["血祭"],
             "steps": [
               {
                 "label": "原始",
@@ -71574,9 +71400,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -71926,9 +71750,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -71994,9 +71816,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -72062,9 +71882,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -72135,9 +71953,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -72208,9 +72024,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -72457,9 +72271,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -72706,9 +72518,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -72960,9 +72770,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -73214,9 +73022,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -73637,9 +73443,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -73715,10 +73519,7 @@
             "amount": 17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -73789,10 +73590,7 @@
             "amount": 17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -73873,11 +73671,7 @@
             "amount": -17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -73958,10 +73752,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74037,10 +73828,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74126,11 +73914,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "增加",
-              "恢复",
-              "血气"
-            ],
+            "tags": ["增加", "恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74216,10 +74000,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74295,10 +74076,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74384,11 +74162,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "增加",
-              "恢复",
-              "血气"
-            ],
+            "tags": ["增加", "恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -74474,9 +74248,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -74826,9 +74598,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -74894,9 +74664,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -74962,9 +74730,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -75035,9 +74801,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -75108,9 +74872,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -75357,9 +75119,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -75606,9 +75366,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -75860,9 +75618,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -76114,9 +75870,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -76689,10 +76443,7 @@
             "amount": 14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -76763,10 +76514,7 @@
             "amount": 14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -76847,11 +76595,7 @@
             "amount": -14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -77282,9 +77026,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -77350,9 +77092,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -77418,9 +77158,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -77491,9 +77229,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -77564,9 +77300,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -77813,9 +77547,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -78062,9 +77794,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -78316,9 +78046,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -78570,9 +78298,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -79221,10 +78947,7 @@
             "amount": 12,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -79295,10 +79018,7 @@
             "amount": 12,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -79379,11 +79099,7 @@
             "amount": -12,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -79885,9 +79601,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -79953,9 +79667,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -80021,9 +79733,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -80094,9 +79804,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -80167,9 +79875,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -80416,9 +80122,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -80665,9 +80369,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -80919,9 +80621,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -81173,9 +80873,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -81890,9 +81588,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -81968,10 +81664,7 @@
             "amount": 17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -82042,10 +81735,7 @@
             "amount": 17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -82126,11 +81816,7 @@
             "amount": -17,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -82211,10 +81897,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82290,10 +81973,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82379,11 +82059,7 @@
             "amount": 8,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "增加",
-              "恢复",
-              "血气"
-            ],
+            "tags": ["增加", "恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82469,10 +82145,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82548,10 +82221,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "恢复",
-              "血气"
-            ],
+            "tags": ["恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82637,11 +82307,7 @@
             "amount": 16,
             "amount_text": "",
             "mechanism": "600027",
-            "tags": [
-              "增加",
-              "恢复",
-              "血气"
-            ],
+            "tags": ["增加", "恢复", "血气"],
             "steps": [],
             "details": [
               {
@@ -82727,9 +82393,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "群体"
-            ],
+            "tags": ["群体"],
             "steps": [],
             "details": [
               {
@@ -83079,9 +82743,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -83147,9 +82809,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -83215,9 +82875,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -83288,9 +82946,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -83361,9 +83017,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -83610,9 +83264,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -83859,9 +83511,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -84113,9 +83763,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -84367,9 +84015,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -85160,10 +84806,7 @@
             "amount": 14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -85234,10 +84877,7 @@
             "amount": 14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "消耗",
-              "精神"
-            ],
+            "tags": ["消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -85318,11 +84958,7 @@
             "amount": -14,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "减少",
-              "消耗",
-              "精神"
-            ],
+            "tags": ["减少", "消耗", "精神"],
             "steps": [],
             "details": [
               {
@@ -85753,9 +85389,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -85821,9 +85455,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -85889,9 +85521,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -85962,9 +85592,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -86035,9 +85663,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -86284,9 +85910,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -86533,9 +86157,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -86787,9 +86409,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -87041,9 +86661,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -87758,9 +87376,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -87826,9 +87442,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -87894,9 +87508,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -87967,9 +87579,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -88040,9 +87650,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -88289,9 +87897,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -88538,9 +88144,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -88792,9 +88396,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -89046,9 +88648,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -89393,9 +88993,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -89461,9 +89059,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -89529,9 +89125,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -89602,9 +89196,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -89675,9 +89267,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -89924,9 +89514,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -90173,9 +89761,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -90427,9 +90013,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -90681,9 +90265,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -91398,9 +90980,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -91466,9 +91046,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -91534,9 +91112,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -91607,9 +91183,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -91680,9 +91254,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -91929,9 +91501,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -92178,9 +91748,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -92432,9 +92000,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -92686,9 +92252,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -93033,9 +92597,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -93101,9 +92663,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -93169,9 +92729,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -93242,9 +92800,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -93315,9 +92871,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -93564,9 +93118,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -93813,9 +93365,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -94067,9 +93617,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -94321,9 +93869,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -95104,9 +94650,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -95172,9 +94716,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -95240,9 +94782,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -95313,9 +94853,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -95386,9 +94924,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -95635,9 +95171,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -95884,9 +95418,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -96138,9 +95670,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -96392,9 +95922,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -96739,9 +96267,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -96807,9 +96333,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -96875,9 +96399,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -96948,9 +96470,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -97021,9 +96541,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -97270,9 +96788,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -97519,9 +97035,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -97773,9 +97287,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -98027,9 +97539,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -98281,9 +97791,7 @@
             "amount": 15.566,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -98932,9 +98440,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -99000,9 +98506,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -99068,9 +98572,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -99141,9 +98643,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -99214,9 +98714,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -99463,9 +98961,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -99712,9 +99208,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -99966,9 +99460,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -100220,9 +99712,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -100567,9 +100057,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -100635,9 +100123,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -100703,9 +100189,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -100776,9 +100260,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -100849,9 +100331,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -101098,9 +100578,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -101347,9 +100825,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -101601,9 +101077,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -101855,9 +101329,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -102506,9 +101978,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -102574,9 +102044,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -102642,9 +102110,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -102715,9 +102181,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -102788,9 +102252,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -103037,9 +102499,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -103286,9 +102746,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -103540,9 +102998,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -103794,9 +103250,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -104141,9 +103595,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -104209,9 +103661,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -104277,9 +103727,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -104350,9 +103798,7 @@
             "amount": 11,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -104423,9 +103869,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -104672,9 +104116,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -104921,9 +104363,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -105175,9 +104615,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -105429,9 +104867,7 @@
             "amount": 10.377,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -106080,9 +105516,7 @@
             "amount": 0,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -106148,9 +105582,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -106216,9 +105648,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -106289,9 +105719,7 @@
             "amount": 24,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {
@@ -106362,9 +105790,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -106611,9 +106037,7 @@
             "amount": 22.43,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -106860,9 +106284,7 @@
             "amount": 11.187,
             "amount_text": "11.19 伤害",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -107109,9 +106531,7 @@
             "amount": 11.187,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -107363,9 +106783,7 @@
             "amount": 11.187,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -107617,9 +107035,7 @@
             "amount": 11.187,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -107871,9 +107287,7 @@
             "amount": 11.187,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [
               {
                 "label": "原始",
@@ -108125,9 +107539,7 @@
             "amount": 11.187,
             "amount_text": "",
             "mechanism": "",
-            "tags": [
-              "普通攻击"
-            ],
+            "tags": ["普通攻击"],
             "steps": [],
             "details": [
               {

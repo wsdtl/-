@@ -285,26 +285,68 @@ class MechanismRuntime:
         context.event_stack.append(frame)
         context.event_depth += 1
         try:
-            listeners: list[tuple[int, Fighter, str, Mapping[str, Any]]] = []
+            listeners: list[tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]] = []
+            participant_order = {fighter.id: index for index, fighter in enumerate(context.fighters)}
+            listener_order = tuple(
+                self.catalog.action_rules["被动技能结算"]["排序"]
+            )
+
+            def add_listener(
+                owner: Fighter,
+                listener_id: str,
+                node: Mapping[str, Any],
+                *,
+                settlement_order: int = 1,
+                build_order: int = 0,
+                item_id: str = "",
+                ability_order: int = 0,
+                effect_order: int = 0,
+            ) -> None:
+                values = {
+                    "监听优先级降序": -int(node.get("优先级", 0)),
+                    "结算顺序升序": int(settlement_order),
+                    "参战位序": participant_order.get(owner.id, len(participant_order)),
+                    "装配位序": int(build_order),
+                    "物品编号": str(item_id),
+                    "能力序号": (int(ability_order), int(effect_order)),
+                }
+                key = tuple(values[field] for field in listener_order) + (str(listener_id),)
+                listeners.append((key, owner, listener_id, node))
+
             for owner in context.fighters:
                 for passive in owner.passives:
                     mechanism_id, node = self._passive_node(passive)
                     if self.catalog.parse_node(node).executor == "监听事件":
-                        listeners.append((int(node.get("优先级", passive.get("结算顺序", 0))), owner, mechanism_id, node))
+                        add_listener(
+                            owner,
+                            mechanism_id,
+                            node,
+                            settlement_order=int(passive.get("结算顺序", 1)),
+                            build_order=int(passive.get("装配位序", 0)),
+                            item_id=str(passive.get("物品编号") or ""),
+                            ability_order=int(passive.get("能力序号", 0)),
+                            effect_order=int(passive.get("效果序号", 0)),
+                        )
                 for status in owner.statuses:
                     for index, node in enumerate(status.listeners):
-                        listeners.append((int(node.get("优先级", 0)), owner, f"{status.name}:{index}", node))
+                        add_listener(owner, f"{status.name}:{index}", node, item_id=status.name, ability_order=index)
             for obj in context.combat_objects.values():
                 if not obj.active:
                     continue
                 owner = context.fighter_by_id(obj.owner_id) or source
                 for index, node in enumerate(obj.listeners):
-                    listeners.append((int(node.get("优先级", 0)), owner, f"{obj.id}:{index}", node))
+                    add_listener(owner, f"{obj.id}:{index}", node, item_id=obj.id, ability_order=index)
             for index, rule in enumerate(context.battle_rules):
                 owner = context.fighter_by_id(str(rule.get("来源") or "")) or source
-                for node in rule.get("监听") or ():
-                    listeners.append((int(node.get("优先级", 0)), owner, f"战场:{index}", node))
-            listeners.sort(key=lambda item: item[0], reverse=True)
+                for listener_index, node in enumerate(rule.get("监听") or ()):
+                    add_listener(
+                        owner,
+                        f"战场:{index}:{listener_index}",
+                        node,
+                        item_id=f"战场:{index}",
+                        ability_order=listener_index,
+                    )
+            listeners.sort(key=lambda item: item[0])
             for _, owner, listener_id, node in listeners:
                 if str(node.get("事件") or "") != kind:
                     continue
@@ -1392,7 +1434,7 @@ class MechanismRuntime:
         elif order == "冷却从低到高":
             candidates.sort(key=lambda skill: source.cooldowns.get(skill.key, 0))
         elif order == "释放顺序":
-            candidates.sort(key=lambda skill: skill.release_order)
+            candidates.sort(key=self._skill_order_key)
         count = len(candidates) if selector.get("选择全部", False) else max(1, int(selector.get("数量", 1)))
         return [skill.key for skill in candidates[:count]]
 
@@ -1646,14 +1688,27 @@ class MechanismRuntime:
     def _skill_available(fighter, skill):
         return not skill.disabled and (not skill.use_limit or skill.uses < skill.use_limit) and fighter.cooldowns.get(skill.key, 0) <= 0
 
+    def _skill_order_key(self, skill):
+        values = {
+            "释放顺序": int(skill.release_order),
+            "装配位序": int(skill.born_order),
+            "物品编号": str(skill.source_id),
+            "能力序号": int(skill.ability_order),
+        }
+        order = self.catalog.action_rules["主动技能轮转"]["排序"]
+        return tuple(values[field] for field in order) + (str(skill.key),)
+
     @staticmethod
     def _skill_from_definition(owner, index, definition, prefix=""):
         value = dict(definition)
+        source_id = str(value.get("编号") or prefix or owner.id)
         return Skill(
             key=str(value.get("编号") or f"{prefix or owner.id}:技能:{index}"),
             name=str(value.get("名称") or f"技能{index + 1}"),
             born_order=index,
             release_order=int(value.get("释放顺序", index + 1)),
+            source_id=source_id,
+            ability_order=index,
             multiplier=float(value.get("威力倍率", 1)),
             spirit_cost=max(0.0, float(value.get("精神消耗", 0))),
             cooldown_actions=max(0, int(value.get("冷却行动", 0))),

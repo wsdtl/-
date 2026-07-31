@@ -436,6 +436,128 @@ class BattleFoundationTest(unittest.TestCase):
         self.assertEqual(skills[0].uses, 1)
         self.assertEqual(enemy.health, health_after_first_cast)
 
+    def test_equal_release_orders_form_a_stable_rotating_sequence(self):
+        engine = self.engine()
+
+        def active(name, order, spirit=0):
+            return {
+                "能力": "主动技能",
+                "名称": name,
+                "释放顺序": order,
+                "精神消耗": spirit,
+                "冷却行动": 1,
+                "效果": [{
+                    "能力": "造成伤害",
+                    "目标": target("当前目标"),
+                    "数值": 1,
+                    "能否暴击": False,
+                    "能否格挡": False,
+                }],
+            }
+
+        techniques = (
+            {
+                "实例": "甲",
+                "编号": "400002",
+                "名称": "甲功法",
+                "出生序号": 2,
+                "能力": [active("甲一", 1), active("甲二", 2)],
+            },
+            {
+                "实例": "乙",
+                "编号": "400001",
+                "名称": "乙功法",
+                "出生序号": 1,
+                "能力": [active("乙一", 1), active("乙二", 2, spirit=120)],
+            },
+        )
+        skills, _ = engine._technique_rules(techniques, {})
+        self.assertEqual([skill.name for skill in skills], ["乙一", "甲一", "乙二", "甲二"])
+
+        reordered_rules = deepcopy(self.rules)
+        reordered_rules["行动规则"]["主动技能轮转"]["排序"] = [
+            "物品编号", "释放顺序", "装配位序", "能力序号",
+        ]
+        reordered_skills, _ = self.engine(reordered_rules)._technique_rules(techniques, {})
+        self.assertEqual(
+            [skill.name for skill in reordered_skills],
+            ["乙一", "乙二", "甲一", "甲二"],
+        )
+
+        actor = self.fighter("actor", "术者", spirit=100)
+        actor.skills = list(skills)
+        actor.cooldowns[skills[0].key] = 1
+        selected = engine._next_skill_from_cursor(actor)
+        self.assertEqual(selected.name, "甲一")
+
+        engine._advance_skill_cursor(actor, selected)
+        self.assertEqual(actor.skill_cursor, 2)
+        self.assertEqual(engine._next_skill_from_cursor(actor).name, "甲二")
+
+        engine._advance_skill_cursor(actor, skills[3])
+        actor.cooldowns.clear()
+        self.assertEqual(actor.skill_cursor, 0)
+        self.assertEqual(engine._next_skill_from_cursor(actor).name, "乙一")
+
+    def test_passive_ties_use_priority_then_stable_ascending_order(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "术者")
+        enemy = self.fighter("enemy", "敌人", side=1)
+        listener = {
+            "能力": "监听事件",
+            "事件": "战斗开始",
+            "观察角色": "来源",
+            "阵营关系": "自身",
+            "效果": [],
+        }
+        actor.passives = [
+            {"机制": "后结先权", "结算顺序": 4, "装配位序": 3, "物品编号": "410004", "能力序号": 0, "节点": {**listener, "优先级": 10}},
+            {"机制": "同序后槽", "结算顺序": 1, "装配位序": 2, "物品编号": "410002", "能力序号": 0, "节点": dict(listener)},
+            {"机制": "第二顺序", "结算顺序": 2, "装配位序": 1, "物品编号": "410003", "能力序号": 0, "节点": dict(listener)},
+            {"机制": "同序前槽", "结算顺序": 1, "装配位序": 1, "物品编号": "410001", "能力序号": 0, "节点": dict(listener)},
+        ]
+        context = self.context(engine, (actor,), (enemy,))
+        order = []
+
+        def record_listener(runtime_context, *_args, **_kwargs):
+            order.append(runtime_context.current_mechanism)
+            return True
+
+        engine._run_effects = record_listener
+        engine._dispatch_event(
+            context,
+            kind="战斗开始",
+            source=actor,
+            target=actor,
+            record=False,
+        )
+        self.assertEqual(order, ["后结先权", "同序前槽", "同序后槽", "第二顺序"])
+
+    def test_main_actions_advance_the_persisted_skill_cursor(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "术者")
+        enemy = self.fighter("enemy", "敌人", side=1)
+        effect = {
+            "能力": "造成伤害",
+            "目标": target("当前目标"),
+            "数值": 1,
+            "能否暴击": False,
+            "能否格挡": False,
+        }
+        actor.skills = [
+            Skill("first", "第一式", release_order=1, effects=(effect,)),
+            Skill("second", "第二式", release_order=1, effects=(effect,)),
+        ]
+        context = self.context(engine, (actor,), (enemy,))
+
+        engine._take_action(context, actor)
+        self.assertEqual((actor.skills[0].uses, actor.skills[1].uses), (1, 0))
+        self.assertEqual(actor.skill_cursor, 1)
+
+        engine._take_action(context, actor)
+        self.assertEqual((actor.skills[0].uses, actor.skills[1].uses), (1, 1))
+        self.assertEqual(actor.skill_cursor, 0)
+
     def test_conditional_mystery_triggers_once_and_can_be_baited(self):
         engine = self.engine()
         actor = self.fighter("actor", "术者")

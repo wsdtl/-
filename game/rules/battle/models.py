@@ -164,6 +164,8 @@ class Skill:
     name: str
     born_order: int = 0
     release_order: int = 1
+    source_id: str = ""
+    ability_order: int = 0
     multiplier: float = 1.0
     spirit_cost: float = 0.0
     cooldown_actions: int = 0
