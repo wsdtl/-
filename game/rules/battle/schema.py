@@ -115,7 +115,7 @@ class RuleSchemaValidator:
                     f"{path}.{ability_name}.字段.{field_name}",
                 )
 
-    def validate_mechanisms(self, path: str = "content/战斗机制/机制.json -> 机制") -> None:
+    def validate_mechanisms(self, path: str = "data/内容/战斗机制/*.json") -> None:
         if not self.mechanisms:
             raise RuleSchemaError(f"{path}：不能为空")
         for mechanism_name, node in self.mechanisms.items():
@@ -275,7 +275,7 @@ class RuleSchemaValidator:
         if field_type != "机制引用":
             self._choice(reference, spec, path)
             return
-        target_path = f"content/战斗机制/机制.json -> 机制.{reference}"
+        target_path = f"data/内容/战斗机制/*.json -> {reference}.节点"
         target = self._object(self.mechanisms[reference], target_path)
         target_category = self.category_of(target, target_path)
         target_executor = self.executor_of(target, target_path)

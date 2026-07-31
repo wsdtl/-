@@ -27,8 +27,8 @@ def inverse_weighted_choice(
         raise ValueError("权重必须是正整数")
 
     # 指数竞赛可直接使用整数稀有权重，并保持抽中率与 1 / 权重 成正比。
-    scores = tuple(
+    priorities = tuple(
         -log(max(float(rng.random()), 1e-300)) * weight
         for weight in inverse_weights
     )
-    return candidates[min(range(len(candidates)), key=scores.__getitem__)]
+    return candidates[min(range(len(candidates)), key=priorities.__getitem__)]

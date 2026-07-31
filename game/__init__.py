@@ -1,5 +1,5 @@
-"""晓楠修仙游戏业务入口。"""
+"""晓楠修仙核心包。
 
-from .app import GameServices, build_game_services, current_game_services
-
-__all__ = ["GameServices", "build_game_services", "current_game_services"]
+正式 JSON 是规则与内容主体；本包只提供基础能力、严格读取和通用战斗执行器。
+玩法服务、命令和应用装配等待后续按 JSON 协议重建。
+"""

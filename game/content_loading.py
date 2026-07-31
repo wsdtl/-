@@ -26,15 +26,14 @@ COLLECTION_SECTIONS = (
     "功法",
     "附魔",
     "宝石",
-    "词条",
     "机制",
-    "战斗方向",
 )
-NUMBERED_SECTIONS = frozenset({"道侣", "物品", "功法", "附魔", "宝石"})
+NUMBERED_SECTIONS = frozenset({"道侣", "物品", "功法", "附魔", "宝石", "机制"})
 POOL_FIELDS = {
     "功法池": "功法",
     "附魔池": "附魔",
     "宝石池": "宝石",
+    "机制池": "机制",
     "道侣池": "道侣",
     "敌人池": "敌人",
     "天材地宝池": "物品",
@@ -88,7 +87,6 @@ class GameDataLoader:
             for scope in ("定义", "规则", "内容", "展示")
         }
         groups, entities, issues = _index_content(catalog)
-        issues.extend(_validate_score_boundaries(catalog))
         issues.extend(_validate_pool_references(catalog))
         issues.extend(_validate_world(catalog))
         issues.extend(_validate_numbering(catalog, entities))
@@ -171,22 +169,7 @@ def _index_content(
 def _entity_identity(value: Mapping[str, Any]) -> dict[str, Any]:
     """所有编号实体都以实际定义判同，池内上下文不属于实体。"""
 
-    return {
-        str(key): raw
-        for key, raw in value.items()
-        if key not in {"说明", "权重", "评分"}
-    }
-
-
-def _validate_score_boundaries(catalog: JsonDataCatalog) -> list[str]:
-    issues: list[str] = []
-    for document in catalog.documents:
-        for field, _ in _walk_fields(document.value):
-            if field in {"评分", "评分模型"}:
-                issues.append(
-                    f"{document.relative_path} -> {field} 只能存在于 tools/战斗校验"
-                )
-    return issues
+    return {str(key): raw for key, raw in value.items()}
 
 
 def _document_collections(
@@ -342,7 +325,13 @@ def _validate_numbering(
         digits = int(definition["编号规则"]["位数"])
     except (JsonDataError, KeyError, TypeError, ValueError) as exc:
         return [f"编号定义无法读取：{exc}"]
-    section_categories = {"道侣": "道侣", "功法": "功法", "附魔": "附魔技能书", "宝石": "宝石"}
+    section_categories = {
+        "道侣": "道侣",
+        "功法": "功法",
+        "附魔": "附魔技能书",
+        "宝石": "宝石",
+        "机制": "机制",
+    }
     for section, values in entities.items():
         for identity, value in values.items():
             if len(identity) != digits or not identity.isdigit():

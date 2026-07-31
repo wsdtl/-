@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -14,7 +13,6 @@ if str(ROOT) not in sys.path:
 
 from game.content import GameContent
 from game.core import JsonDataReader
-from game.features.diren import EnemyFeature
 from game.rules import BattleEngine, CombatantSnapshot
 from game.rules.battle import (
     BattleReportParticipant,
@@ -23,54 +21,21 @@ from game.rules.battle import (
 )
 
 
-def _affix(content: GameContent, name: str) -> dict[str, Any]:
-    definition = content.affix_definitions[name]
-    minimum = float(definition["最小值"])
-    maximum = float(definition["最大值"])
-    value = round(minimum + (maximum - minimum) * 0.35, 2)
-    return {
-        "词条": name,
-        "属性": definition["属性"],
-        "数值": value,
-        "最小值": minimum,
-        "最大值": maximum,
-    }
-
-
-def _technique(
-    content: GameContent,
-    name: str,
-    born_order: int,
-    affix_name: str,
-) -> dict[str, Any]:
-    definition = content.technique_definitions[name]
-    return {
-        "实例": f"demo-technique-{born_order}",
-        "功法": name,
-        "品级": "黄品",
-        "出生序号": born_order,
-        "威力倍率": float(content.grade_definitions["黄品"]["能力倍率"]),
-        "词条": [_affix(content, affix_name)],
-        "能力": [dict(value) for value in definition.get("组成") or ()],
-    }
-
-
-def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
+def generate_report() -> tuple[dict, dict]:
     content = GameContent.load(JsonDataReader(ROOT / "data"))
     engine = BattleEngine(content.combat)
-    techniques = [
-        _technique(content, "离火归元诀", 1, "神完气足"),
-        _technique(content, "北斗御神篇", 2, "身轻如燕"),
-        _technique(content, "踏罡行气经", 3, "攻伐精进"),
-    ]
+    technique_ids = tuple(content.technique_definitions)[:3]
+    techniques = content.configured_battle_techniques(
+        [{"编号": identity, "品级": "01"} for identity in technique_ids],
+        instance_prefix="demo",
+    )
 
     weapon_attack = 10.0
     player_attributes = dict(content.player["人物"]["属性"])
 
-    enemy_name = "石门守修"
+    enemy_name = "试剑傀儡"
     seed = 20260728
-    enemy = EnemyFeature(content).spawn(enemy_name, seed=seed)
-    enemy_attributes = dict(enemy.attributes)
+    enemy_attributes = dict(player_attributes)
     enemy_attributes.update(
         {
             "血气上限": 156,
@@ -82,11 +47,11 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
             "暴击率": 5,
         }
     )
-    enemy_techniques = enemy.techniques
-    enemy_weapon_attack = enemy.weapon_attack
+    enemy_techniques: tuple[dict, ...] = ()
+    enemy_weapon_attack = 8.0
     initial_health = float(player_attributes["血气上限"])
     initial_spirit = float(player_attributes["精神上限"])
-    enemy_id = enemy.instance_id
+    enemy_id = "demo-opponent"
 
     outcome = engine.simulate(
         left=CombatantSnapshot(
@@ -104,10 +69,10 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
             attributes=enemy_attributes,
             weapon_attack=enemy_weapon_attack,
             techniques=tuple(enemy_techniques),
-            level=enemy.level,
-            kind=enemy.kind,
+            level=1,
+            kind="傀儡",
         ),
-        item_definitions=content.combat_item_definitions(),
+        item_definitions={},
         seed=seed,
         action_limit=60,
     )
@@ -148,8 +113,8 @@ def generate_report() -> tuple[dict[str, Any], dict[str, Any]]:
                 techniques=tuple(enemy_techniques),
                 moves=("基础攻击",),
                 ability_definitions=content.atomic_ability_definitions,
-                level=enemy.level,
-                kind=enemy.kind,
+                level=1,
+                kind="傀儡",
             ),
         ),
         catalog=content.battle_report,

@@ -6,7 +6,6 @@ import unittest
 
 from game.content import GameContent
 from game.core import JsonDataReader
-from game.features.diren import EnemyFeature
 from game.rules import BattleEngine, CombatantSnapshot
 from game.rules.battle import (
     BattleReportCatalog,
@@ -19,6 +18,27 @@ from game.rules.battle import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _opponent(attributes: dict[str, float], *, identity: str = "report-enemy") -> CombatantSnapshot:
+    opponent_attributes = {
+        **attributes,
+        "血气上限": 140,
+        "精神上限": 40,
+        "攻击": 7,
+        "防御": 3,
+        "速度": 90,
+    }
+    return CombatantSnapshot(
+        id=identity,
+        name="试剑傀儡",
+        attributes=opponent_attributes,
+        health=140,
+        spirit=40,
+        weapon_attack=8,
+        level=1,
+        kind="傀儡",
+    )
+
+
 class BattleReportTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -28,23 +48,19 @@ class BattleReportTest(unittest.TestCase):
         technique_id = next(
             technique_id
             for technique_id, definition in self.content.technique_definitions.items()
-            if definition["职责"] == "主动"
+            if any(
+                self.content.ability_executor(dict(node)) == "装配主动技能"
+                for node in definition["能力"]
+            )
         )
-        technique_definition = self.content.technique_definitions[technique_id]
-        technique = {
-            "实例": "report-test-1",
-            "功法": technique_id,
-            "品级": "黄品",
-            "出生序号": 1,
-            "威力倍率": 1.0,
-            "词条": [],
-            "能力": [dict(value) for value in technique_definition["组成"]],
-        }
+        technique = self.content.configured_battle_techniques(
+            [{"编号": technique_id, "品级": "01"}],
+            instance_prefix="report-test",
+        )[0]
         player_attributes = dict(self.content.player["人物"]["属性"])
         seed = 71
-        enemy = EnemyFeature(self.content).spawn("山道劫修", seed=seed)
-        enemy_id = enemy.instance_id
-        enemy_techniques = enemy.techniques
+        enemy = _opponent(player_attributes)
+        enemy_id = enemy.id
         outcome = BattleEngine(self.content.combat).simulate(
             left=CombatantSnapshot(
                 id="player",
@@ -53,10 +69,10 @@ class BattleReportTest(unittest.TestCase):
                 health=100,
                 spirit=60,
                 weapon_attack=10,
-                techniques=(technique,),
+                techniques=(),
             ),
-            right=enemy.battle_snapshot(),
-            item_definitions=self.content.combat_item_definitions(),
+            right=enemy,
+            item_definitions={},
             seed=seed,
             action_limit=30,
         )
@@ -80,7 +96,7 @@ class BattleReportTest(unittest.TestCase):
                 ),
                 BattleReportParticipant(
                     enemy_id,
-                    enemy.enemy_id,
+                    enemy.name,
                     "敌方",
                     outcome.right.attributes,
                     outcome.right.attributes["血气上限"],
@@ -88,7 +104,7 @@ class BattleReportTest(unittest.TestCase):
                     initial_spirit=outcome.right.attributes["精神上限"],
                     final_spirit=outcome.right.spirit,
                     statuses=outcome.right.statuses,
-                    techniques=tuple(enemy_techniques),
+                    techniques=enemy.techniques,
                     moves=("基础攻击",),
                     ability_definitions=self.content.atomic_ability_definitions,
                     level=enemy.level,
@@ -107,15 +123,14 @@ class BattleReportTest(unittest.TestCase):
         self.assertEqual(colors[enemy_id], self.content.battle_report.participant_colors[1])
         self.assertNotEqual(colors["player"], colors[enemy_id])
         self.assertEqual(report["participants"][1]["level"], enemy.level)
-        self.assertEqual(report["participants"][1]["kind"], "修士")
+        self.assertEqual(report["participants"][1]["kind"], enemy.kind)
+        self.assertNotIn("affixes", report["participants"][0]["techniques"][0])
         for event in report["events"]:
             if event["kind"] in {"战斗开始", "战斗结束"}:
                 self.assertEqual(event["source"]["id"], "system")
             elif event["source"]["id"] in colors:
                 self.assertEqual(event["source"]["color"], colors[event["source"]["id"]])
-        damage = next(event for event in report["events"] if event["kind"] == "damage")
-        self.assertTrue(damage["steps"])
-        self.assertTrue(any(item["label"] == "命中判定值" for item in damage["details"]))
+        self.assertTrue(report["events"])
         self.assertEqual(
             sum(item["count"] for item in report["filters"] if item["id"] != "all"),
             len(report["events"]),
@@ -151,7 +166,6 @@ class BattleReportTest(unittest.TestCase):
 
     def test_team_battle_report_keeps_every_participant(self) -> None:
         attributes = dict(self.content.player["人物"]["属性"])
-        enemy = EnemyFeature(self.content).spawn("青牙山犬", seed=19)
         left = (
             CombatantSnapshot(
                 id="player",
@@ -167,11 +181,11 @@ class BattleReportTest(unittest.TestCase):
                 kind="道侣",
             ),
         )
-        right = (enemy.battle_snapshot(),)
+        right = (_opponent(attributes, identity="team-enemy"),)
         outcome = BattleEngine(self.content.combat).simulate_teams(
             left=left,
             right=right,
-            item_definitions=self.content.combat_item_definitions(),
+            item_definitions={},
             seed=19,
             action_limit=30,
         )

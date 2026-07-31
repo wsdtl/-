@@ -26,10 +26,6 @@ class BattleReportCatalog:
         return catalog
 
     @property
-    def version(self) -> str:
-        return str(self.raw["版本"])
-
-    @property
     def report_schema(self) -> str:
         return str(self.protocol["战报"])
 
@@ -180,8 +176,6 @@ class BattleReportCatalog:
         )
 
     def _validate(self) -> None:
-        if not self.version.strip():
-            raise ValueError("战报配置缺少版本")
         if not self.report_schema.strip() or not self.presentation_schema.strip():
             raise ValueError("战报配置缺少协议名称")
         if self.presentation_version < 1:

@@ -360,7 +360,7 @@ def _technique_report(
     active: Mapping[str, Any] = {}
     mechanisms: list[str] = []
     fixed_attributes: dict[str, float] = {}
-    for raw_node in value.get("能力") or value.get("组成") or ():
+    for raw_node in value.get("能力") or ():
         if not isinstance(raw_node, Mapping):
             continue
         node = dict(raw_node)
@@ -377,28 +377,12 @@ def _technique_report(
         if executor in {"装配主动技能", "装配被动技能"}:
             mechanisms.extend(_mechanism_names(node.get("效果") or (), ability_definitions))
 
-    affixes = []
-    for item in value.get("词条") or ():
-        if isinstance(item, Mapping):
-            name = str(item.get("词条") or item.get("名称") or item.get("属性") or "词条")
-            attribute = str(item.get("属性") or "")
-            amount = item.get("数值")
-            display = name
-            if isinstance(amount, int | float) and not isinstance(amount, bool):
-                display = (
-                    f"{name} · {attribute} "
-                    f"+{_attribute_text(attribute, float(amount), catalog)}"
-                )
-            affixes.append({"name": name, "display": display})
-        else:
-            affixes.append({"name": str(item), "display": str(item)})
     return {
         "name": str(value.get("功法") or value.get("名称") or "未命名功法"),
         "grade": str(value.get("品级") or ""),
         "born_order": int(value.get("出生序号") or 0),
         "move": str(active.get("名称") or ""),
         "mechanisms": list(dict.fromkeys(mechanisms)),
-        "affixes": affixes,
         "fixed_attributes": fixed_attributes,
     }
 

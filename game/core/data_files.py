@@ -14,7 +14,7 @@ class JsonDataError(ValueError):
 
 
 DATA_SCOPES = ("定义", "规则", "内容", "展示")
-POOL_SECTIONS = frozenset({"道侣", "敌人", "物品", "功法", "附魔", "宝石"})
+POOL_SECTIONS = frozenset({"道侣", "敌人", "物品", "功法", "附魔", "宝石", "机制"})
 
 
 @dataclass(frozen=True)
@@ -269,8 +269,6 @@ def content_section(document: JsonDocument) -> str | None:
     parts = PurePosixPath(document.relative_path).parts
     if file_id == "地图规则":
         return "世界"
-    if file_id == "战斗方向":
-        return "战斗方向"
     if file_id.endswith("道侣"):
         return "道侣"
     if file_id.endswith("敌人"):
@@ -284,7 +282,7 @@ def content_section(document: JsonDocument) -> str | None:
     if file_id.startswith("物品-"):
         return "物品"
     if "战斗机制" in parts:
-        return "词条" if file_id == "词条" else "机制"
+        return "机制"
     if len(parts) >= 4 and parts[1] == "世界" and file_id == parts[-2]:
         return "区域" if len(parts) == 4 else "地点"
     return None

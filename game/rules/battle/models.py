@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 class CombatCatalog:
     attributes: Mapping[str, Mapping[str, Any]]
     mechanisms: Mapping[str, Mapping[str, Any]]
+    mechanism_names: Mapping[str, str]
     abilities: Mapping[str, Mapping[str, Any]]
     events: Mapping[str, Mapping[str, Any]]
     resources: Mapping[str, Mapping[str, Any]]
@@ -36,6 +37,10 @@ class CombatCatalog:
         return cls(
             attributes=dict(source.get("属性") or {}),
             mechanisms=dict(source.get("机制") or {}),
+            mechanism_names={
+                str(key): str(name)
+                for key, name in dict(source.get("机制名称") or {}).items()
+            },
             abilities=dict(source.get("原子能力") or {}),
             events=events,
             resources=dict(source.get("资源") or {}),
@@ -55,6 +60,9 @@ class CombatCatalog:
             return self.events[str(key)]
         except KeyError as exc:
             raise ValueError(f"战斗核心未登记事件：{key}") from exc
+
+    def mechanism_name(self, key: str) -> str:
+        return self.mechanism_names.get(str(key), str(key))
 
     def parse_node(self, value: Mapping[str, Any]) -> "RuleNode":
         ability = str(value.get("能力") or "")

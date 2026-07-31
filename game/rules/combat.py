@@ -338,7 +338,7 @@ class BattleEngine(MechanismRuntime):
         for resource, attribute in dict(self.catalog.action_rules.get("行动开始恢复") or {}).items():
             amount = actor.value(str(attribute), 0)
             if amount > 0:
-                self._mechanism_recover_resource(context, actor, actor, {"目标": {"能力": "选择目标", "范围": "自身"}, "资源": resource, "数值": amount}, 1)
+                self._mechanism_recover_resource(context, actor, actor, {"目标": {"能力": "选择目标", "范围": "自身"}, "资源": resource, "数值": amount, "标签": ["自然恢复"]}, 1)
 
     def _tick_cooldowns(self, context, fighter):
         for key in tuple(fighter.cooldowns):
@@ -355,6 +355,15 @@ class BattleEngine(MechanismRuntime):
 
     def _cast_skill(self, context, actor, target, skill, *, triggered=False, ignore_cost=False, ignore_cooldown=False, multiplier=1.0):
         if skill is None or skill.disabled or (skill.use_limit and skill.uses >= skill.use_limit):
+            return False
+        if self._action_restricted(actor, "技能"):
+            context.event(
+                "技能施放失败后",
+                actor,
+                target,
+                f"{skill.name}受禁制无法施展",
+                values={"技能": skill.name, "技能键": skill.key, "原因": "行动限制"},
+            )
             return False
         if not ignore_cooldown and actor.cooldowns.get(skill.key, 0) > 0:
             return False
@@ -438,14 +447,16 @@ class BattleEngine(MechanismRuntime):
         effective_rule = "无视防御" if ignore_defense and defense_rule == "普通" else defense_rule
         judgement = self._dispatch_event(context, kind="命中判定前", source=source, target=target, amount=amount, values={"行动类型": damage_form}, tags=tags)
         tags = tuple(judgement.tags)
-        if can_critical:
+        allow_critical = can_critical
+        if allow_critical:
             judgement = self._dispatch_event(context, kind="暴击判定前", source=source, target=target, amount=amount, values={"暴击率": self._percent(source, "暴击率"), "行动类型": damage_form}, tags=tags)
             tags = tuple(judgement.tags)
+            allow_critical = not judgement.cancelled
         if can_block and effective_rule != "真实":
             judgement = self._dispatch_event(context, kind="格挡判定前", source=source, target=target, amount=amount, values={"格挡率": self._percent(target, "格挡率"), "行动类型": damage_form}, tags=tags)
             tags = tuple(judgement.tags)
         resolution = self.damage.resolve(
-            DamageRequest(amount=max(0.0, float(amount)), label=label, damage_form=damage_form, defense_rule=effective_rule, tags=tags, can_miss=can_miss, can_critical=can_critical, can_block=can_block),
+            DamageRequest(amount=max(0.0, float(amount)), label=label, damage_form=damage_form, defense_rule=effective_rule, tags=tags, can_miss=can_miss, can_critical=allow_critical, can_block=can_block),
             source=source, target=target, rng=context.rng,
             judge=lambda kind, chance, roll: self._judgement(context, kind, chance, roll),
         )
@@ -458,6 +469,8 @@ class BattleEngine(MechanismRuntime):
         if pre.target is not target:
             target = pre.target
             resolution = self.damage.resolve(resolution.request, source=source, target=target, rng=context.rng, judge=lambda kind, chance, roll: self._judgement(context, kind, chance, roll))
+        if "伤害" in self._immunities(target):
+            pre.cancelled = True
         target_was_alive = target.alive
         resolution = self.damage.with_limited_damage(resolution, 0 if pre.cancelled else pre.amount)
         if resolution.defeated:

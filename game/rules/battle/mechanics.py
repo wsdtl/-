@@ -478,7 +478,17 @@ class MechanismRuntime:
             actual = set(skill.tags if skill else ())
         expected = set(str(value) for value in condition.get("标签") or ())
         relation = str(condition.get("关系") or "包含任一")
-        return bool(actual & expected) if relation == "包含任一" else expected <= actual if relation == "包含全部" else not bool(actual & expected)
+        if relation == "包含任一":
+            return bool(actual & expected)
+        if relation == "包含全部":
+            return expected <= actual
+        if relation == "全部不含":
+            return not bool(actual & expected)
+        if relation == "为空":
+            return not actual
+        if relation == "数量至少":
+            return len(actual) >= max(1, int(condition.get("数量", 1)))
+        raise ValueError(f"未知标签关系：{relation}")
 
     @staticmethod
     def _compare(left: float, right: float, relation: str) -> bool:
@@ -528,7 +538,7 @@ class MechanismRuntime:
                 amount *= max(0.0, 1.0 + self._percent(source, "护盾加成"))
             before, maximum = self._resource_values(destination, requested_resource)
             event = "恢复前" if requested_resource == "血气" else "获得护盾前" if requested_resource == "护盾" else "资源恢复前"
-            frame = self._dispatch_event(context, kind=event, source=source, target=destination, amount=amount, values={"资源": requested_resource, "变化前数值": before, "上限": maximum}, tags=("恢复", requested_resource))
+            frame = self._dispatch_event(context, kind=event, source=source, target=destination, amount=amount, values={"资源": requested_resource, "变化前数值": before, "上限": maximum}, tags=tuple((*effect.get("标签", ()), "恢复", requested_resource)))
             if frame.cancelled:
                 continue
             resource = requested_resource
@@ -537,6 +547,8 @@ class MechanismRuntime:
             elif frame.kind == "恢复前":
                 resource = "血气"
             destination = frame.target
+            if "恢复" in self._immunities(destination):
+                continue
             before, maximum = self._resource_values(destination, resource)
             received = max(0.0, frame.amount)
             if resource == "血气":
@@ -629,11 +641,16 @@ class MechanismRuntime:
             destination = frame.target
             definition["标签"] = sorted(frame.tags)
             failure = ""
+            is_control = bool(definition.get("是否控制", False)) or "控制" in frame.tags
+            immunities = self._immunities(destination)
             if frame.cancelled:
                 failure = "被取消"
-            elif "负面状态" in self._immunities(destination) and definition.get("类别") == "负面":
+            elif "状态" in immunities:
                 failure = "状态免疫"
-            is_control = bool(definition.get("是否控制", False)) or "控制" in frame.tags
+            elif "负面状态" in immunities and definition.get("类别") == "负面":
+                failure = "状态免疫"
+            elif "控制" in immunities and is_control:
+                failure = "控制免疫"
             if not failure and is_control:
                 base = float(definition.get("控制基础命中率", 100)) / 100.0
                 chance = self._clamp(base + self._percent(source, "控制命中率") - self._percent(destination, "控制抵抗率"), 0.0, 1.0)
@@ -779,7 +796,28 @@ class MechanismRuntime:
             return False
         for _, status in sources:
             for receiver in receivers:
-                receiver.statuses.append(copy.deepcopy(status))
+                copied = copy.deepcopy(status)
+                frame = self._dispatch_event(
+                    context,
+                    kind="添加状态前",
+                    source=source,
+                    target=receiver,
+                    values={"状态": copied.name, "状态定义": copied.as_dict()},
+                    tags=tuple((*copied.tags, "复制")),
+                )
+                if frame.cancelled:
+                    continue
+                receiver = frame.target
+                copied.tags = tuple(frame.tags - {"复制"})
+                receiver.statuses.append(copied)
+                self._dispatch_event(
+                    context,
+                    kind="添加状态后",
+                    source=source,
+                    target=receiver,
+                    values={"状态": copied.name, "状态层数": copied.stacks},
+                    tags=copied.tags,
+                )
         return True
 
     def _mechanism_transfer_status(self, context, source, target, effect, multiplier, **kwargs):
@@ -1002,7 +1040,7 @@ class MechanismRuntime:
                 field = str(effect.get("字段") or "")
                 mode = str(effect.get("方式") or "设置")
                 value = effect.get("值")
-                attr = {"名称": "name", "精神消耗": "spirit_cost", "冷却行动": "cooldown_actions", "威力倍率": "multiplier", "禁用": "disabled", "目标标签": "tags", "效果": "effects"}.get(field)
+                attr = {"名称": "name", "精神消耗": "spirit_cost", "冷却行动": "cooldown_actions", "释放顺序": "release_order", "威力倍率": "multiplier", "禁用": "disabled", "目标标签": "tags", "效果": "effects"}.get(field)
                 if attr is None:
                     raise ValueError(f"技能字段不能修改：{field}")
                 before = getattr(skill, attr)
@@ -1059,6 +1097,13 @@ class MechanismRuntime:
             intent.action = "技能"
         else:
             raise ValueError(f"未知行动意图字段：{field}")
+        if context.event_stack and context.event_stack[-1].kind == "行动决策前":
+            frame = context.event_stack[-1]
+            frame.cancelled = intent.cancelled
+            frame.facts.update({"行动类型": intent.action, "技能键": intent.skill_key, "目标ID": intent.target_id})
+            selected_target = context.fighter_by_id(intent.target_id)
+            if selected_target is not None:
+                frame.target = selected_target
         self._dispatch_event(context, kind="行动意图变化后", source=source, target=target, values={"字段": field, "行动": intent.action, "技能键": intent.skill_key, "目标ID": intent.target_id})
         return True
 
@@ -1090,8 +1135,12 @@ class MechanismRuntime:
             context.battle_rules[:] = [rule for rule in context.battle_rules if str(rule.get("名称") or "") != name]
             changed = before != len(context.battle_rules)
         else:
+            definition = copy.deepcopy(dict(effect.get("规则") or {}))
+            unknown = set(definition) - {"监听"}
+            if unknown:
+                raise ValueError("战场规则存在无执行语义字段：" + "、".join(sorted(unknown)))
             context.battle_rules.append({
-                **copy.deepcopy(dict(effect.get("规则") or {})),
+                **definition,
                 "名称": name,
                 "来源": source.id,
                 "来源退场时移除": bool(effect.get("来源退场时移除", False)),

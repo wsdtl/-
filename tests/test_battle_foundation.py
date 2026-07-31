@@ -58,6 +58,9 @@ class BattleFoundationTest(unittest.TestCase):
     def test_foundation_declares_exact_executable_boundary(self):
         self.assertEqual(len(self.rules["原子能力"]), 68)
         self.assertEqual(len(self.rules["事件"]), 57)
+        self.assertEqual(len(self.rules["机制"]), 1600)
+        self.assertEqual(len(self.rules["机制名称"]), 1600)
+        self.assertEqual(self.rules["机制名称"]["600001"], "正锋")
         text = json.dumps(self.rules["原子能力"], ensure_ascii=False)
         self.assertNotIn("蓄势", text)
         self.assertNotIn("选择自身", self.rules["原子能力"])
@@ -66,6 +69,148 @@ class BattleFoundationTest(unittest.TestCase):
         routed = set(engine._mechanism_handlers) | set(engine._condition_handlers) | set(engine._value_handlers) | set(engine._target_handlers) | set(engine._skill_selector_handlers) | set(engine._assembly_handlers) | {"选择状态"}
         for name, definition in self.rules["原子能力"].items():
             self.assertIn(definition["执行器"], routed, name)
+
+    def test_mechanism_library_is_numbered_curated_and_covers_all_non_assembly_atoms(self):
+        directory = ROOT / "data" / "内容" / "战斗机制"
+        files = sorted(directory.glob("*.json"))
+        self.assertEqual(len(files), 80)
+        entries = [
+            entry
+            for path in files
+            for entry in json.loads(path.read_text(encoding="utf-8"))
+        ]
+        self.assertTrue(all(len(json.loads(path.read_text(encoding="utf-8"))) == 20 for path in files))
+        self.assertEqual(
+            {entry["编号"] for entry in entries},
+            {f"60{index:04d}" for index in range(1, 1601)},
+        )
+        self.assertEqual(len({entry["名称"] for entry in entries}), 1600)
+        self.assertTrue(all(set(entry) == {"编号", "名称", "节点"} for entry in entries))
+
+        used: set[str] = set()
+
+        def collect(value):
+            if isinstance(value, dict):
+                if "能力" in value:
+                    used.add(str(value["能力"]))
+                for child in value.values():
+                    collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+
+        collect(entries)
+        self.assertEqual(
+            set(self.rules["原子能力"]) - used,
+            {"固定属性加成", "主动技能", "被动技能", "引用被动机制"},
+        )
+
+    def test_mechanisms_have_no_inert_battle_rules_or_colliding_runtime_names(self):
+        entries = [
+            entry
+            for path in sorted((ROOT / "data" / "内容" / "战斗机制").glob("*.json"))
+            for entry in json.loads(path.read_text(encoding="utf-8"))
+        ]
+        statuses = {}
+        forms = {}
+
+        def visit(value, listener_event=None):
+            if isinstance(value, dict):
+                current_event = (
+                    str(value.get("事件") or "")
+                    if value.get("能力") == "监听事件"
+                    else listener_event
+                )
+                if value.get("能力") == "修改战场规则" and value.get("方式") == "添加":
+                    rule = value.get("规则")
+                    self.assertEqual(set(rule), {"监听"})
+                    self.assertTrue(rule["监听"])
+                if value.get("能力") == "修改行动意图":
+                    self.assertEqual(current_event, "行动决策前")
+                if value.get("能力") == "添加状态":
+                    definition = value["状态"]
+                    signature = json.dumps(definition, ensure_ascii=False, sort_keys=True)
+                    previous = statuses.setdefault(definition["名称"], signature)
+                    self.assertEqual(previous, signature, definition["名称"])
+                if value.get("能力") == "切换形态":
+                    signature = json.dumps(value.get("定义") or {}, ensure_ascii=False, sort_keys=True)
+                    previous = forms.setdefault(value["形态"], signature)
+                    self.assertEqual(previous, signature, value["形态"])
+                for child in value.values():
+                    visit(child, current_event)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child, listener_event)
+
+        visit(entries)
+
+    def test_each_mechanism_domain_reaches_the_runtime_by_stable_id(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "本体", health=50, spirit=20)
+        ally = self.fighter("ally", "同伴")
+        enemy = self.fighter("enemy", "敌方", side=1)
+        actor.skills = [Skill("test", "试诀", spirit_cost=20, cooldown_actions=2)]
+        actor.current_skill = "test"
+        context = self.context(engine, (actor, ally), (enemy,))
+
+        enemy_health = enemy.health
+        engine._execute_mechanism_reference(context, actor, enemy, "600001")
+        self.assertLess(enemy.health, enemy_health)
+        engine._execute_mechanism_reference(context, actor, enemy, "600025")
+        self.assertGreater(actor.health, 50)
+        engine._execute_mechanism_reference(context, actor, enemy, "600037")
+        self.assertTrue(any(status.name == "蚀脉" for status in enemy.statuses))
+        engine._execute_mechanism_reference(context, actor, enemy, "600049")
+        self.assertGreater(actor.spirit, 20)
+        engine._execute_mechanism_reference(context, actor, enemy, "600061")
+        self.assertGreater(context.action_progress[actor.id], 0)
+        engine._execute_mechanism_reference(context, actor, enemy, "600073")
+        self.assertTrue(context.judgement_overrides["命中"])
+        engine._execute_mechanism_reference(context, actor, enemy, "600085")
+        self.assertEqual(actor.skills[0].spirit_cost, 15)
+        engine._execute_mechanism_reference(context, actor, enemy, "600097")
+        self.assertEqual(context.relations[0]["名称"], "同契")
+        engine._execute_mechanism_reference(context, actor, enemy, "600109")
+        self.assertTrue(any(fighter.summoned for fighter in context.fighters))
+        engine._execute_mechanism_reference(context, actor, enemy, "600121")
+        self.assertEqual(actor.form, "攻势")
+
+        actor.passives = [
+            {"机制": identity, "结算顺序": order, "节点": self.rules["机制"][identity]}
+            for order, identity in enumerate(("600020", "600133"), start=1)
+        ]
+        engine._dispatch_event(
+            context,
+            kind="受到伤害后",
+            source=enemy,
+            target=actor,
+            amount=20,
+            values={"实际数值": 20, "护盾伤害": 0, "血气伤害": 20, "过量伤害": 0, "伤害形式": "直接"},
+        )
+        self.assertEqual(context.mechanism_counters[(actor.id, "创势")], 2)
+        self.assertEqual(context.records[(actor.id, "最近受伤")], [20.0])
+        self.assertEqual(engine.catalog.mechanism_name("600001"), "正锋")
+
+    def test_new_ecosystem_signatures_match_names_and_execute(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "本体", health=30, spirit=80)
+        enemy = self.fighter("enemy", "敌方", health=80, side=1)
+        actor.skills = [Skill("origin", "祖传剑诀", spirit_cost=5, cooldown_actions=1)]
+        actor.current_skill = "origin"
+        context = self.context(engine, (actor,), (enemy,))
+
+        engine._execute_mechanism_reference(context, actor, enemy, "600901")
+        self.assertEqual((actor.health, enemy.health), (80, 30))
+
+        engine._execute_mechanism_reference(context, actor, enemy, "601461")
+        self.assertTrue(any(value.kind == "构造物" for value in context.fighters))
+
+        engine._execute_mechanism_reference(context, actor, enemy, "601361")
+        self.assertGreater(len(actor.skills), 1)
+
+        actor.passives = [{"机制": "601581", "结算顺序": 1, "节点": self.rules["机制"]["601581"]}]
+        engine._dispatch_event(context, kind="行动决策后", source=enemy, target=actor)
+        self.assertEqual(context.records[(actor.id, "敌行兆")], [1.0])
 
     def test_foundation_rejects_invalid_timing_and_reaction_contracts(self):
         invalid_timing = deepcopy(self.rules)
@@ -261,6 +406,153 @@ class BattleFoundationTest(unittest.TestCase):
         self.assertFalse(engine._execute_mechanism(context, actor, enemy, recursive))
         self.assertEqual(skill.uses, 3)
         self.assertEqual(context.triggered_skill_depth, 0)
+
+    def test_once_per_battle_skill_is_assembled_and_cannot_cast_twice(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "术者")
+        enemy = self.fighter("enemy", "敌人", side=1)
+        techniques = ({
+            "实例": "秘术实例",
+            "功法": "焚神秘术",
+            "能力": [{
+                "能力": "主动技能",
+                "名称": "一念焚神",
+                "精神消耗": 0,
+                "冷却行动": 0,
+                "使用次数": 1,
+                "效果": [{
+                    "能力": "造成伤害", "目标": target("当前目标"), "数值": 10,
+                    "能否暴击": False, "能否格挡": False,
+                }],
+            }],
+        },)
+        skills, _ = engine._technique_rules(techniques, {})
+        self.assertEqual(skills[0].use_limit, 1)
+        context = self.context(engine, (actor,), (enemy,))
+
+        self.assertTrue(engine._cast_skill(context, actor, enemy, skills[0]))
+        health_after_first_cast = enemy.health
+        self.assertFalse(engine._cast_skill(context, actor, enemy, skills[0]))
+        self.assertEqual(skills[0].uses, 1)
+        self.assertEqual(enemy.health, health_after_first_cast)
+
+    def test_conditional_mystery_triggers_once_and_can_be_baited(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "术者")
+        enemy = self.fighter("enemy", "敌人", side=1)
+        techniques = ({
+            "实例": "反疗秘术实例",
+            "功法": "问罪经",
+            "能力": [{
+                "能力": "被动技能",
+                "名称": "回春问罪",
+                "结算顺序": 1,
+                "效果": [{
+                    "能力": "监听事件",
+                    "事件": "恢复后",
+                    "观察角色": "来源",
+                    "阵营关系": "任意敌方",
+                    "每场战斗最多触发": 1,
+                    "效果": [{
+                        "能力": "造成伤害", "目标": target("事件来源"), "数值": 10,
+                        "能否暴击": False, "能否格挡": False,
+                    }],
+                }],
+            }],
+        },)
+        _, passives = engine._technique_rules(techniques, {})
+        actor.passives = list(passives)
+        context = self.context(engine, (actor,), (enemy,))
+
+        engine._dispatch_event(context, kind="恢复后", source=enemy, target=enemy, amount=1)
+        health_after_first_trigger = enemy.health
+        engine._dispatch_event(context, kind="恢复后", source=enemy, target=enemy, amount=100)
+
+        self.assertLess(health_after_first_trigger, 100)
+        self.assertEqual(enemy.health, health_after_first_trigger)
+
+    def test_every_formal_conditional_mystery_reaches_runtime(self):
+        technique_dir = ROOT / "data" / "内容" / "物品" / "功法"
+        mysteries = []
+        for path in technique_dir.glob("*.json"):
+            for technique in json.loads(path.read_text(encoding="utf-8")):
+                for ability in technique["能力"]:
+                    if ability["能力"] == "被动技能" and ability["效果"][0].get("能力") == "监听事件":
+                        mysteries.append((technique["编号"], ability))
+        self.assertEqual(len(mysteries), 40)
+
+        for identity, ability in mysteries:
+            with self.subTest(identity=identity, mystery=ability["名称"]):
+                engine = self.engine()
+                owner = self.fighter("owner", "术者", spirit=100)
+                ally = self.fighter("ally", "同伴")
+                enemy = self.fighter("enemy", "敌人", side=1)
+                owner.skills = [Skill("origin", "本命诀", spirit_cost=0, cooldown_actions=1)]
+                owner.current_skill = "origin"
+                context = self.context(engine, (owner, ally), (enemy,))
+                listener = deepcopy(ability["效果"][0])
+                listener.pop("条件", None)
+                owner.passives = [{"机制": identity, "结算顺序": 1, "节点": listener}]
+
+                relation = listener.get("阵营关系", "自身")
+                observed = owner if relation == "自身" else ally if relation == "其他己方" else enemy
+                role = listener.get("观察角色", "来源")
+                source = observed if role == "来源" else enemy if observed is not enemy else owner
+                target_fighter = observed if role == "承受者" else owner if observed is not owner else enemy
+                values = {
+                    "行动者": observed.id,
+                    "对象类型": "构造物",
+                    "资源": "精神",
+                    "变化前数值": 10,
+                    "变化后数值": 0,
+                    "实际数值": 10,
+                    "技能": "本命诀",
+                    "技能键": "origin",
+                }
+                engine._dispatch_event(
+                    context,
+                    kind=listener["事件"],
+                    source=source,
+                    target=target_fighter,
+                    amount=10,
+                    values=values,
+                )
+                self.assertTrue(context.battle_trigger_counts)
+
+    def test_formal_group_arts_change_multiple_real_targets(self):
+        technique_dir = ROOT / "data" / "内容" / "物品" / "功法"
+        group_abilities = []
+        abilities = {}
+        for path in technique_dir.glob("*.json"):
+            for technique in json.loads(path.read_text(encoding="utf-8")):
+                for ability in technique["能力"]:
+                    if ability["能力"] == "主动技能" and "群体" in ability.get("标签", ()):
+                        group_abilities.append(ability)
+                        abilities[ability["名称"].rsplit("·", 1)[-1]] = ability
+
+        cases = {
+            "万剑朝宗": ("enemy_health", lambda allies, enemies, context: sum(value.health < 100 for value in enemies)),
+            "天罗封脉": ("enemy_status", lambda allies, enemies, context: sum(bool(value.statuses) for value in enemies)),
+            "沧海横流": ("enemy_delay", lambda allies, enemies, context: sum(context.action_progress[value.id] < 0.5 for value in enemies)),
+            "青莲普渡": ("ally_heal", lambda allies, enemies, context: sum(value.health > 50 for value in allies)),
+            "山河同担": ("ally_shield", lambda allies, enemies, context: sum(value.shield > 0 for value in allies)),
+            "流光渡众": ("ally_haste", lambda allies, enemies, context: sum(context.action_progress[value.id] > 0.5 for value in allies)),
+            "法天象地": ("ally_status", lambda allies, enemies, context: sum(bool(value.statuses) for value in allies)),
+        }
+        self.assertEqual(len(group_abilities), 120)
+
+        for name, (kind, changed) in cases.items():
+            with self.subTest(name=name, kind=kind):
+                engine = self.engine()
+                owner = self.fighter("owner", "术者", health=50, spirit=200)
+                allies = [owner, self.fighter("ally1", "同伴甲", health=50), self.fighter("ally2", "同伴乙", health=50)]
+                enemies = [self.fighter(f"enemy{index}", f"敌人{index}", side=1) for index in range(3)]
+                skills, _ = engine._technique_rules(({"实例": name, "名称": name, "能力": [abilities[name]]},), {})
+                owner.skills = list(skills)
+                context = self.context(engine, tuple(allies), tuple(enemies))
+                context.action_progress = {fighter.id: 0.5 for fighter in context.fighters}
+                engine._cast_skill(context, owner, enemies[0], skills[0])
+                self.assertGreaterEqual(changed(allies, enemies, context), 2)
 
     def test_target_sets_and_aggregate_values_use_real_teams(self):
         engine = self.engine()
@@ -460,6 +752,53 @@ class BattleFoundationTest(unittest.TestCase):
         self.assertEqual(enemy.health, 80)
         self.assertEqual(skill.cooldown_actions, 4)
         self.assertEqual(enemy.skills[0].name, "镜剑")
+
+    def test_skill_restriction_immunities_and_critical_cancel_are_executed(self):
+        engine = self.engine()
+        actor = self.fighter("actor", "术者")
+        enemy = self.fighter("enemy", "守方", side=1)
+        skill = Skill(
+            "s1",
+            "飞剑",
+            effects=({
+                "能力": "造成伤害",
+                "目标": target("当前目标"),
+                "数值": number(20),
+                "能否暴击": True,
+                "能否格挡": False,
+            },),
+        )
+        actor.skills.append(skill)
+        context = self.context(engine, (actor,), (enemy,))
+
+        actor.statuses.append(StatusState("缄脉", action_limits=("技能",)))
+        self.assertFalse(engine._cast_skill(context, actor, enemy, skill))
+        self.assertEqual(enemy.health, 100)
+        actor.statuses.clear()
+
+        enemy.statuses.append(StatusState("封存", effect_immunities=("伤害", "恢复", "状态", "控制")))
+        engine._execute_mechanism(context, actor, enemy, skill.effects[0])
+        self.assertEqual(enemy.health, 100)
+        enemy.health = 50
+        engine._execute_mechanism(context, actor, enemy, {
+            "能力": "恢复资源", "目标": target("当前目标"), "资源": "血气", "数值": 20,
+        })
+        self.assertEqual(enemy.health, 50)
+        engine._execute_mechanism(context, actor, enemy, {
+            "能力": "添加状态", "目标": target("当前目标"),
+            "状态": {"名称": "试印", "类别": "中性", "剩余行动": 1},
+        })
+        self.assertEqual([value.name for value in enemy.statuses], ["封存"])
+
+        enemy.statuses.clear()
+        enemy.passives.append({"机制": "600204", "节点": self.rules["机制"]["600204"]})
+        actor.attributes["暴击率"] = 100
+        actor.attributes["暴击伤害"] = 300
+        resolution = engine._apply_damage(
+            context, actor, enemy, 10, can_critical=True, can_block=False,
+        )
+        self.assertFalse(resolution.critical)
+        self.assertEqual(resolution.health_damage, 10)
 
     def test_relations_intent_judgement_and_battle_rules_are_mutable(self):
         engine = self.engine()

@@ -10,6 +10,7 @@ from .damage import (
 from .mechanics import MechanismRuntime as MechanismRuntime
 from .foundation import (
     load_battle_foundation as load_battle_foundation,
+    load_battle_mechanisms as load_battle_mechanisms,
     validate_battle_foundation as validate_battle_foundation,
 )
 from .models import (
