@@ -24,7 +24,7 @@ def test_battle_context_updates_fighter_indexes_for_summons() -> None:
         rng=random.Random(1),
         left=left,
         right=right,
-        item_definitions={},
+        medicine_definitions={},
     )
     summon = _fighter("summon")
     summon.side = 0

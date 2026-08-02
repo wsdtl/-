@@ -8,9 +8,15 @@ from pathlib import Path
 from launch import C, OnEvent, config, logger
 
 from .config import game_config
+from .core.alchemy import AlchemyService
+from .core.build import BuildService
 from .core.combat import CombatService
 from .core.data import JsonDataService
+from .core.item import ItemService
 from .core.pool import PoolService
+from .core.role import RoleService
+from .core.travel import TravelService
+from .core.world import WorldService
 
 
 @dataclass(frozen=True)
@@ -20,6 +26,12 @@ class CoreServices:
     data: JsonDataService
     combat: CombatService
     pool: PoolService
+    build: BuildService
+    world: WorldService
+    travel: TravelService
+    item: ItemService
+    role: RoleService
+    alchemy: AlchemyService
 
 
 @dataclass(frozen=True)
@@ -66,7 +78,72 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("modes", len(pool_status.modes)),
         )
     )
-    core = CoreServices(data=data, combat=combat, pool=pool)
+    build = BuildService(data, pool)
+    build_status = build.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("构筑核心微服务已启动"),
+            C.kv("conflicts", build_status.conflict_count),
+            C.kv("attempts", build_status.attempt_limit),
+        )
+    )
+    world = WorldService(data)
+    world_status = world.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("世界微服务已启动"),
+            C.kv("regions", world_status.region_count),
+            C.kv("locations", world_status.location_count),
+            C.kv("roads", world_status.road_count),
+        )
+    )
+    travel = TravelService(data, world)
+    travel_status = travel.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("行程微服务已启动"),
+            C.kv("metrics", travel_status.metric_count),
+            C.kv("roads", travel_status.road_count),
+        )
+    )
+    item = ItemService(data)
+    item_status = item.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("物品微服务已启动"),
+            C.kv("categories", item_status.category_count),
+            C.kv("items", item_status.item_count),
+        )
+    )
+    role = RoleService(data, item)
+    role_status = role.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("角色核心微服务已启动"),
+            C.kv("companions", role_status.companion_count),
+            C.kv("enemies", role_status.enemy_count),
+        )
+    )
+    alchemy = AlchemyService(data, item)
+    alchemy_status = alchemy.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("炼药微服务已启动"),
+            C.kv("recipes", alchemy_status.recipe_count),
+            C.kv("furnaces", alchemy_status.furnace_method_count),
+        )
+    )
+    core = CoreServices(
+        data=data,
+        combat=combat,
+        pool=pool,
+        build=build,
+        world=world,
+        travel=travel,
+        item=item,
+        role=role,
+        alchemy=alchemy,
+    )
     features = FeatureServices()
     return GameServices(core=core, features=features)
 

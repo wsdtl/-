@@ -211,9 +211,12 @@ def _document_entries(
     if descriptor.shape == NAMED_ENTITY:
         if not isinstance(value, Mapping):
             raise JsonDataError(f"命名内容文件根值必须是对象：{document.relative_path}")
-        identity = str(value.get("名称") or document.file_id).strip()
-        if not identity:
-            raise JsonDataError(f"命名内容文件缺少身份：{document.relative_path}")
+        identity = document.file_id
+        declared_name = value.get("名称")
+        if declared_name is not None and str(declared_name).strip() != identity:
+            raise JsonDataError(
+                f"命名内容身份必须使用文件名：{document.relative_path} -> {declared_name}"
+            )
         return ((identity, value),)
     raise JsonDataError(f"内容文档形态不受支持：{document.relative_path}")
 

@@ -6,15 +6,27 @@ import ast
 from pathlib import Path
 
 import game.core as core_namespace
+import game.core.alchemy as alchemy_api
+import game.core.build as build_api
 import game.core.combat as combat_api
 import game.core.data as data_api
+import game.core.item as item_api
 import game.core.pool as pool_api
+import game.core.role as role_api
+import game.core.travel as travel_api
+import game.core.world as world_api
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_PACKAGES = (
     "game.core.combat",
     "game.core.data",
     "game.core.pool",
+    "game.core.build",
+    "game.core.world",
+    "game.core.travel",
+    "game.core.item",
+    "game.core.alchemy",
+    "game.core.role",
 )
 
 
@@ -31,6 +43,7 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "CombatResult",
         "CombatService",
         "CombatStatus",
+        "CombatStatusSpec",
         "CombatantResult",
         "CombatantReportSpec",
         "CombatantSpec",
@@ -53,6 +66,73 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "PoolService",
         "PoolStatus",
     }
+    assert set(build_api.__all__) == {
+        "BuildError",
+        "BuildRequest",
+        "BuildResult",
+        "BuildSelection",
+        "BuildService",
+        "BuildSlotRequest",
+        "BuildStatus",
+    }
+    assert set(world_api.__all__) == {
+        "AltitudeRange",
+        "LocationDefinition",
+        "LocationFeatureDefinition",
+        "LocationReference",
+        "RegionDefinition",
+        "RoadDefinition",
+        "SurfaceBounds",
+        "SurfaceCoordinate",
+        "SurfacePoint",
+        "WorldDataError",
+        "WorldDefinition",
+        "WorldService",
+        "WorldStatus",
+    }
+    assert set(travel_api.__all__) == {
+        "TravelError",
+        "TravelMetrics",
+        "TravelPlan",
+        "TravelRequest",
+        "TravelRealmEffects",
+        "TravelService",
+        "TravelStatus",
+    }
+    assert set(item_api.__all__) == {
+        "ItemBattleState",
+        "ItemCategory",
+        "ItemDataError",
+        "ItemDefinition",
+        "ItemMedicineDefinition",
+        "ItemService",
+        "ItemStatus",
+        "ItemUseEffect",
+    }
+    assert set(alchemy_api.__all__) == {
+        "DIRECT_MODE",
+        "SIDE_MODE",
+        "AlchemyError",
+        "AlchemyGradeBasis",
+        "AlchemyMaterial",
+        "AlchemyPlan",
+        "AlchemyRequest",
+        "AlchemyService",
+        "AlchemyStatus",
+        "FurnaceMethod",
+        "MaterialAllocation",
+        "PreparedBattlePills",
+        "RecipeDefinition",
+        "VeinRequirement",
+    }
+    assert set(role_api.__all__) == {
+        "RoleBuildSlot",
+        "RoleError",
+        "RoleItemStack",
+        "RoleProfile",
+        "RoleService",
+        "RoleStatus",
+    }
     assert not hasattr(data_api.JsonDataService, "read")
     assert not hasattr(data_api.JsonDataService, "scope")
 
@@ -64,13 +144,20 @@ def test_runtime_business_does_not_import_core_internals() -> None:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 for module in _imported_modules(node):
-                    cmd_violation = folder.name == "cmd" and module.startswith("game.core")
+                    cmd_violation = folder.name == "cmd" and module.startswith(
+                        "game.core"
+                    )
                     feature_violation = folder.name == "features" and (
                         module == "game.core"
-                        or any(module.startswith(f"{package}.") for package in SERVICE_PACKAGES)
+                        or any(
+                            module.startswith(f"{package}.")
+                            for package in SERVICE_PACKAGES
+                        )
                     )
                     if cmd_violation or feature_violation:
-                        violations.append(f"{path.relative_to(ROOT)}:{node.lineno} -> {module}")
+                        violations.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno} -> {module}"
+                        )
     assert violations == []
 
 

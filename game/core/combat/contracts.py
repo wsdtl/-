@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from game.core.item import ItemMedicineDefinition
+
 BUILD_SECTIONS = frozenset({"功法", "附魔", "宝石"})
 
 
@@ -27,6 +29,22 @@ class CombatBuildRef:
 
 
 @dataclass(frozen=True)
+class CombatStatusSpec:
+    """由其他核心服务准备、由战斗核心解析机制的战前状态。"""
+
+    name: str
+    category: str
+    remaining_actions: int
+    duration_unit: str
+    modifiers: tuple[tuple[str, float], ...] = ()
+    tags: tuple[str, ...] = ()
+    mechanism_ids: tuple[str, ...] = ()
+    source: str = ""
+    source_name: str = ""
+    metadata: tuple[tuple[str, str | int | float], ...] = ()
+
+
+@dataclass(frozen=True)
 class CombatantSpec:
     id: str
     name: str
@@ -39,6 +57,7 @@ class CombatantSpec:
     spirit: float | None = None
     shield: float = 0.0
     statuses: tuple[Mapping[str, Any], ...] = ()
+    prepared_statuses: tuple[CombatStatusSpec, ...] = ()
     cooldowns: Mapping[str, int] = field(default_factory=dict)
     inventory: Mapping[str, int] = field(default_factory=dict)
     auto_medicine: bool = False
@@ -51,7 +70,6 @@ class CombatantSpec:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
-    battle_pills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +97,7 @@ class CombatRequest:
     seed: int
     action_limit: int
     share_left_inventory: bool = False
+    medicine_definitions: tuple[ItemMedicineDefinition, ...] = ()
     report: CombatReportSpec | None = None
 
 
@@ -171,7 +190,6 @@ class CombatantResult:
     owner_id: str = ""
     controller_id: str = ""
     counts_for_victory: bool = True
-    battle_pills: tuple[str, ...] = ()
 
     @property
     def alive(self) -> bool:
@@ -217,11 +235,7 @@ class CombatResult:
             return None
         values = self.left_results if winner_side == "left" else self.right_results
         return next(
-            (
-                value.id
-                for value in values
-                if value.alive and value.counts_for_victory
-            ),
+            (value.id for value in values if value.alive and value.counts_for_victory),
             None,
         )
 
@@ -238,8 +252,9 @@ __all__ = [
     "CombatRequest",
     "CombatResult",
     "CombatStatus",
-    "CombatantResult",
+    "CombatStatusSpec",
     "CombatantReportSpec",
+    "CombatantResult",
     "CombatantSpec",
     "StatusResult",
 ]

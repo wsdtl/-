@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from game.core.item import ItemMedicineDefinition
+
 if TYPE_CHECKING:
     from .engine import BattleEngine
 
@@ -220,7 +222,6 @@ class Fighter:
     tags: set[str] = field(default_factory=set)
     tactic: list[Mapping[str, Any]] = field(default_factory=list)
     battle_profile: dict[str, Any] = field(default_factory=dict)
-    battle_pills: tuple[str, ...] = ()
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -328,7 +329,6 @@ class RuntimeCombatantSnapshot:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
-    battle_pills: tuple[str, ...] = ()
 
 
 @dataclass
@@ -336,7 +336,7 @@ class BattleContext:
     rng: random.Random
     left: Fighter
     right: Fighter
-    item_definitions: dict[str, dict[str, Any]]
+    medicine_definitions: dict[str, ItemMedicineDefinition]
     left_team: list[Fighter] = field(default_factory=list)
     right_team: list[Fighter] = field(default_factory=list)
     events: list[BattleEvent] = field(default_factory=list)

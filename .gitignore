@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .env
 .venv/
+node_modules/
 .runtime/
 database/*.db
 database/*.db-shm

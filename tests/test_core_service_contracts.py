@@ -111,6 +111,13 @@ def test_pool_field_projection_does_not_copy_complete_entities() -> None:
     assert all(set(fields) == {"权重"} for _, fields in values)
 
 
+def test_field_projection_rejects_missing_contract_fields() -> None:
+    data, _ = _services()
+
+    with pytest.raises(JsonDataError, match="实体缺少请求字段"):
+        data.entity_fields("功法", ("不存在的字段",))
+
+
 def test_pool_section_mismatch_is_rejected() -> None:
     data, _ = _services()
 

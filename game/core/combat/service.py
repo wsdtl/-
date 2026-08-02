@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -17,6 +16,7 @@ from .contracts import (
     CombatRequest,
     CombatResult,
     CombatStatus,
+    CombatStatusSpec,
 )
 from .engine import BattleEngine
 from .foundation import load_battle_foundation
@@ -38,9 +38,7 @@ class CombatService:
             raise RuntimeError("战斗核心已经初始化")
         foundation = load_battle_foundation(self._data)
         report_dataset = materialize(self._data.dataset("战斗展示"))
-        report_catalog = BattleReportCatalog.from_mapping(
-            report_dataset["战报"]
-        )
+        report_catalog = BattleReportCatalog.from_mapping(report_dataset["战报"])
         self._engine = BattleEngine(foundation)
         self._report_catalog = report_catalog
         return self.status()
@@ -64,11 +62,11 @@ class CombatService:
     def _execute_sync(self, request: CombatRequest) -> CombatResult:
         left = tuple(self._runtime_snapshot(value) for value in request.left_team)
         right = tuple(self._runtime_snapshot(value) for value in request.right_team)
-        item_definitions = self._inventory_definitions((*request.left_team, *request.right_team))
+        medicine_definitions = self._medicine_definitions(request)
         result = self._simulate_runtime_teams(
             left=left,
             right=right,
-            item_definitions=item_definitions,
+            medicine_definitions=medicine_definitions,
             seed=request.seed,
             action_limit=request.action_limit,
             share_left_inventory=request.share_left_inventory,
@@ -82,7 +80,7 @@ class CombatService:
         *,
         left: tuple[RuntimeCombatantSnapshot, ...],
         right: tuple[RuntimeCombatantSnapshot, ...],
-        item_definitions: dict[str, dict[str, Any]],
+        medicine_definitions: dict[str, Any],
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
@@ -92,7 +90,7 @@ class CombatService:
         return self._require_engine().simulate_teams(
             left=left,
             right=right,
-            item_definitions=item_definitions,
+            medicine_definitions=medicine_definitions,
             seed=seed,
             action_limit=action_limit,
             share_left_inventory=share_left_inventory,
@@ -106,11 +104,15 @@ class CombatService:
             if section not in BUILD_SECTIONS:
                 raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
             definition = materialize(self._data.entity(section, identity))
-            definition["实例"] = reference.instance_id or f"{value.id}:{section}:{index}"
+            definition["实例"] = (
+                reference.instance_id or f"{value.id}:{section}:{index}"
+            )
             definition["出生序号"] = int(reference.born_order)
             definition["威力倍率"] = float(reference.power_multiplier)
             techniques.append(definition)
-        battle_pills, pill_statuses = self._battle_pill_statuses(value)
+        prepared_statuses = tuple(
+            self._prepared_status(status) for status in value.prepared_statuses
+        )
         return RuntimeCombatantSnapshot(
             id=value.id,
             name=value.name,
@@ -122,7 +124,7 @@ class CombatService:
             health=value.health,
             spirit=value.spirit,
             shield=value.shield,
-            statuses=tuple((*copy.deepcopy(value.statuses), *pill_statuses)),
+            statuses=(*copy.deepcopy(value.statuses), *prepared_statuses),
             cooldowns=copy.deepcopy(dict(value.cooldowns)),
             inventory=copy.deepcopy(dict(value.inventory)),
             auto_medicine=value.auto_medicine,
@@ -135,96 +137,49 @@ class CombatService:
             tags=tuple(value.tags),
             tactic=tuple(copy.deepcopy(value.tactic)),
             battle_profile=copy.deepcopy(dict(value.battle_profile)),
-            battle_pills=battle_pills,
         )
 
-    def _battle_pill_statuses(
-        self,
-        combatant: CombatantSpec,
-    ) -> tuple[tuple[str, ...], tuple[dict[str, Any], ...]]:
-        identities = tuple(str(value).strip() for value in combatant.battle_pills)
-        if any(not value for value in identities):
-            raise ValueError("战丹编号不能为空")
-        if not identities:
-            return (), ()
-
-        alchemy_rules = materialize(self._data.dataset("炼药规则"))
-        battle_pill_rules = dict(alchemy_rules["丹则"]["战丹"])
-        repeat_rule = str(battle_pill_rules["同丹重复"])
-        if repeat_rule not in {"允许", "禁止"}:
-            raise ValueError(f"未知战丹重复规则：{repeat_rule}")
-        if repeat_rule == "禁止" and len(identities) != len(set(identities)):
-            raise ValueError("同一名参战者不能重复寄存同一枚战丹")
-        strength_rules = {
-            int(rule["强度"]): dict(rule)
-            for rule in alchemy_rules["战丹"]["强度规则"]
+    def _prepared_status(self, value: CombatStatusSpec) -> dict[str, Any]:
+        listeners = []
+        for mechanism_id in value.mechanism_ids:
+            mechanism = materialize(self._data.entity("机制", mechanism_id))
+            node = copy.deepcopy(dict(mechanism["节点"]))
+            if node.get("能力") != "监听事件":
+                raise ValueError(f"战前状态只能装配监听型战斗机制：{mechanism_id}")
+            listeners.append(node)
+        record = dict(value.metadata)
+        if value.mechanism_ids:
+            record["战斗机制"] = list(value.mechanism_ids)
+        return {
+            "名称": value.name,
+            "类别": value.category,
+            "剩余行动": value.remaining_actions,
+            "持续单位": value.duration_unit,
+            "属性": dict(value.modifiers),
+            "标签": list(value.tags),
+            "监听": listeners,
+            "来源": value.source,
+            "来源名称": value.source_name,
+            "记录": record,
         }
-        slot_limit = int(battle_pill_rules["丹位上限"])
-        used_slots = 0
-        statuses: list[dict[str, Any]] = []
-        for identity in identities:
-            item = materialize(self._data.entity("物品", identity))
-            effect = dict(item.get("使用效果") or {})
-            if effect.get("类型") != "寄存战丹":
-                raise ValueError(f"{identity}不是战丹")
-            slots = int(item.get("丹位", 0))
-            strength = int(item.get("强度", 0))
-            strength_rule = strength_rules.get(strength)
-            if strength_rule is None or slots < 1:
-                raise ValueError(f"{identity}缺少有效的强度或丹位")
-            expected_slots = int(strength_rule["丹位"])
-            if slots != expected_slots:
-                raise ValueError(
-                    f"战丹{identity}强度{strength}应占用{expected_slots}个丹位"
-                )
-            used_slots += slots
 
-            status = copy.deepcopy(dict(effect.get("战前状态") or {}))
-            if status.get("持续单位") != "整场战斗":
-                raise ValueError(f"{identity}的战前状态必须持续整场战斗")
-            mechanism_ids = tuple(str(value) for value in effect.get("战斗机制") or ())
-            listeners = list(copy.deepcopy(status.get("监听") or ()))
-            for mechanism_id in mechanism_ids:
-                mechanism = materialize(self._data.entity("机制", mechanism_id))
-                node = copy.deepcopy(dict(mechanism["节点"]))
-                if node.get("能力") != "监听事件":
-                    raise ValueError(
-                        f"战丹{identity}只能装配监听型战斗机制：{mechanism_id}"
-                    )
-                listeners.append(node)
-            status["监听"] = listeners
-            status["来源"] = combatant.id
-            status["来源名称"] = str(item.get("名称") or identity)
-            record = copy.deepcopy(dict(status.get("记录") or {}))
-            record.update(
-                {
-                    "战丹编号": identity,
-                    "战斗机制": list(mechanism_ids),
-                    "强度": strength,
-                    "丹位": slots,
-                }
-            )
-            status["记录"] = record
-            statuses.append(status)
-
-        if used_slots > slot_limit:
-            raise ValueError(f"寄存战丹占用{used_slots}个丹位，超过上限{slot_limit}")
-        return identities, tuple(statuses)
-
-    def _inventory_definitions(
-        self,
-        combatants: Sequence[CombatantSpec],
-    ) -> dict[str, dict[str, Any]]:
-        identities = {
+    @staticmethod
+    def _medicine_definitions(request: CombatRequest) -> dict[str, Any]:
+        definitions = {value.identity: value for value in request.medicine_definitions}
+        if len(definitions) != len(request.medicine_definitions):
+            raise ValueError("恢复丹定义编号不能重复")
+        inventory_ids = {
             str(identity)
-            for combatant in combatants
+            for combatant in (*request.left_team, *request.right_team)
             for identity, quantity in combatant.inventory.items()
             if int(quantity) > 0
         }
-        return {
-            identity: materialize(self._data.entity("物品", identity))
-            for identity in sorted(identities)
-        }
+        unknown = set(definitions) - inventory_ids
+        if unknown:
+            raise ValueError(
+                "恢复丹定义未被任何参战者携带：" + "、".join(sorted(unknown))
+            )
+        return definitions
 
     def _attach_report(
         self,
@@ -242,7 +197,9 @@ class CombatService:
         requested_by_id = {value.id: value for value in requested}
         unknown = set(metadata) - set(requested_by_id)
         if unknown:
-            raise ValueError("战报补充信息引用未知参战者：" + "、".join(sorted(unknown)))
+            raise ValueError(
+                "战报补充信息引用未知参战者：" + "、".join(sorted(unknown))
+            )
         runtime_by_id = {value.id: value for value in runtime_snapshots}
         participants = []
         for value in (*result.left_results, *result.right_results):
@@ -276,7 +233,9 @@ class CombatService:
                         )
                     ),
                     final_spirit=value.spirit,
-                    initial_shield=original.shield if original is not None else value.shield,
+                    initial_shield=original.shield
+                    if original is not None
+                    else value.shield,
                     final_shield=value.shield,
                     initial_statuses=original.statuses if original is not None else (),
                     statuses=value.statuses,

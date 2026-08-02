@@ -9,6 +9,7 @@ import pytest
 
 from game.core.data import JsonDataError
 from game.core.data.files import JsonDataReader
+from game.core.data.loading import GameDataLoader
 
 
 def test_unknown_content_path_stops_loading(tmp_path: Path) -> None:
@@ -35,6 +36,29 @@ def test_world_documents_are_separated_by_json_read_rules() -> None:
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村.json"].descriptor.dataset == "地点"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村道侣.json"].descriptor.dataset == "道侣"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村敌人.json"].descriptor.dataset == "敌人"
+
+
+def test_named_entity_cannot_override_filename_identity(tmp_path: Path) -> None:
+    rules = [
+        _bootstrap_rule(),
+        {
+            "数据集": "地点",
+            "路径": "内容/世界/*/*/*.json",
+            "结构": "命名实体",
+            "实体类别": "地点",
+            "目录主体": True,
+        },
+    ]
+    _write_rules(tmp_path, rules)
+    folder = tmp_path / "内容" / "世界" / "青岚州" / "青溪村"
+    folder.mkdir(parents=True)
+    (folder / "青溪村.json").write_text(
+        json.dumps({"名称": "别处"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(JsonDataError, match="身份必须使用文件名"):
+        GameDataLoader(JsonDataReader(tmp_path)).load()
 
 
 def _bootstrap_rule() -> dict[str, str]:

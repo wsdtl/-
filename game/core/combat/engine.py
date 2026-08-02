@@ -101,9 +101,9 @@ class BattleEngine(MechanismRuntime):
             "装配被动技能": self._assemble_passive_skill,
         }
 
-    def simulate(self, *, left, right, item_definitions, seed, action_limit) -> CombatResult:
+    def simulate(self, *, left, right, medicine_definitions, seed, action_limit) -> CombatResult:
         return self.simulate_teams(
-            left=(left,), right=(right,), item_definitions=item_definitions,
+            left=(left,), right=(right,), medicine_definitions=medicine_definitions,
             seed=seed, action_limit=action_limit,
         )
 
@@ -112,7 +112,7 @@ class BattleEngine(MechanismRuntime):
         *,
         left: tuple[RuntimeCombatantSnapshot, ...],
         right: tuple[RuntimeCombatantSnapshot, ...],
-        item_definitions: dict[str, dict[str, Any]],
+        medicine_definitions: dict[str, Any],
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
@@ -131,7 +131,7 @@ class BattleEngine(MechanismRuntime):
             rng=random.Random(int(seed)),
             left=left_fighters[0],
             right=right_fighters[0],
-            item_definitions=item_definitions,
+            medicine_definitions=medicine_definitions,
             left_team=left_fighters,
             right_team=right_fighters,
         )
@@ -259,7 +259,6 @@ class BattleEngine(MechanismRuntime):
             controller_id=str(snapshot.controller_id or snapshot.id), form=str(snapshot.form or "本相"),
             forms=copy.deepcopy(dict(snapshot.forms)), tags=set(snapshot.tags), tactic=copy.deepcopy(list(snapshot.tactic)),
             battle_profile=self._normalize_battle_profile(snapshot.battle_profile),
-            battle_pills=tuple(snapshot.battle_pills),
         )
 
     @staticmethod
@@ -279,7 +278,6 @@ class BattleEngine(MechanismRuntime):
             consumed_items=dict(fighter.consumed_items), skill_cursor=fighter.skill_cursor,
             form=fighter.form, owner_id=fighter.owner_id, controller_id=fighter.controller_id,
             counts_for_victory=fighter.counts_for_victory,
-            battle_pills=tuple(fighter.battle_pills),
         )
 
     @staticmethod
@@ -660,21 +658,15 @@ class BattleEngine(MechanismRuntime):
     def _use_medicine(self, context, fighter):
         if not fighter.auto_medicine:
             return
-        for effect_type, resource in (("恢复血气", "血气"), ("恢复精神", "精神")):
+        for resource in ("血气", "精神"):
             current, maximum = self._resource_values(fighter, resource)
             if maximum <= 0 or current / maximum >= fighter.medicine_threshold:
                 continue
             candidates = []
             for item_id, quantity in fighter.inventory.items():
-                use = (context.item_definitions.get(item_id) or {}).get("使用效果") or {}
-                if quantity > 0 and use.get("类型") == effect_type:
-                    if "恢复百分比" in use:
-                        percentage = float(use.get("恢复百分比", 0))
-                        if percentage < 0:
-                            raise ValueError(f"{item_id}的恢复百分比不能小于 0")
-                        amount = maximum * percentage / 100.0
-                    else:
-                        amount = max(0.0, float(use.get("恢复量", 0)))
+                medicine = context.medicine_definitions.get(item_id)
+                if quantity > 0 and medicine is not None and medicine.resource == resource:
+                    amount = maximum * medicine.recovery_percent / 100.0
                     candidates.append((amount, item_id))
             if not candidates:
                 continue

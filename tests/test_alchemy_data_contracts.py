@@ -13,11 +13,11 @@ VEINS = {"青华", "丹离", "坤载", "太白", "玄冥"}
 def test_every_spirit_material_pool_is_assigned_to_two_distinct_veins() -> None:
     data = _data()
     assignments = data.dataset("炼药规则")["归脉"]
-    declared_pools = [str(row["灵材池"]) for row in assignments]
+    declared_pools = [str(row["灵植池"]) for row in assignments]
     material_pools = {
         Path(path).stem
         for path in data.document_paths()
-        if path.startswith("内容/物品/灵材/") and path.endswith(".json")
+        if path.startswith("内容/物品/灵植/") and path.endswith(".json")
     }
 
     assert len(declared_pools) == len(set(declared_pools))
@@ -33,8 +33,21 @@ def test_every_spirit_material_pool_is_assigned_to_two_distinct_veins() -> None:
     material_ids = data.pool_members(tuple(sorted(material_pools)), "物品")
     assert len(material_ids) == 108
     assert all(
-        data.entity_record("物品", identity).number_category == "灵材"
+        data.entity_record("物品", identity).number_category == "灵植"
         for identity in material_ids
+    )
+
+    mineral_pools = {
+        Path(path).stem
+        for path in data.document_paths()
+        if path.startswith("内容/物品/灵矿/") and path.endswith(".json")
+    }
+    mineral_ids = data.pool_members(tuple(sorted(mineral_pools)), "物品")
+    assert len(mineral_pools) == 54
+    assert len(mineral_ids) == 108
+    assert all(
+        data.entity_record("物品", identity).number_category == "灵矿"
+        for identity in mineral_ids
     )
 
 
@@ -79,7 +92,7 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
     }
     for prescription in prescriptions.values():
         assert prescription["药引池"] == "药引-兽宝"
-        output_id = str(prescription["成丹"]["编号"])
+        output_id = str(prescription["成丹"])
         output_ids.add(output_id)
         assert data.entity_record("物品", output_id).number_category == "丹药"
 
@@ -95,15 +108,18 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
         ingredient_count = sum(int(row["味数"]) for row in furnace["辅材"])
 
         assert effect["类型"] == "寄存战丹"
-        assert int(pill["丹位"]) == int(strength_rule["丹位"])
+        assert "丹位" not in pill
+        assert int(strength_rule["丹位"]) > 0
         assert int(prescription["强度"]) == strength
         assert difficulty in {
             int(value) for value in strength_rule["允许炼制难度"]
         }
         assert int(difficulty_rule["辅材总味数"]["最少"]) <= ingredient_count
         assert ingredient_count <= int(difficulty_rule["辅材总味数"]["最多"])
-        assert prescription["最低药引品级"] == difficulty_rule["最低药引品级"]
-        assert prescription["最低辅材品级"] == difficulty_rule["最低辅材品级"]
+        assert "最低药引品级" not in prescription
+        assert "最低辅材品级" not in prescription
+        assert difficulty_rule["最低药引品级"]
+        assert difficulty_rule["最低辅材品级"]
         assert referenced_mechanisms <= mechanism_ids
         if referenced_mechanisms:
             mechanism_pill_ids.add(output_id)

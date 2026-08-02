@@ -6,6 +6,7 @@ from pathlib import Path
 
 from game.core.combat import CombatantSpec, CombatRequest, CombatService
 from game.core.data import JsonDataService, materialize
+from game.core.item import ItemService
 
 
 def test_auto_medicine_uses_resource_maximum_for_percentage_recovery() -> None:
@@ -13,6 +14,8 @@ def test_auto_medicine_uses_resource_maximum_for_percentage_recovery() -> None:
     data.initialize()
     combat = CombatService(data)
     combat.initialize()
+    items = ItemService(data)
+    items.initialize()
 
     request = CombatRequest(
         left_team=(
@@ -49,6 +52,7 @@ def test_auto_medicine_uses_resource_maximum_for_percentage_recovery() -> None:
         ),
         seed=7,
         action_limit=1,
+        medicine_definitions=items.medicines(("100006",)),
     )
 
     result = combat._execute_sync(request)

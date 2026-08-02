@@ -28,6 +28,9 @@ from .contracts import (
     CombatStatus as CombatStatus,
 )
 from .contracts import (
+    CombatStatusSpec as CombatStatusSpec,
+)
+from .contracts import (
     StatusResult as StatusResult,
 )
 from .service import CombatService as CombatService
@@ -38,10 +41,11 @@ __all__ = [
     "CombatReportSpec",
     "CombatRequest",
     "CombatResult",
-    "CombatantResult",
-    "CombatantReportSpec",
-    "CombatantSpec",
     "CombatService",
     "CombatStatus",
+    "CombatStatusSpec",
+    "CombatantReportSpec",
+    "CombatantResult",
+    "CombatantSpec",
     "StatusResult",
 ]

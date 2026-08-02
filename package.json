@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "format:data": "prettier --write \"data/**/*.json\"",
+    "check:data-format": "prettier --check \"data/**/*.json\""
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
+  }
+}

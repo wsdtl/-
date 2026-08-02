@@ -6,18 +6,24 @@ from pathlib import Path
 
 import pytest
 
+from game.core.alchemy import AlchemyError, AlchemyService
 from game.core.combat import CombatantSpec, CombatRequest, CombatService
 from game.core.data import JsonDataService
+from game.core.item import ItemService
 
 
 def test_battle_pill_is_resolved_into_runtime_listeners() -> None:
-    combat = _combat()
+    combat, alchemy = _services()
 
     snapshot = combat._runtime_snapshot(
-        _combatant("left", battle_pills=("100087",))
+        _combatant(
+            "left",
+            prepared_statuses=alchemy.prepare_battle_pills(
+                ("100087",), source_id="left"
+            ).statuses,
+        )
     )
 
-    assert snapshot.battle_pills == ("100087",)
     assert len(snapshot.statuses) == 1
     status = snapshot.statuses[0]
     assert len(status["监听"]) == 2
@@ -30,19 +36,19 @@ def test_battle_pill_is_resolved_into_runtime_listeners() -> None:
 
 
 def test_fatal_guard_battle_pill_prevents_first_death() -> None:
-    combat = _combat()
+    combat, alchemy = _services()
     request = CombatRequest(
         left_team=(
             _combatant(
                 "left",
                 health=20,
                 speed=1,
-                battle_pills=("100039",),
+                prepared_statuses=alchemy.prepare_battle_pills(
+                    ("100039",), source_id="left"
+                ).statuses,
             ),
         ),
-        right_team=(
-            _combatant("right", attack=500, speed=200),
-        ),
+        right_team=(_combatant("right", attack=500, speed=200),),
         seed=7,
         action_limit=1,
     )
@@ -50,41 +56,40 @@ def test_fatal_guard_battle_pill_prevents_first_death() -> None:
     result = combat._execute_sync(request)
 
     assert result.left.health > 0
-    assert result.left.battle_pills == ("100039",)
     assert any(event.mechanism == "600023" for event in result.events)
 
 
 def test_battle_pill_rejects_duplicate_identity() -> None:
-    combat = _combat()
+    _, alchemy = _services()
 
-    with pytest.raises(ValueError, match="不能重复寄存"):
-        combat._runtime_snapshot(
-            _combatant("left", battle_pills=("100019", "100019"))
-        )
+    with pytest.raises(AlchemyError, match="不能重复寄存"):
+        alchemy.prepare_battle_pills(("100019", "100019"), source_id="left")
 
 
 def test_battle_pill_rejects_slot_overflow() -> None:
-    combat = _combat()
+    _, alchemy = _services()
 
-    with pytest.raises(ValueError, match="超过上限3"):
-        combat._runtime_snapshot(
-            _combatant("left", battle_pills=("100018", "100027"))
-        )
+    with pytest.raises(AlchemyError, match="超过上限 3"):
+        alchemy.prepare_battle_pills(("100018", "100027"), source_id="left")
 
 
 def test_battle_pill_rejects_non_battle_medicine() -> None:
-    combat = _combat()
+    _, alchemy = _services()
 
-    with pytest.raises(ValueError, match="100001不是战丹"):
-        combat._runtime_snapshot(_combatant("left", battle_pills=("100001",)))
+    with pytest.raises(AlchemyError, match="物品不是战丹：100001"):
+        alchemy.prepare_battle_pills(("100001",), source_id="left")
 
 
-def _combat() -> CombatService:
+def _services() -> tuple[CombatService, AlchemyService]:
     data = JsonDataService(Path(__file__).resolve().parents[1] / "data")
     data.initialize()
     combat = CombatService(data)
     combat.initialize()
-    return combat
+    items = ItemService(data)
+    items.initialize()
+    alchemy = AlchemyService(data, items)
+    alchemy.initialize()
+    return combat, alchemy
 
 
 def _combatant(
@@ -93,7 +98,7 @@ def _combatant(
     attack: float = 20,
     speed: float = 100,
     health: float | None = None,
-    battle_pills: tuple[str, ...] = (),
+    prepared_statuses=(),
 ) -> CombatantSpec:
     return CombatantSpec(
         id=identity,
@@ -107,5 +112,5 @@ def _combatant(
             "命中率": 100,
         },
         health=health,
-        battle_pills=battle_pills,
+        prepared_statuses=prepared_statuses,
     )

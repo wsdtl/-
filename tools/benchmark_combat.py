@@ -1,6 +1,6 @@
 """固定规模战斗基准：15 名玩家与 15 名道侣对战同规模队伍。"""
 
-# ruff: noqa: E402, I001
+# ruff: noqa: I001
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from game.core.combat import CombatService  # noqa: E402
-from game.core.combat.models import RuntimeCombatantSnapshot  # noqa: E402
-from game.core.data import JsonDataService  # noqa: E402
+from game.core.combat import CombatService
+from game.core.combat.models import RuntimeCombatantSnapshot
+from game.core.data import JsonDataService
 
 
 LISTENER_EVENTS = (
@@ -125,7 +125,7 @@ def run(rounds: int, warmup: int, action_limit: int, listeners: int) -> None:
         combat._simulate_runtime_teams(
             left=left,
             right=right,
-            item_definitions={},
+            medicine_definitions={},
             seed=seed,
             action_limit=action_limit,
         )
@@ -138,7 +138,7 @@ def run(rounds: int, warmup: int, action_limit: int, listeners: int) -> None:
         outcome = combat._simulate_runtime_teams(
             left=left,
             right=right,
-            item_definitions={},
+            medicine_definitions={},
             seed=seed,
             action_limit=action_limit,
         )

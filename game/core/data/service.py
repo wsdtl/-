@@ -181,11 +181,10 @@ def _select_fields(
     value: Mapping[str, Any],
     fields: Sequence[str],
 ) -> Mapping[str, Any]:
-    return MappingProxyType({
-        field: value[field]
-        for field in fields
-        if field in value
-    })
+    missing = tuple(field for field in fields if field not in value)
+    if missing:
+        raise JsonDataError("实体缺少请求字段：" + "、".join(missing))
+    return MappingProxyType({field: value[field] for field in fields})
 
 
 def materialize(value: Any) -> Any:
