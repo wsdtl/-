@@ -404,7 +404,7 @@ service = MessageConsoleService(
         retention_seconds=RETENTION_SECONDS,
         busy_timeout_ms=config.database.busy_timeout_ms,
     ),
-    media_dir=config.base_dir / "data" / "runtime_log_media",
+    media_dir=config.base_dir / ".runtime" / "runtime_log_media",
 )
 
 

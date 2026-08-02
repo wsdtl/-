@@ -13,10 +13,9 @@ from fastapi import APIRouter
 from launch.log import C, logger
 from message import coerce_message
 
-from .base_handler import BaseAdapter
+from .base_handler import BaseMessageHandler
 from .context import SendRequest, current_message_context
 from .depends import call_with_dependencies
-
 
 _current_manager: ContextVar[Any | None] = ContextVar(
     "adapter_current_manager",
@@ -37,7 +36,7 @@ class AdapterSpec:
     """一个可启用通信适配器的公共描述。"""
 
     name: str
-    handler: type[BaseAdapter]
+    handler: type[BaseMessageHandler]
     manager: Any
     has_context: Callable[[], bool]
     http_mount: AdapterHttpMount | None = None
@@ -84,17 +83,70 @@ def enabled_adapter_specs() -> List[AdapterSpec]:
 
 
 class MessageHandler:
-    """把业务命令同时注册到当前启用的消息适配器。"""
+    """把业务回调注册到当前启用的消息适配器。"""
 
     @staticmethod
-    def handler(*args, **kwargs) -> Callable:
-        """把一个业务命令按相同规则注册到所有启用驱动器。"""
+    def fullmatch(
+        cmd,
+        *,
+        priority: int = 0,
+        block: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable:
+        """注册必须完整匹配整条消息的回调。"""
 
         def wrapper(func: Callable) -> Callable:
             for spec in enabled_adapter_specs():
-                spec.handler.handler(*args, **kwargs)(
-                    MessageHandler._bind_manager(func, spec.manager)
-                )
+                spec.handler.fullmatch(
+                    cmd=cmd,
+                    priority=priority,
+                    block=block,
+                    metadata=metadata,
+                )(MessageHandler._bind_manager(func, spec.manager))
+            return func
+
+        return wrapper
+
+    @staticmethod
+    def command(
+        cmd,
+        *,
+        priority: int = 0,
+        block: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable:
+        """注册命令词加参数的回调。"""
+
+        def wrapper(func: Callable) -> Callable:
+            for spec in enabled_adapter_specs():
+                spec.handler.command(
+                    cmd=cmd,
+                    priority=priority,
+                    block=block,
+                    metadata=metadata,
+                )(MessageHandler._bind_manager(func, spec.manager))
+            return func
+
+        return wrapper
+
+    @staticmethod
+    def regex(
+        cmd,
+        *,
+        priority: int = 0,
+        block: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable:
+        """注册完整消息正则回调。"""
+
+        def wrapper(func: Callable) -> Callable:
+            for spec in enabled_adapter_specs():
+                spec.handler.regex(
+                    cmd=cmd,
+                    priority=priority,
+                    block=block,
+                    metadata=metadata,
+                )(MessageHandler._bind_manager(func, spec.manager))
             return func
 
         return wrapper
@@ -139,7 +191,10 @@ class AdapterReplyManager:
         if manager is None:
             if is_log:
                 logger.opt(colors=True).warning(
-                    f"{C.warn('回复失败，缺少当前适配器上下文')} {C.kv('client', client_id)}"
+                    C.join(
+                        C.warn("回复失败，缺少当前适配器上下文"),
+                        C.kv("client", client_id),
+                    )
                 )
             return False
 

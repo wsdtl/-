@@ -2,26 +2,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+import asyncio
+import copy
+from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 
 from game.core.data import JsonDataService
 
 from .catalog import BattleReportCatalog
+from .contracts import (
+    BUILD_SECTIONS,
+    CombatantSpec,
+    CombatRequest,
+    CombatResult,
+    CombatStatus,
+)
 from .engine import BattleEngine
 from .foundation import load_battle_foundation
-from .models import BattleOutcome, CombatantSnapshot
+from .models import RuntimeCombatantSnapshot
 from .presentation import build_battle_report_presentation
-from .report import BattleReportParticipant, build_battle_report
-
-
-@dataclass(frozen=True)
-class CombatStatus:
-    initialized: bool
-    mechanism_count: int
-    ability_count: int
-    event_count: int
+from .report import RuntimeBattleReportParticipant, build_battle_report
 
 
 class CombatService:
@@ -36,8 +37,9 @@ class CombatService:
         if self._engine is not None:
             raise RuntimeError("战斗核心已经初始化")
         foundation = load_battle_foundation(self._data)
+        report_dataset = self._data.dataset("战报展示")
         report_catalog = BattleReportCatalog.from_mapping(
-            self._data.read("展示/战报.json")
+            report_dataset["战报"]
         )
         self._engine = BattleEngine(foundation)
         self._report_catalog = report_catalog
@@ -54,33 +56,39 @@ class CombatService:
             event_count=len(engine.catalog.events),
         )
 
-    def simulate(
-        self,
-        *,
-        left: CombatantSnapshot,
-        right: CombatantSnapshot,
-        item_definitions: dict[str, dict[str, Any]],
-        seed: int,
-        action_limit: int,
-    ) -> BattleOutcome:
-        return self._require_engine().simulate(
+    async def execute(self, request: CombatRequest) -> CombatResult:
+        """执行唯一的公共战斗请求，不阻塞异步消息驱动。"""
+
+        return await asyncio.to_thread(self._execute_sync, request)
+
+    def _execute_sync(self, request: CombatRequest) -> CombatResult:
+        left = tuple(self._runtime_snapshot(value) for value in request.left_team)
+        right = tuple(self._runtime_snapshot(value) for value in request.right_team)
+        item_definitions = self._inventory_definitions((*request.left_team, *request.right_team))
+        result = self._simulate_runtime_teams(
             left=left,
             right=right,
             item_definitions=item_definitions,
-            seed=seed,
-            action_limit=action_limit,
+            seed=request.seed,
+            action_limit=request.action_limit,
+            share_left_inventory=request.share_left_inventory,
         )
+        if request.report is None:
+            return result
+        return self._attach_report(result, request, (*left, *right))
 
-    def simulate_teams(
+    def _simulate_runtime_teams(
         self,
         *,
-        left: tuple[CombatantSnapshot, ...],
-        right: tuple[CombatantSnapshot, ...],
+        left: tuple[RuntimeCombatantSnapshot, ...],
+        right: tuple[RuntimeCombatantSnapshot, ...],
         item_definitions: dict[str, dict[str, Any]],
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
-    ) -> BattleOutcome:
+    ) -> CombatResult:
+        """供战斗服务自身测试和基准使用的内部同步入口。"""
+
         return self._require_engine().simulate_teams(
             left=left,
             right=right,
@@ -90,32 +98,140 @@ class CombatService:
             share_left_inventory=share_left_inventory,
         )
 
-    def build_report(
-        self,
-        outcome: BattleOutcome,
-        participants: Sequence[BattleReportParticipant],
-        *,
-        seed: int | None = None,
-        generated_at: str | None = None,
-        scene: str = "青岚山演武台",
-    ) -> dict[str, Any]:
-        return build_battle_report(
-            outcome,
-            participants,
-            catalog=self._require_report_catalog(),
-            seed=seed,
-            generated_at=generated_at,
-            scene=scene,
+    def _runtime_snapshot(self, value: CombatantSpec) -> RuntimeCombatantSnapshot:
+        techniques = []
+        for index, reference in enumerate(value.build):
+            section = str(reference.section or "").strip()
+            identity = str(reference.identity or "").strip()
+            if section not in BUILD_SECTIONS:
+                raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
+            definition = self._data.entity(section, identity)
+            definition["实例"] = reference.instance_id or f"{value.id}:{section}:{index}"
+            definition["出生序号"] = int(reference.born_order)
+            definition["威力倍率"] = float(reference.power_multiplier)
+            techniques.append(definition)
+        return RuntimeCombatantSnapshot(
+            id=value.id,
+            name=value.name,
+            attributes=copy.deepcopy(dict(value.attributes)),
+            level=value.level,
+            kind=value.kind,
+            weapon_attack=value.weapon_attack,
+            techniques=tuple(techniques),
+            health=value.health,
+            spirit=value.spirit,
+            shield=value.shield,
+            statuses=tuple(copy.deepcopy(value.statuses)),
+            cooldowns=copy.deepcopy(dict(value.cooldowns)),
+            inventory=copy.deepcopy(dict(value.inventory)),
+            auto_medicine=value.auto_medicine,
+            medicine_threshold=value.medicine_threshold,
+            skill_cursor=value.skill_cursor,
+            owner_id=value.owner_id,
+            controller_id=value.controller_id,
+            form=value.form,
+            forms=copy.deepcopy(dict(value.forms)),
+            tags=tuple(value.tags),
+            tactic=tuple(copy.deepcopy(value.tactic)),
+            battle_profile=copy.deepcopy(dict(value.battle_profile)),
         )
 
-    def build_presentation(
+    def _inventory_definitions(
         self,
-        report: Mapping[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        return build_battle_report_presentation(
-            report,
-            self._require_report_catalog(),
+        combatants: Sequence[CombatantSpec],
+    ) -> dict[str, dict[str, Any]]:
+        identities = {
+            str(identity)
+            for combatant in combatants
+            for identity, quantity in combatant.inventory.items()
+            if int(quantity) > 0
+        }
+        return {
+            identity: self._data.entity("物品", identity)
+            for identity in sorted(identities)
+        }
+
+    def _attach_report(
+        self,
+        result: CombatResult,
+        request: CombatRequest,
+        runtime_snapshots: tuple[RuntimeCombatantSnapshot, ...],
+    ) -> CombatResult:
+        report_spec = request.report
+        if report_spec is None:
+            return result
+        metadata = {value.id: value for value in report_spec.participants}
+        if len(metadata) != len(report_spec.participants):
+            raise ValueError("战报补充信息的参战者 ID 不能重复")
+        requested = (*request.left_team, *request.right_team)
+        requested_by_id = {value.id: value for value in requested}
+        unknown = set(metadata) - set(requested_by_id)
+        if unknown:
+            raise ValueError("战报补充信息引用未知参战者：" + "、".join(sorted(unknown)))
+        runtime_by_id = {value.id: value for value in runtime_snapshots}
+        participants = []
+        for value in (*result.left_results, *result.right_results):
+            original = requested_by_id.get(value.id)
+            runtime = runtime_by_id.get(value.id)
+            display = metadata.get(value.id)
+            attributes = dict(value.attributes)
+            participants.append(
+                RuntimeBattleReportParticipant(
+                    id=value.id,
+                    name=value.name,
+                    title=(display.title if display and display.title else value.kind),
+                    attributes=attributes,
+                    initial_health=(
+                        value.health
+                        if original is None
+                        else float(
+                            original.health
+                            if original.health is not None
+                            else attributes.get("血气上限", value.health)
+                        )
+                    ),
+                    final_health=value.health,
+                    initial_spirit=(
+                        value.spirit
+                        if original is None
+                        else float(
+                            original.spirit
+                            if original.spirit is not None
+                            else attributes.get("精神上限", value.spirit)
+                        )
+                    ),
+                    final_spirit=value.spirit,
+                    initial_shield=original.shield if original is not None else value.shield,
+                    final_shield=value.shield,
+                    initial_statuses=original.statuses if original is not None else (),
+                    statuses=value.statuses,
+                    techniques=runtime.techniques if runtime is not None else (),
+                    moves=display.moves if display else (),
+                    mechanisms=display.mechanisms if display else (),
+                    ability_definitions=self._require_engine().catalog.abilities,
+                    color=display.color if display else "",
+                    extra=display.extra if display else {},
+                    level=value.level,
+                    kind=value.kind,
+                )
+            )
+        report = build_battle_report(
+            result,
+            participants,
+            catalog=self._require_report_catalog(),
+            seed=request.seed,
+            generated_at=report_spec.generated_at,
+            scene=report_spec.scene,
         )
+        presentation = (
+            build_battle_report_presentation(
+                report,
+                self._require_report_catalog(),
+            )
+            if report_spec.include_presentation
+            else None
+        )
+        return replace(result, report=report, presentation=presentation)
 
     def _require_engine(self) -> BattleEngine:
         if self._engine is None:
@@ -128,4 +244,4 @@ class CombatService:
         return self._report_catalog
 
 
-__all__ = ["CombatService", "CombatStatus"]
+__all__ = ["CombatService"]

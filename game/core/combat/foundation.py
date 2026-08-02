@@ -11,17 +11,6 @@ from .executors import EXECUTOR_CATEGORIES
 from .schema import RuleSchemaValidator
 
 
-DEFINITION_PATHS = {
-    "属性": "定义/战斗/属性.json",
-    "资源": "定义/战斗/资源.json",
-    "事件": "定义/战斗/事件.json",
-    "原子能力": "定义/战斗/原子能力.json",
-}
-RULE_PATHS = {
-    "伤害规则": "规则/战斗/伤害.json",
-    "行动规则": "规则/战斗/行动.json",
-    "状态反应": "规则/战斗/状态反应.json",
-}
 def load_battle_foundation(
     data: JsonDataService,
     *,
@@ -29,8 +18,7 @@ def load_battle_foundation(
 ) -> dict[str, Any]:
     if not data.status().loaded:
         raise RuntimeError("JSON 数据微服务必须先于战斗微服务启动")
-    result = {name: data.read(path) for name, path in DEFINITION_PATHS.items()}
-    result.update({name: data.read(path) for name, path in RULE_PATHS.items()})
+    result = data.dataset("战斗基石")
     if mechanisms is None:
         mechanism_nodes, mechanism_names = load_battle_mechanisms(data)
     else:
@@ -254,6 +242,3 @@ def _strings(value: Any, path: str) -> tuple[str, ...]:
     if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
         raise ValueError(f"{path}必须是非空字符串数组")
     return tuple(value)
-
-
-__all__ = ["load_battle_foundation", "load_battle_mechanisms", "validate_battle_foundation"]

@@ -23,11 +23,6 @@ class BaseAdapter(ABC):
 
     @staticmethod
     @abstractmethod
-    def handler(*args, **kwargs) -> Callable:
-        """注册处理函数。"""
-
-    @staticmethod
-    @abstractmethod
     async def shutdown() -> None:
         """关闭适配器并清理资源。"""
 
@@ -40,15 +35,30 @@ class BaseMessageHandler(BaseAdapter):
 
     业务回调可接收的公共上下文字段：
     - client_id: 触发消息的调用方身份。
-    - message: 命令触发片段之后的文本。
+    - message: command 模式下命令词之后的参数，其余模式为空。
     - manager: 当前驱动器的回复器。
     - cmd: 命令片段。
     - raw_message: 完整原始文本。
     - message_context: 显式消息上下文。
     - reply_target: 当前消息的默认回复目标。
     - adapter_capabilities: 当前驱动器公开能力。
-    - match: 正则命中对象；精确命令时为 None。
+    - match: regex 模式的完整消息命中对象，其余模式为 None。
 
     驱动器回复器必须兼容：
         async def send(message, client_id, is_log=True, request_id=None) -> bool
     """
+
+    @staticmethod
+    @abstractmethod
+    def fullmatch(*args, **kwargs) -> Callable:
+        """注册完整消息回调。"""
+
+    @staticmethod
+    @abstractmethod
+    def command(*args, **kwargs) -> Callable:
+        """注册命令词加参数回调。"""
+
+    @staticmethod
+    @abstractmethod
+    def regex(*args, **kwargs) -> Callable:
+        """注册完整消息正则回调。"""

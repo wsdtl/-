@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import replace
 import copy
 import math
 import random
+from collections.abc import Mapping
 from typing import Any, Callable
 
-from .damage import DamageEngine, DamageRequest, DamageResolution
+from .contracts import CombatantResult, CombatResult, StatusResult
+from .damage import DamageEngine, DamageRequest
 from .mechanics import MechanismRuntime
 from .models import (
     ActionIntent,
     BattleContext,
-    BattleOutcome,
     CombatCatalog,
-    CombatantResult,
-    CombatantSnapshot,
     Fighter,
+    RuntimeCombatantSnapshot,
     Skill,
     StatusState,
 )
@@ -103,7 +101,7 @@ class BattleEngine(MechanismRuntime):
             "装配被动技能": self._assemble_passive_skill,
         }
 
-    def simulate(self, *, left, right, item_definitions, seed, action_limit) -> BattleOutcome:
+    def simulate(self, *, left, right, item_definitions, seed, action_limit) -> CombatResult:
         return self.simulate_teams(
             left=(left,), right=(right,), item_definitions=item_definitions,
             seed=seed, action_limit=action_limit,
@@ -112,13 +110,13 @@ class BattleEngine(MechanismRuntime):
     def simulate_teams(
         self,
         *,
-        left: tuple[CombatantSnapshot, ...],
-        right: tuple[CombatantSnapshot, ...],
+        left: tuple[RuntimeCombatantSnapshot, ...],
+        right: tuple[RuntimeCombatantSnapshot, ...],
         item_definitions: dict[str, dict[str, Any]],
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
-    ) -> BattleOutcome:
+    ) -> CombatResult:
         if not left or not right:
             raise ValueError("战斗双方都必须至少有一名参战者")
         ids = [str(value.id).strip() for value in (*left, *right)]
@@ -165,7 +163,7 @@ class BattleEngine(MechanismRuntime):
         )
         left_results = tuple(self._fighter_result(value) for value in context.left_team)
         right_results = tuple(self._fighter_result(value) for value in context.right_team)
-        return BattleOutcome(
+        return CombatResult(
             left=left_results[0], right=right_results[0], actions=context.action_number,
             events=tuple(context.events),
             trigger_activations=sum(context.battle_trigger_counts.values()),
@@ -237,7 +235,7 @@ class BattleEngine(MechanismRuntime):
         if index is not None:
             actor.skill_cursor = (index + 1) % len(actor.skills)
 
-    def _build_fighter(self, snapshot: CombatantSnapshot) -> Fighter:
+    def _build_fighter(self, snapshot: RuntimeCombatantSnapshot) -> Fighter:
         attributes = self._normalize_attributes(snapshot.attributes)
         attributes["攻击"] = attributes.get("攻击", 0) + float(snapshot.weapon_attack)
         skills, passives = self._technique_rules(list(snapshot.techniques), attributes)
@@ -270,12 +268,37 @@ class BattleEngine(MechanismRuntime):
             level=fighter.level, kind=fighter.kind,
             health=max(0.0, round(fighter.health, 3)), spirit=max(0.0, round(fighter.spirit, 3)),
             shield=max(0.0, round(fighter.shield, 3)),
-            statuses=tuple(status for status in fighter.statuses if status.remaining_turns > 0 and status.duration_unit != "整场战斗"),
+            statuses=tuple(
+                BattleEngine._status_result(status)
+                for status in fighter.statuses
+                if status.remaining_turns > 0 and status.duration_unit != "整场战斗"
+            ),
             cooldowns={k: v for k, v in fighter.cooldowns.items() if v > 0},
             inventory={k: v for k, v in fighter.inventory.items() if v > 0},
             consumed_items=dict(fighter.consumed_items), skill_cursor=fighter.skill_cursor,
             form=fighter.form, owner_id=fighter.owner_id, controller_id=fighter.controller_id,
             counts_for_victory=fighter.counts_for_victory,
+        )
+
+    @staticmethod
+    def _status_result(status: StatusState) -> StatusResult:
+        return StatusResult(
+            name=status.name,
+            category=status.category,
+            remaining_turns=status.remaining_turns,
+            source=status.source,
+            source_name=status.source_name,
+            source_mechanism=status.source_mechanism,
+            modifiers=dict(status.modifiers),
+            stacks=status.stacks,
+            max_stacks=status.max_stacks,
+            tags=tuple(status.tags),
+            duration_unit=status.duration_unit,
+            action_limits=tuple(status.action_limits),
+            effect_immunities=tuple(status.effect_immunities),
+            listeners=tuple(copy.deepcopy(status.listeners)),
+            values=copy.deepcopy(status.values),
+            expire_with_source=status.expire_with_source,
         )
 
     def _next_action_order(self, context):
@@ -295,9 +318,18 @@ class BattleEngine(MechanismRuntime):
             count = math.floor(total + 1e-9)
             context.action_progress[fighter.id] = min(max(total - count, 0), 1 - 1e-12)
             for ordinal in range(count):
-                ready.append(((ordinal + 1 - before) / efficiency, -fighter.value("速度", 100), fighter.side, ordinal, fighter))
-        ready.sort(key=lambda value: value[:4])
-        return tuple(value[4] for value in ready)
+                ready.append(
+                    (
+                        (ordinal + 1 - before) / efficiency,
+                        -fighter.value("速度", 100),
+                        fighter.side,
+                        ordinal,
+                        context.fighter_order.get(fighter.id, 0),
+                        fighter,
+                    )
+                )
+        ready.sort(key=lambda value: value[:-1])
+        return tuple(value[-1] for value in ready)
 
     def _action_efficiency(self, context, fighter):
         rules = self.catalog.action_rules
@@ -608,12 +640,15 @@ class BattleEngine(MechanismRuntime):
                 kept.append(status)
             else:
                 context.event("移除状态后", actor, actor, f"{status.name}消散", values={"状态": status.name, "原因": "到期"}, tags=status.tags)
+        if len(kept) != len(actor.statuses):
+            context.mark_listener_index_dirty()
         actor.statuses = kept
         for obj in list(context.combat_objects.values()):
             if obj.remaining_actions > 0:
                 obj.remaining_actions -= 1
                 if obj.remaining_actions == 0:
                     context.combat_objects.pop(obj.id, None)
+                    context.mark_listener_index_dirty()
                     shell = context.fighter_by_id(obj.id)
                     if shell is not None:
                         shell.active = False
@@ -644,6 +679,3 @@ class BattleEngine(MechanismRuntime):
         if attribute not in target.attributes and not any(attribute in status.modifiers for status in target.statuses):
             return float(default)
         return target.value(attribute, default * 100) / 100.0
-
-
-__all__ = ["BattleEngine"]

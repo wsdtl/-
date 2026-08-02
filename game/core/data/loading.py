@@ -1,179 +1,210 @@
-"""正式 JSON 的分阶段注册、分组和编号实体索引。"""
+"""正式 JSON 的实体、资源池与世界索引。"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any
 
+from .contracts import JsonDataError
 from .files import (
+    NAMED_ENTITY,
+    NAMED_ENTITY_MAP,
+    NUMBERED_ENTITY_LIST,
+    OBJECT,
+    OBJECT_LIST,
+    PLAIN_DOCUMENT,
+    REFERENCE_POOL,
     JsonDataCatalog,
-    JsonDataError,
     JsonDataReader,
     JsonDocument,
-    content_section,
 )
 
 
-COLLECTION_SECTIONS = (
-    "世界",
-    "区域",
-    "地点",
-    "敌人",
-    "道侣",
-    "物品",
-    "功法",
-    "附魔",
-    "宝石",
-    "机制",
-)
-NUMBERED_SECTIONS = frozenset({"道侣", "物品", "功法", "附魔", "宝石", "机制"})
+@dataclass(frozen=True)
+class PoolDefinition:
+    section: str
+    identities: tuple[str, ...] = ()
+    source_files: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True)
 class LoadedGameData:
     catalog: JsonDataCatalog
-    definitions: Mapping[str, Any]
-    rules: Mapping[str, Any]
-    content: Mapping[str, Any]
-    presentation: Mapping[str, Any]
-    groups: Mapping[str, Mapping[str, tuple[str, ...]]]
     entities: Mapping[str, Mapping[str, Any]]
-    issues: tuple[str, ...]
+    pool_definitions: Mapping[str, PoolDefinition]
 
-    def expand_pool(
+    @property
+    def entity_count(self) -> int:
+        return sum(len(values) for values in self.entities.values())
+
+    @property
+    def pool_count(self) -> int:
+        return len(self.pool_definitions)
+
+    def resolve_pool(
         self,
-        file_ids: list[str] | tuple[str, ...],
+        file_ids: Sequence[str],
         section: str,
         *,
         deduplicate: bool,
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
-        return self.catalog.expand_pool(file_ids, section, deduplicate=deduplicate)
+    ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+        """递归展开直接编号池、源文件池和实体源文件。"""
+
+        section_name = str(section or "").strip()
+        if section_name not in self.entities:
+            raise JsonDataError(f"不支持的资源池集合：{section_name or '<空>'}")
+        result: list[tuple[str, Mapping[str, Any]]] = []
+        for file_id in file_ids:
+            result.extend(self._resolve_pool_file(str(file_id), section_name, ()))
+        if not result:
+            joined = "、".join(str(value) for value in file_ids) or "<空>"
+            raise JsonDataError(f"资源池为空：{joined} -> {section_name}")
+        if not deduplicate:
+            return tuple(result)
+        unique: list[tuple[str, Mapping[str, Any]]] = []
+        seen: set[str] = set()
+        for identity, value in result:
+            if identity in seen:
+                continue
+            seen.add(identity)
+            unique.append((identity, value))
+        return tuple(unique)
+
+    def _resolve_pool_file(
+        self,
+        file_id: str,
+        section: str,
+        stack: tuple[str, ...],
+    ) -> list[tuple[str, Mapping[str, Any]]]:
+        document = self.catalog.content_file(file_id)
+        canonical = document.file_id
+        pool = self.pool_definitions.get(canonical)
+        if pool is None:
+            raise JsonDataError(f"内容文件不是资源池：{document.relative_path}")
+        if pool.section != section:
+            raise JsonDataError(
+                f"资源池集合不匹配：{document.relative_path} 是 {pool.section}，不是 {section}"
+            )
+        cycle_key = canonical.casefold()
+        stack_keys = tuple(value.casefold() for value in stack)
+        if cycle_key in stack_keys:
+            chain = " -> ".join((*stack, canonical))
+            raise JsonDataError(f"资源池形成循环引用：{chain}")
+        entities = self.entities[section]
+        result: list[tuple[str, Mapping[str, Any]]] = []
+        for identity in pool.identities:
+            value = entities.get(identity)
+            if value is None:
+                raise JsonDataError(
+                    f"资源池引用不存在的{section}：{document.relative_path} -> {identity}"
+                )
+            result.append((identity, value))
+        next_stack = (*stack, canonical)
+        for source_file in pool.source_files:
+            result.extend(self._resolve_pool_file(source_file, section, next_stack))
+        return result
 
 
 class GameDataLoader:
-    """注册四类正式 JSON，并建立分组与编号实体索引。"""
+    """注册四类正式 JSON，并建立可验证的运行期只读索引。"""
 
     def __init__(self, reader: JsonDataReader) -> None:
         self.reader = reader
 
     def load(self) -> LoadedGameData:
         catalog = self.reader.load_catalog()
-        scopes = {
-            scope: _scope_values(catalog.documents, scope)
-            for scope in ("定义", "规则", "内容", "展示")
-        }
-        groups, entities, issues = _index_content(catalog)
-        return LoadedGameData(
+        entities, pools = _index_content(catalog)
+        _validate_number_prefixes(catalog)
+        loaded = LoadedGameData(
             catalog=catalog,
-            definitions=MappingProxyType(scopes["定义"]),
-            rules=MappingProxyType(scopes["规则"]),
-            content=MappingProxyType(scopes["内容"]),
-            presentation=MappingProxyType(scopes["展示"]),
-            groups=MappingProxyType(
-                {file_id: MappingProxyType(sections) for file_id, sections in groups.items()}
-            ),
             entities=MappingProxyType(
                 {section: MappingProxyType(values) for section, values in entities.items()}
             ),
-            issues=tuple(dict.fromkeys(issues)),
+            pool_definitions=MappingProxyType(pools),
         )
-
-
-def _scope_values(documents: tuple[JsonDocument, ...], scope: str) -> dict[str, Any]:
-    return {
-        document.relative_path: document.value
-        for document in documents
-        if document.scope == scope
-    }
+        _validate_all_pools(loaded)
+        _validate_pool_references(loaded)
+        return loaded
 
 
 def _index_content(
     catalog: JsonDataCatalog,
-) -> tuple[
-    dict[str, dict[str, tuple[str, ...]]],
-    dict[str, dict[str, Mapping[str, Any]]],
-    list[str],
-]:
-    groups: dict[str, dict[str, tuple[str, ...]]] = {}
+) -> tuple[dict[str, dict[str, Mapping[str, Any]]], dict[str, PoolDefinition]]:
+    sections = {
+        document.descriptor.section
+        for document in catalog.documents
+        if document.descriptor.section
+    }
     entities: dict[str, dict[str, Mapping[str, Any]]] = {
-        section: {} for section in NUMBERED_SECTIONS
+        section: {} for section in sorted(sections)
     }
-    sources: dict[str, dict[str, str]] = {section: {} for section in NUMBERED_SECTIONS}
-    conflict_sources: dict[str, dict[str, set[str]]] = {
-        section: {} for section in NUMBERED_SECTIONS
-    }
+    sources: dict[str, dict[str, str]] = {section: {} for section in entities}
+    pools: dict[str, PoolDefinition] = {}
     for document in catalog.documents:
-        if document.scope != "内容":
+        descriptor = document.descriptor
+        _validate_document_shape(document)
+        if not descriptor.section:
             continue
-        sections = _document_collections(document)
-        groups[document.file_id] = {}
-        for section, entries in sections.items():
-            groups[document.file_id][section] = tuple(identity for identity, _ in entries)
-            if section not in NUMBERED_SECTIONS:
+        if descriptor.shape == REFERENCE_POOL:
+            pools[document.file_id] = _reference_pool(document, descriptor.section)
+            continue
+        entries = _document_entries(document)
+        if descriptor.source_pool:
+            pools[document.file_id] = PoolDefinition(
+                section=descriptor.section,
+                identities=tuple(identity for identity, _ in entries),
+            )
+        values = entities.get(descriptor.section)
+        if values is None:
+            continue
+        for identity, value in entries:
+            previous = values.get(identity)
+            if previous is None:
+                values[identity] = value
+                sources[descriptor.section][identity] = document.relative_path
                 continue
-            for identity, value in entries:
-                previous = entities[section].get(identity)
-                if previous is None:
-                    entities[section][identity] = value
-                    sources[section][identity] = document.relative_path
-                elif _entity_identity(previous) != _entity_identity(value):
-                    conflict_sources[section].setdefault(
-                        identity,
-                        {sources[section][identity]},
-                    ).add(document.relative_path)
-    issues = []
-    for section, conflicts in conflict_sources.items():
-        for identity, paths in conflicts.items():
-            ordered = sorted(paths, key=str.casefold)
-            issues.append(
-                f"实体编号 {identity} 被 {len(ordered)} 份文件用于不同{section}："
-                f"{ordered[0]} 等"
-            )
-    return groups, entities, issues
+            if _entity_identity(previous) != _entity_identity(value):
+                raise JsonDataError(
+                    f"实体身份冲突：{descriptor.section} {identity} 同时定义于 "
+                    f"{sources[descriptor.section][identity]} 与 {document.relative_path}"
+                )
+    return entities, pools
 
 
-def _entity_identity(value: Mapping[str, Any]) -> dict[str, Any]:
-    """所有编号实体都以实际定义判同，池内上下文不属于实体。"""
-
-    return {str(key): raw for key, raw in value.items()}
-
-
-def _document_collections(
+def _document_entries(
     document: JsonDocument,
-) -> dict[str, tuple[tuple[str, Mapping[str, Any]], ...]]:
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    descriptor = document.descriptor
     value = document.value
-    section = content_section(document)
-    if section not in COLLECTION_SECTIONS:
-        return {}
-    if section in NUMBERED_SECTIONS:
-        if not isinstance(value, list):
-            raise JsonDataError(
-                f"编号内容文件根值必须是数组：{document.relative_path} -> {section}"
-            )
-        return {section: _array_entries(value, document, section)}
-    if not isinstance(value, dict):
-        raise JsonDataError(
-            f"命名内容文件根值必须是对象：{document.relative_path} -> {section}"
-        )
-    if section in {"世界", "区域", "地点"}:
-        identity = str(value.get("名称") or document.file_id)
-        return {section: ((identity, value),)}
-    return {
-        section: tuple(
-            (str(key), raw)
-            for key, raw in value.items()
-            if isinstance(raw, dict)
-        )
-    }
+    section = descriptor.section
+    if descriptor.shape == NUMBERED_ENTITY_LIST:
+        return _numbered_entries(value, document, section)
+    if descriptor.shape == NAMED_ENTITY_MAP:
+        return _named_collection_entries(value, document, section)
+    if descriptor.shape == NAMED_ENTITY:
+        if not isinstance(value, dict):
+            raise JsonDataError(f"命名内容文件根值必须是对象：{document.relative_path}")
+        identity = str(value.get("名称") or document.file_id).strip()
+        if not identity:
+            raise JsonDataError(f"命名内容文件缺少身份：{document.relative_path}")
+        return ((identity, value),)
+    raise JsonDataError(f"内容文档形态不受支持：{document.relative_path}")
 
 
-def _array_entries(
-    values: list[Any],
+def _numbered_entries(
+    value: Any,
     document: JsonDocument,
     section: str,
 ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
-    result = []
-    for index, raw in enumerate(values):
+    if not isinstance(value, list):
+        raise JsonDataError(
+            f"编号内容文件根值必须是数组：{document.relative_path} -> {section}"
+        )
+    result: list[tuple[str, Mapping[str, Any]]] = []
+    seen: set[str] = set()
+    for index, raw in enumerate(value):
         if not isinstance(raw, dict):
             raise JsonDataError(
                 f"内容对象必须是字典：{document.relative_path} -> {section}[{index}]"
@@ -183,11 +214,165 @@ def _array_entries(
             raise JsonDataError(
                 f"内容对象缺少编号：{document.relative_path} -> {section}[{index}]"
             )
+        if identity in seen:
+            raise JsonDataError(f"内容文件存在重复编号：{document.relative_path} -> {identity}")
+        seen.add(identity)
         result.append((identity, raw))
+    if not result:
+        raise JsonDataError(f"编号内容文件不能为空：{document.relative_path}")
     return tuple(result)
 
 
-__all__ = [
-    "GameDataLoader",
-    "LoadedGameData",
-]
+def _named_collection_entries(
+    value: Any,
+    document: JsonDocument,
+    section: str,
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    if not isinstance(value, dict) or not value:
+        raise JsonDataError(
+            f"命名内容集合必须是非空对象：{document.relative_path} -> {section}"
+        )
+    result = []
+    for identity, raw in value.items():
+        if not isinstance(raw, dict):
+            raise JsonDataError(
+                f"命名内容对象必须是字典：{document.relative_path} -> {section}.{identity}"
+            )
+        result.append((str(identity), raw))
+    return tuple(result)
+
+
+def _reference_pool(document: JsonDocument, section: str) -> PoolDefinition:
+    value = document.value
+    if not isinstance(value, list) or not value:
+        raise JsonDataError(f"引用池必须是非空字符串数组：{document.relative_path}")
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        raise JsonDataError(f"引用池包含无效成员：{document.relative_path}")
+    references = tuple(item.strip() for item in value)
+    if len(references) != len(set(references)):
+        raise JsonDataError(f"引用池包含重复成员：{document.relative_path}")
+    direct_flags = tuple(_looks_like_entity_id(item) for item in references)
+    if all(direct_flags):
+        return PoolDefinition(section=section, identities=references)
+    if any(direct_flags):
+        raise JsonDataError(f"引用池不能混用实体编号和源文件名：{document.relative_path}")
+    return PoolDefinition(section=section, source_files=references)
+
+
+def _validate_document_shape(document: JsonDocument) -> None:
+    shape = document.descriptor.shape
+    value = document.value
+    if shape == PLAIN_DOCUMENT:
+        return
+    if shape == OBJECT and not isinstance(value, dict):
+        raise JsonDataError(f"对象文档根值必须是对象：{document.relative_path}")
+    if shape == OBJECT_LIST and (
+        not isinstance(value, list) or any(not isinstance(item, dict) for item in value)
+    ):
+        raise JsonDataError(f"字典列表文档根值必须是字典数组：{document.relative_path}")
+    if shape == NAMED_ENTITY and not isinstance(value, dict):
+        raise JsonDataError(f"命名实体文档根值必须是对象：{document.relative_path}")
+
+
+def _validate_all_pools(loaded: LoadedGameData) -> None:
+    for file_id, pool in loaded.pool_definitions.items():
+        loaded.resolve_pool((file_id,), pool.section, deduplicate=False)
+
+
+def _validate_pool_references(loaded: LoadedGameData) -> None:
+    expected_sections = loaded.catalog.read_rules.pool_reference_sections
+    for document in loaded.catalog.documents:
+        if document.scope not in loaded.catalog.read_rules.pool_reference_scopes:
+            continue
+        for key, reference in _iter_pool_references(document.value):
+            expected = expected_sections.get(key)
+            if expected is None:
+                raise JsonDataError(
+                    f"未登记的资源池引用字段：{document.relative_path} -> {key}"
+                )
+            target = loaded.catalog.content_file(reference)
+            pool = loaded.pool_definitions.get(target.file_id)
+            if pool is None or pool.section != expected:
+                actual = pool.section if pool is not None else "非资源池"
+                raise JsonDataError(
+                    f"资源池引用类别错误：{document.relative_path} -> {key}={reference} "
+                    f"应为{expected}，实际为{actual}"
+                )
+
+
+def _validate_number_prefixes(
+    catalog: JsonDataCatalog,
+) -> None:
+    number_definition_path = catalog.read_rules.number_definition_path
+    number_definition = catalog.read(number_definition_path)
+    if not isinstance(number_definition, dict):
+        raise JsonDataError(f"编号定义没有加载：{number_definition_path}")
+    rule = number_definition.get("编号规则")
+    prefix_rows = number_definition.get("编号前缀")
+    if not isinstance(rule, dict) or not isinstance(prefix_rows, list):
+        raise JsonDataError("定义/编号.json 缺少编号规则或编号前缀")
+    digits = int(rule.get("位数") or 0)
+    prefix_digits = int(rule.get("前缀位数") or 0)
+    allowed: dict[str, set[str]] = {}
+    for row in prefix_rows:
+        if not isinstance(row, dict):
+            raise JsonDataError("定义/编号.json.编号前缀必须是字典数组")
+        prefix = str(row.get("前缀") or "")
+        category = str(row.get("类别") or "")
+        if not prefix or not category:
+            raise JsonDataError("定义/编号.json.编号前缀缺少前缀或类别")
+        allowed.setdefault(category, set()).add(prefix)
+    for document in catalog.documents:
+        descriptor = document.descriptor
+        if descriptor.shape != NUMBERED_ENTITY_LIST:
+            continue
+        category = descriptor.number_category
+        prefixes = allowed.get(category, set())
+        if not prefixes:
+            raise JsonDataError(f"定义/编号.json 没有登记{category}编号前缀")
+        for identity, _ in _numbered_entries(
+            document.value,
+            document,
+            descriptor.section,
+        ):
+            if len(identity) != digits or not identity.isdigit():
+                raise JsonDataError(
+                    f"{descriptor.section}编号不符合{digits}位数字规则：{identity}"
+                )
+            if identity[:prefix_digits] not in prefixes:
+                raise JsonDataError(
+                    f"{descriptor.section}编号前缀不属于{category}：{identity}"
+                )
+
+
+def _iter_pool_references(value: Any) -> tuple[tuple[str, str], ...]:
+    result: list[tuple[str, str]] = []
+
+    def visit(current: Any) -> None:
+        if isinstance(current, dict):
+            for raw_key, raw_value in current.items():
+                key = str(raw_key)
+                if key.endswith("池"):
+                    if isinstance(raw_value, str):
+                        result.append((key, raw_value))
+                    elif isinstance(raw_value, list) and all(
+                        isinstance(item, str) for item in raw_value
+                    ):
+                        result.extend((key, item) for item in raw_value)
+                    else:
+                        raise JsonDataError(f"资源池引用必须是文件名或文件名数组：{key}")
+                visit(raw_value)
+        elif isinstance(current, list):
+            for item in current:
+                visit(item)
+
+    visit(value)
+    return tuple(result)
+
+
+def _looks_like_entity_id(value: str) -> bool:
+    return len(value) == 6 and value.isdigit()
+
+
+def _entity_identity(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {str(key): raw for key, raw in value.items()}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-
 EXECUTOR_CATEGORIES = MappingProxyType(
     {
         "装配属性": frozenset({"装配"}),
@@ -74,6 +73,3 @@ EXECUTOR_CATEGORIES = MappingProxyType(
         "修改战术": frozenset({"效果"}),
     }
 )
-
-
-__all__ = ["EXECUTOR_CATEGORIES"]

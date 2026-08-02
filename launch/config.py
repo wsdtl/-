@@ -17,9 +17,9 @@
 import ast
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
-from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # 项目根目录。
@@ -412,10 +412,10 @@ def load_config() -> Config:
     )
 
     database = DatabaseConfig(
-        path=env.get_path("DATABASE_PATH", BASE_DIR / "data" / "game.db"),
+        path=env.get_path("DATABASE_PATH", BASE_DIR / ".runtime" / "game.db"),
         runtime_log_path=env.get_path(
             "RUNTIME_LOG_DATABASE_PATH",
-            BASE_DIR / "data" / "runtime_log.db",
+            BASE_DIR / ".runtime" / "runtime_log.db",
         ),
         busy_timeout_ms=int(env.get("DATABASE_BUSY_TIMEOUT_MS", "5000") or "5000"),
     )

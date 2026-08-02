@@ -641,6 +641,3 @@ def _status_display(value: Mapping[str, Any]) -> str:
 def _number(value: Any) -> str:
     number = round(float(value or 0), 2)
     return str(int(number)) if number.is_integer() else f"{number:.2f}".rstrip("0").rstrip(".")
-
-
-__all__ = ["build_battle_report_presentation"]

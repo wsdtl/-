@@ -7,17 +7,25 @@
 from __future__ import annotations
 
 import inspect
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterable, List
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
 from .log import C, logger
-from .on_event import OnEvent
-from .schedulers import Scheduler
 from .mount import AdapterMount, FastAPIMount
+from .on_event import OnEvent
 from .runtime_guard import runtime_guard
+from .schedulers import Scheduler
+
+
+class LifecycleCleanupError(RuntimeError):
+    """关闭阶段多项资源清理失败。"""
+
+    def __init__(self, message: str, errors: Iterable[Exception]) -> None:
+        self.errors = tuple(errors)
+        super().__init__(f"{message}（{len(self.errors)} 项）")
 
 
 @asynccontextmanager
@@ -28,26 +36,58 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     关闭：按优先级运行关闭回调、关闭适配器、关闭调度器。
     """
 
+    cleanup_errors: list[Exception] = []
     runtime_guard.acquire()
-    adapters = []
-    started = False
-
     try:
-        adapters = await _mount_app(app)
-        await _run_adapters(adapters)
-        await _start_schedulers()
-        await _add_scheduler_jobs()
-        await _run_callbacks(OnEvent.ordered_callbacks(OnEvent.connect_list))
-        started = True
+        async with AsyncExitStack() as cleanup:
+            cleanup.callback(
+                _capture_sync_cleanup,
+                "运行时单实例锁",
+                runtime_guard.release,
+                cleanup_errors,
+            )
 
-        logger.opt(colors=True).success(f"{C.ok('FastAPI 服务启动成功')}")
-        yield
-    finally:
-        callbacks = OnEvent.ordered_callbacks(OnEvent.disconnect_list) if started else []
-        try:
-            await _shutdown(callbacks, adapters)
-        finally:
-            runtime_guard.release()
+            adapters = await _mount_app(app)
+            for adapter in adapters:
+                cleanup.push_async_callback(
+                    _capture_cleanup,
+                    f"适配器 {adapter.__name__}",
+                    adapter.shutdown,
+                    cleanup_errors,
+                )
+                await adapter.run()
+
+            cleanup.push_async_callback(
+                _capture_cleanup,
+                "调度器",
+                _shutdown_schedulers,
+                cleanup_errors,
+            )
+            await _start_schedulers()
+            await _add_scheduler_jobs()
+
+            disconnect_callbacks = OnEvent.ordered_callbacks(OnEvent.disconnect_list)
+            cleanup.push_async_callback(
+                _capture_callbacks,
+                disconnect_callbacks,
+                cleanup_errors,
+            )
+            await _run_callbacks(OnEvent.ordered_callbacks(OnEvent.connect_list))
+
+            logger.opt(colors=True).success(f"{C.ok('FastAPI 服务启动成功')}")
+            yield
+    except Exception:
+        if cleanup_errors:
+            logger.opt(colors=True).error(
+                C.join(
+                    C.fail("服务异常退出时另有清理失败"),
+                    C.kv("count", len(cleanup_errors)),
+                )
+            )
+        raise
+
+    if cleanup_errors:
+        raise LifecycleCleanupError("服务关闭阶段存在清理失败", cleanup_errors)
 
 
 async def _mount_app(app: FastAPI) -> List[type]:
@@ -55,13 +95,6 @@ async def _mount_app(app: FastAPI) -> List[type]:
 
     await FastAPIMount(app)
     return await AdapterMount(app)
-
-
-async def _run_adapters(adapters: Iterable[type]) -> None:
-    """启动 Adapter，让它们整理自己的运行期索引。"""
-
-    for adapter in adapters:
-        await adapter.run()
 
 
 async def _start_schedulers() -> None:
@@ -117,39 +150,73 @@ async def _run_callbacks(callbacks: Iterable[Callable]) -> None:
     """按传入顺序运行启动/关闭回调。"""
 
     for callback in callbacks:
-        if inspect.iscoroutinefunction(callback):
-            await callback()
-        else:
-            callback()
-
-
-async def _shutdown(callbacks: Iterable[Callable], adapters: Iterable[type]) -> None:
-    """关闭阶段统一清理资源。"""
-
-    try:
-        await _run_callbacks(callbacks)
-    finally:
-        await _shutdown_adapters(adapters)
-        await _shutdown_schedulers()
-
-
-async def _shutdown_adapters(adapters: Iterable[type]) -> None:
-    """通知 Adapter 清理自己的后台任务和连接。"""
-
-    for adapter in adapters:
-        shutdown = getattr(adapter, "shutdown", None)
-        if shutdown is None:
-            continue
-
-        result = shutdown()
+        result = callback()
         if inspect.isawaitable(result):
             await result
+
+
+async def _capture_callbacks(
+    callbacks: Iterable[Callable], cleanup_errors: list[Exception]
+) -> None:
+    """逐个关闭业务服务；单项失败不能阻断后续清理。"""
+
+    for callback in callbacks:
+        await _capture_cleanup(
+            f"业务关闭回调 {callback.__module__}.{callback.__name__}",
+            callback,
+            cleanup_errors,
+        )
+
+
+async def _capture_cleanup(
+    label: str,
+    callback: Callable,
+    cleanup_errors: list[Exception],
+) -> None:
+    """执行一项同步或异步清理并保存异常。"""
+
+    try:
+        result = callback()
+        if inspect.isawaitable(result):
+            await result
+    except Exception as exc:
+        cleanup_errors.append(exc)
+        logger.opt(colors=True, exception=exc).error(
+            C.join(C.fail("服务清理失败"), C.kv("target", label))
+        )
+
+
+def _capture_sync_cleanup(
+    label: str,
+    callback: Callable[[], None],
+    cleanup_errors: list[Exception],
+) -> None:
+    """执行必须保持同步的清理动作并保存异常。"""
+
+    try:
+        callback()
+    except Exception as exc:
+        cleanup_errors.append(exc)
+        logger.opt(colors=True, exception=exc).error(
+            C.join(C.fail("服务清理失败"), C.kv("target", label))
+        )
 
 
 async def _shutdown_schedulers() -> None:
     """关闭调度器，避免热重载或退出时留下后台线程/任务。"""
 
-    if Scheduler.syncinstance.running:
-        Scheduler.syncinstance.shutdown(wait=False)
-    if Scheduler.asyncinstance.running:
-        Scheduler.asyncinstance.shutdown(wait=False)
+    errors: list[Exception] = []
+    for name, scheduler in (
+        ("同步调度器", Scheduler.syncinstance),
+        ("异步调度器", Scheduler.asyncinstance),
+    ):
+        try:
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+        except Exception as exc:
+            errors.append(exc)
+            logger.opt(colors=True, exception=exc).error(
+                C.join(C.fail("调度器关闭失败"), C.kv("target", name))
+            )
+    if errors:
+        raise LifecycleCleanupError("调度器关闭失败", errors)

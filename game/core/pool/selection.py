@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from math import log
 import random
 from collections.abc import Sequence
+from math import log
 from typing import TypeVar
-
 
 T = TypeVar("T")
 
@@ -54,6 +53,3 @@ def _inverse_weighted_index(rng: random.Random, weights: Sequence[int]) -> int:
         for weight in weights
     )
     return min(range(len(priorities)), key=priorities.__getitem__)
-
-
-__all__ = ["inverse_weighted_sample"]

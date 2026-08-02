@@ -564,6 +564,3 @@ class RuleSchemaValidator:
     @staticmethod
     def _unknown_fields(path: str, values: Iterable[str]) -> None:
         raise RuleSchemaError(f"{path}：规则不认识字段 " + "、".join(sorted(str(value) for value in values)))
-
-
-__all__ = ["RuleSchemaError", "RuleSchemaValidator"]

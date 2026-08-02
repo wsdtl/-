@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 import copy
 import math
+from collections.abc import Mapping
 from typing import Any
 
-from .models import BattleEvent, CombatObject, EventFrame, Fighter, Skill, StatusState
+from .contracts import BattleEvent
+from .models import CombatObject, EventFrame, Fighter, Skill, StatusState
 
 
 class MechanismRuntime:
@@ -236,6 +237,7 @@ class MechanismRuntime:
                 setattr(fighter, key, copy.deepcopy(value))
         context.left_team[:] = [current[value] for value in snapshot["left_ids"] if value in current]
         context.right_team[:] = [current[value] for value in snapshot["right_ids"] if value in current]
+        context.rebuild_indexes()
         context.records = copy.deepcopy(snapshot["records"])
         context.relations = copy.deepcopy(snapshot["relations"])
         context.combat_objects = copy.deepcopy(snapshot["objects"])
@@ -264,6 +266,87 @@ class MechanismRuntime:
     def _mechanism_listener(*_args, **_kwargs):
         return True
 
+    def _compiled_listeners(self, context):
+        """Compile listeners once per structural battle state.
+
+        Event dispatch used to rebuild and sort every passive, status,
+        object, and battle-rule listener for every event. The JSON contract
+        is unchanged; only the runtime lookup is indexed by event name.
+        """
+
+        if not context.listener_index_dirty:
+            return context.listener_index
+
+        listener_order = tuple(self.catalog.action_rules["被动技能结算"]["排序"])
+        grouped: dict[str, list[tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]]] = {}
+        participant_order = context.fighter_order
+
+        def add_listener(
+            owner: Fighter,
+            listener_id: str,
+            node: Mapping[str, Any],
+            *,
+            settlement_order: int = 1,
+            build_order: int = 0,
+            item_id: str = "",
+            ability_order: int = 0,
+            effect_order: int = 0,
+        ) -> None:
+            event_name = str(node.get("事件") or "")
+            if not event_name:
+                return
+            values = {
+                "监听优先级降序": -int(node.get("优先级", 0)),
+                "结算顺序升序": int(settlement_order),
+                "参战位序": participant_order.get(owner.id, len(participant_order)),
+                "装配位序": int(build_order),
+                "物品编号": str(item_id),
+                "能力序号": (int(ability_order), int(effect_order)),
+            }
+            key = tuple(values[field] for field in listener_order) + (str(listener_id),)
+            grouped.setdefault(event_name, []).append((key, owner, listener_id, node))
+
+        for owner in context.fighters:
+            for passive in owner.passives:
+                mechanism_id, node = self._passive_node(passive)
+                if self.catalog.parse_node(node).executor == "监听事件":
+                    add_listener(
+                        owner,
+                        mechanism_id,
+                        node,
+                        settlement_order=int(passive.get("结算顺序", 1)),
+                        build_order=int(passive.get("装配位序", 0)),
+                        item_id=str(passive.get("物品编号") or ""),
+                        ability_order=int(passive.get("能力序号", 0)),
+                        effect_order=int(passive.get("效果序号", 0)),
+                    )
+            for status in owner.statuses:
+                for index, node in enumerate(status.listeners):
+                    add_listener(owner, f"{status.name}:{index}", node, item_id=status.name, ability_order=index)
+        for obj in context.combat_objects.values():
+            if not obj.active:
+                continue
+            owner = context.fighter_by_id(obj.owner_id) or context.left
+            for index, node in enumerate(obj.listeners):
+                add_listener(owner, f"{obj.id}:{index}", node, item_id=obj.id, ability_order=index)
+        for index, rule in enumerate(context.battle_rules):
+            owner = context.fighter_by_id(str(rule.get("来源") or "")) or context.left
+            for listener_index, node in enumerate(rule.get("监听") or ()):
+                add_listener(
+                    owner,
+                    f"战场:{index}:{listener_index}",
+                    node,
+                    item_id=f"战场:{index}",
+                    ability_order=listener_index,
+                )
+
+        context.listener_index = {
+            event_name: tuple(sorted(values, key=lambda item: item[0]))
+            for event_name, values in grouped.items()
+        }
+        context.listener_index_dirty = False
+        return context.listener_index
+
     def _mechanism_reference(self, context, source, target, effect, multiplier, **kwargs):
         return self._execute_mechanism_reference(
             context, source, target, str(effect.get("机制") or ""), multiplier, **kwargs
@@ -273,7 +356,7 @@ class MechanismRuntime:
         depth_limit = int(self.catalog.action_rules.get("事件链深度上限", self.MAX_EVENT_DEPTH))
         if context.event_depth >= depth_limit:
             raise RuntimeError("战斗事件链超过安全深度")
-        contract = self.catalog.require_event(kind)
+        self.catalog.require_event(kind)
         facts = dict(values or {})
         facts.setdefault("事件", kind)
         facts.setdefault("来源", source.id)
@@ -285,71 +368,8 @@ class MechanismRuntime:
         context.event_stack.append(frame)
         context.event_depth += 1
         try:
-            listeners: list[tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]] = []
-            participant_order = {fighter.id: index for index, fighter in enumerate(context.fighters)}
-            listener_order = tuple(
-                self.catalog.action_rules["被动技能结算"]["排序"]
-            )
-
-            def add_listener(
-                owner: Fighter,
-                listener_id: str,
-                node: Mapping[str, Any],
-                *,
-                settlement_order: int = 1,
-                build_order: int = 0,
-                item_id: str = "",
-                ability_order: int = 0,
-                effect_order: int = 0,
-            ) -> None:
-                values = {
-                    "监听优先级降序": -int(node.get("优先级", 0)),
-                    "结算顺序升序": int(settlement_order),
-                    "参战位序": participant_order.get(owner.id, len(participant_order)),
-                    "装配位序": int(build_order),
-                    "物品编号": str(item_id),
-                    "能力序号": (int(ability_order), int(effect_order)),
-                }
-                key = tuple(values[field] for field in listener_order) + (str(listener_id),)
-                listeners.append((key, owner, listener_id, node))
-
-            for owner in context.fighters:
-                for passive in owner.passives:
-                    mechanism_id, node = self._passive_node(passive)
-                    if self.catalog.parse_node(node).executor == "监听事件":
-                        add_listener(
-                            owner,
-                            mechanism_id,
-                            node,
-                            settlement_order=int(passive.get("结算顺序", 1)),
-                            build_order=int(passive.get("装配位序", 0)),
-                            item_id=str(passive.get("物品编号") or ""),
-                            ability_order=int(passive.get("能力序号", 0)),
-                            effect_order=int(passive.get("效果序号", 0)),
-                        )
-                for status in owner.statuses:
-                    for index, node in enumerate(status.listeners):
-                        add_listener(owner, f"{status.name}:{index}", node, item_id=status.name, ability_order=index)
-            for obj in context.combat_objects.values():
-                if not obj.active:
-                    continue
-                owner = context.fighter_by_id(obj.owner_id) or source
-                for index, node in enumerate(obj.listeners):
-                    add_listener(owner, f"{obj.id}:{index}", node, item_id=obj.id, ability_order=index)
-            for index, rule in enumerate(context.battle_rules):
-                owner = context.fighter_by_id(str(rule.get("来源") or "")) or source
-                for listener_index, node in enumerate(rule.get("监听") or ()):
-                    add_listener(
-                        owner,
-                        f"战场:{index}:{listener_index}",
-                        node,
-                        item_id=f"战场:{index}",
-                        ability_order=listener_index,
-                    )
-            listeners.sort(key=lambda item: item[0])
+            listeners = self._compiled_listeners(context).get(kind, ())
             for _, owner, listener_id, node in listeners:
-                if str(node.get("事件") or "") != kind:
-                    continue
                 if not self._listener_relation_matches(context, owner, frame, node):
                     continue
                 if not self._conditions_allow(
@@ -724,6 +744,7 @@ class MechanismRuntime:
             mode = str(definition.get("重复方式") or "刷新持续")
             if existing is None:
                 destination.statuses.append(status)
+                context.mark_listener_index_dirty()
             elif mode == "不叠加":
                 continue
             elif mode == "增加层数":
@@ -759,11 +780,13 @@ class MechanismRuntime:
                     status.stacks -= consume
                     if status.stacks <= 0 and status in target.statuses:
                         target.statuses.remove(status)
+                        context.mark_listener_index_dirty()
                 generated = reaction.get("生成状态")
                 if isinstance(generated, Mapping):
                     value = copy.deepcopy(dict(generated))
                     value["来源"] = source.id
                     target.statuses.append(StatusState.from_dict(value))
+                    context.mark_listener_index_dirty()
                 self._run_effects(context, source, target, reaction.get("效果") or (), multiplier)
                 self._dispatch_event(
                     context,
@@ -812,6 +835,7 @@ class MechanismRuntime:
                 continue
             if status in owner.statuses:
                 owner.statuses.remove(status)
+                context.mark_listener_index_dirty()
                 self._dispatch_event(context, kind="移除状态后", source=source, target=owner, values={"状态": status.name, "状态层数": status.stacks}, tags=status.tags)
                 removed = True
         return removed
@@ -831,6 +855,7 @@ class MechanismRuntime:
                 status.stacks = min(status.max_stacks, before + amount)
             if status.stacks <= 0 and status in owner.statuses:
                 owner.statuses.remove(status)
+                context.mark_listener_index_dirty()
             self._dispatch_event(context, kind="状态层数变化后", source=source, target=owner, values={"状态": status.name, "变化前数值": before, "变化后数值": status.stacks})
         return True
 
@@ -863,6 +888,7 @@ class MechanismRuntime:
                 receiver = frame.target
                 copied.tags = tuple(frame.tags - {"复制"})
                 receiver.statuses.append(copied)
+                context.mark_listener_index_dirty()
                 self._dispatch_event(
                     context,
                     kind="添加状态后",
@@ -881,6 +907,7 @@ class MechanismRuntime:
         for owner, status in pairs:
             owner.statuses.remove(status)
             receivers[0].statuses.append(status)
+            context.mark_listener_index_dirty()
         return True
 
     def _mechanism_modify_action_progress(self, context, source, target, effect, multiplier, cost=False, **_):
@@ -1187,6 +1214,8 @@ class MechanismRuntime:
             before = len(context.battle_rules)
             context.battle_rules[:] = [rule for rule in context.battle_rules if str(rule.get("名称") or "") != name]
             changed = before != len(context.battle_rules)
+            if changed:
+                context.mark_listener_index_dirty()
         else:
             definition = copy.deepcopy(dict(effect.get("规则") or {}))
             unknown = set(definition) - {"监听"}
@@ -1198,6 +1227,7 @@ class MechanismRuntime:
                 "来源": source.id,
                 "来源退场时移除": bool(effect.get("来源退场时移除", False)),
             })
+            context.mark_listener_index_dirty()
             changed = True
         self._dispatch_event(context, kind="战场规则变化后", source=source, target=source, values={"规则": name, "方式": mode})
         return changed
@@ -1275,6 +1305,7 @@ class MechanismRuntime:
         else:
             obj = CombatObject(object_id, name, kind, side, source.id, int(definition.get("持续行动", 0)), float(definition.get("耐久", 0)), list(copy.deepcopy(definition.get("监听") or ())), copy.deepcopy(dict(definition.get("记录") or {})), set(str(value) for value in definition.get("标签") or ()))
             context.combat_objects[object_id] = obj
+            context.mark_listener_index_dirty()
             durability = max(1.0, obj.health or 1.0)
             fighter = Fighter(
                 id=object_id,
@@ -1312,6 +1343,7 @@ class MechanismRuntime:
         obj = context.combat_objects.pop(identity, None)
         if obj is not None:
             obj.active = False
+            context.mark_listener_index_dirty()
         if not fighter.active and obj is None:
             return False
         fighter.active = False
@@ -1331,6 +1363,7 @@ class MechanismRuntime:
             expired = [status for status in fighter.statuses if status.expire_with_source and status.source == source.id]
             for status in expired:
                 fighter.statuses.remove(status)
+                context.mark_listener_index_dirty()
                 self._dispatch_event(
                     context,
                     kind="移除状态后",
@@ -1345,6 +1378,7 @@ class MechanismRuntime:
         ]
         if removed_rules:
             context.battle_rules[:] = [rule for rule in context.battle_rules if rule not in removed_rules]
+            context.mark_listener_index_dirty()
             for rule in removed_rules:
                 self._dispatch_event(
                     context,
@@ -1369,6 +1403,7 @@ class MechanismRuntime:
                 old_team.remove(destination)
                 new_team.append(destination)
                 destination.side = new_side
+                context.rebuild_indexes()
                 if destination.id in context.combat_objects:
                     context.combat_objects[destination.id].side = new_side
         elif field == "主人":
@@ -1720,6 +1755,3 @@ class MechanismRuntime:
     @staticmethod
     def _clamp(value, minimum, maximum):
         return min(float(maximum), max(float(minimum), float(value)))
-
-
-__all__ = ["MechanismRuntime"]

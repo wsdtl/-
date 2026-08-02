@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-import random
 from typing import Any, Callable
 
 from .models import Fighter
@@ -356,6 +356,3 @@ class DamageEngine:
     @staticmethod
     def _clamp(value: float, minimum: float, maximum: float) -> float:
         return min(maximum, max(minimum, float(value)))
-
-
-__all__ = ["DamageBreakdown", "DamageEngine", "DamageRequest", "DamageResolution"]

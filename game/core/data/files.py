@@ -1,39 +1,129 @@
-"""运行期按文件名读取 data 目录中的 JSON。"""
+"""按 JSON 读取规则注册全部正式数据文件。"""
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
+from .contracts import JsonDataError
 
-class JsonDataError(ValueError):
-    """请求的数据文件不存在、越界或不是合法 JSON。"""
+ROUTING_RULES_PATH = Path("定义") / "数据读取规则.json"
+
+PLAIN_DOCUMENT = "普通文档"
+OBJECT = "对象"
+OBJECT_LIST = "字典列表"
+NUMBERED_ENTITY_LIST = "编号实体列表"
+NAMED_ENTITY_MAP = "命名实体字典"
+NAMED_ENTITY = "命名实体"
+REFERENCE_POOL = "引用池"
+
+DOCUMENT_SHAPES = frozenset(
+    {
+        PLAIN_DOCUMENT,
+        OBJECT,
+        OBJECT_LIST,
+        NUMBERED_ENTITY_LIST,
+        NAMED_ENTITY_MAP,
+        NAMED_ENTITY,
+        REFERENCE_POOL,
+    }
+)
+ENTITY_SHAPES = frozenset(
+    {NUMBERED_ENTITY_LIST, NAMED_ENTITY_MAP, NAMED_ENTITY, REFERENCE_POOL}
+)
 
 
-DATA_SCOPES = ("定义", "规则", "内容", "展示")
-POOL_SECTIONS = frozenset({"道侣", "敌人", "物品", "功法", "附魔", "宝石", "机制"})
+@dataclass(frozen=True)
+class ReadRule:
+    """一条由 JSON 声明的文件匹配与交付规则。"""
+
+    dataset: str
+    pattern: str
+    shape: str
+    matcher: re.Pattern[str]
+    data_name: str = ""
+    section: str = ""
+    number_category: str = ""
+    source_pool: bool = False
+    filename_matches_parent: bool = False
+
+    def matches(self, relative_path: str, file_id: str) -> bool:
+        if self.matcher.fullmatch(relative_path) is None:
+            return False
+        parent = relative_path.rsplit("/", 2)[-2] if "/" in relative_path else ""
+        return not self.filename_matches_parent or file_id == parent
+
+
+@dataclass(frozen=True)
+class DataReadRules:
+    """读取器启动所需的最小 JSON 引导契约。"""
+
+    scopes: tuple[str, ...]
+    rules: tuple[ReadRule, ...]
+    rules_by_scope: MappingProxyType
+    number_definition_path: str
+    file_reference_scopes: frozenset[str]
+    pool_reference_scopes: frozenset[str]
+    pool_reference_sections: MappingProxyType
+
+    def descriptor(self, relative_path: str, file_id: str) -> DocumentDescriptor:
+        scope = relative_path.partition("/")[0]
+        candidates = self.rules_by_scope.get(scope, ())
+        matches = tuple(
+            rule for rule in candidates if rule.matches(relative_path, file_id)
+        )
+        if not matches:
+            raise JsonDataError(f"数据文件没有匹配的读取规则：{relative_path}")
+        if len(matches) > 1:
+            patterns = "、".join(rule.pattern for rule in matches)
+            raise JsonDataError(f"数据文件匹配多条读取规则：{relative_path} -> {patterns}")
+        rule = matches[0]
+        return DocumentDescriptor(
+            dataset=rule.dataset,
+            data_name=rule.data_name or file_id,
+            shape=rule.shape,
+            section=rule.section,
+            number_category=rule.number_category,
+            source_pool=rule.source_pool,
+        )
+
+
+@dataclass(frozen=True)
+class DocumentDescriptor:
+    """由读取规则赋予文档的交付身份与通用结构。"""
+
+    dataset: str
+    data_name: str
+    shape: str
+    section: str = ""
+    number_category: str = ""
+    source_pool: bool = False
 
 
 @dataclass(frozen=True)
 class JsonDocument:
-    """一份已经严格解析、但尚未进入玩法执行的 JSON 文档。"""
+    """一份已经严格解析并匹配读取规则的 JSON 文档。"""
 
     relative_path: str
     scope: str
     file_id: str
     value: Any
+    descriptor: DocumentDescriptor
 
 
 @dataclass(frozen=True)
 class JsonDataCatalog:
-    """按定义、规则、内容、展示分阶段注册后的只读数据目录。"""
+    """按路径、数据集和内容文件名注册后的只读文档目录。"""
 
     documents: tuple[JsonDocument, ...]
     by_path: MappingProxyType
+    by_dataset: MappingProxyType
     content_by_file: MappingProxyType
+    read_rules: DataReadRules
 
     def read(self, relative_path: str | Path) -> Any:
         key = _path_key(relative_path)
@@ -42,56 +132,40 @@ class JsonDataCatalog:
             raise JsonDataError(f"数据文件没有注册：{relative_path}")
         return document.value
 
+    def dataset(self, name: str) -> tuple[JsonDocument, ...]:
+        key = str(name or "").strip()
+        if not key:
+            raise JsonDataError("数据集名称不能为空")
+        documents = self.by_dataset.get(key)
+        if documents is None:
+            raise JsonDataError(f"数据集不存在：{key}")
+        return documents
+
     def content_file(self, file_id: str) -> JsonDocument:
         key = str(file_id or "").strip().removesuffix(".json").casefold()
         if not key:
-            raise JsonDataError("资源池文件名不能为空")
+            raise JsonDataError("内容文件名不能为空")
         document = self.content_by_file.get(key)
         if document is None:
-            raise JsonDataError(f"资源池文件不存在：{file_id}.json")
+            raise JsonDataError(f"内容文件不存在：{file_id}.json")
         return document
-
-    def expand_pool(
-        self,
-        file_ids: list[str] | tuple[str, ...],
-        section: str,
-        *,
-        deduplicate: bool,
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
-        """按文件顺序展开对象池，可选择保留重复项或按实体身份去重。"""
-
-        section_name = str(section or "").strip()
-        if section_name not in POOL_SECTIONS:
-            raise JsonDataError(f"不支持的资源池集合：{section_name or '<空>'}")
-        result: list[tuple[str, dict[str, Any]]] = []
-        seen: set[str] = set()
-        for file_id in file_ids:
-            document = self.content_file(str(file_id))
-            for identity, value in _pool_entries(document, section_name):
-                if deduplicate and identity in seen:
-                    continue
-                seen.add(identity)
-                result.append((identity, value))
-        if not result:
-            joined = "、".join(str(value) for value in file_ids) or "<空>"
-            raise JsonDataError(f"资源池为空：{joined} -> {section_name}")
-        return tuple(result)
 
 
 class JsonDataReader:
-    """启动时一次性严格解析全部正式 JSON。"""
+    """先读取固定引导文件，再按其中规则解析全部正式 JSON。"""
 
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).expanduser().resolve()
 
     def load_catalog(self) -> JsonDataCatalog:
-        """一次解析正式数据目录，并建立路径注册表和内容文件名注册表。"""
-
+        read_rules = self._load_read_rules()
         documents: list[JsonDocument] = []
         by_path: dict[str, JsonDocument] = {}
+        by_dataset: dict[str, list[JsonDocument]] = {}
+        dataset_names: dict[str, dict[str, str]] = {}
         content_by_file: dict[str, JsonDocument] = {}
         content_sources: dict[str, str] = {}
-        for scope in DATA_SCOPES:
+        for scope in read_rules.scopes:
             directory = self.root / scope
             if not directory.is_dir():
                 raise JsonDataError(f"数据目录不存在：{scope}")
@@ -101,31 +175,54 @@ class JsonDataReader:
             )
             for path in files:
                 relative_path = path.relative_to(self.root).as_posix()
+                value = self._read_path(path, relative_path)
+                descriptor = read_rules.descriptor(relative_path, path.stem)
                 document = JsonDocument(
                     relative_path=relative_path,
                     scope=scope,
                     file_id=path.stem,
-                    value=self._read_path(path, relative_path),
+                    value=value,
+                    descriptor=descriptor,
                 )
-                key = relative_path.casefold()
-                if key in by_path:
+                path_key = relative_path.casefold()
+                if path_key in by_path:
                     raise JsonDataError(f"数据文件路径重复：{relative_path}")
-                by_path[key] = document
+                by_path[path_key] = document
                 documents.append(document)
-                if scope == "内容":
-                    file_key = path.stem.casefold()
-                    previous = content_sources.get(file_key)
-                    if previous is not None:
-                        raise JsonDataError(
-                            f"内容文件名重复 {path.name}：{previous} 与 {relative_path}"
-                        )
-                    content_sources[file_key] = relative_path
-                    content_by_file[file_key] = document
+                names = dataset_names.setdefault(descriptor.dataset, {})
+                previous_name = names.get(descriptor.data_name)
+                if previous_name is not None:
+                    raise JsonDataError(
+                        f"数据集 {descriptor.dataset} 的数据名重复 "
+                        f"{descriptor.data_name}：{previous_name} 与 {relative_path}"
+                    )
+                names[descriptor.data_name] = relative_path
+                by_dataset.setdefault(descriptor.dataset, []).append(document)
+                if scope not in read_rules.file_reference_scopes:
+                    continue
+                file_key = path.stem.casefold()
+                previous = content_sources.get(file_key)
+                if previous is not None:
+                    raise JsonDataError(
+                        f"内容文件名重复 {path.name}：{previous} 与 {relative_path}"
+                    )
+                content_sources[file_key] = relative_path
+                content_by_file[file_key] = document
         return JsonDataCatalog(
             documents=tuple(documents),
             by_path=MappingProxyType(by_path),
+            by_dataset=MappingProxyType(
+                {name: tuple(values) for name, values in by_dataset.items()}
+            ),
             content_by_file=MappingProxyType(content_by_file),
+            read_rules=read_rules,
         )
+
+    def _load_read_rules(self) -> DataReadRules:
+        path = self.root / ROUTING_RULES_PATH
+        relative_path = ROUTING_RULES_PATH.as_posix()
+        value = self._read_path(path, relative_path)
+        return _parse_read_rules(value, relative_path)
 
     @staticmethod
     def _read_path(path: Path, display_path: str) -> Any:
@@ -134,6 +231,198 @@ class JsonDataReader:
             return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
         except (OSError, json.JSONDecodeError, JsonDataError) as exc:
             raise JsonDataError(f"数据文件读取失败：{display_path}：{exc}") from exc
+
+
+def _parse_read_rules(value: Any, path: str) -> DataReadRules:
+    if not isinstance(value, dict):
+        raise JsonDataError(f"数据读取规则根值必须是对象：{path}")
+    unknown = set(value) - {
+        "作用域",
+        "编号定义",
+        "文件名引用作用域",
+        "资源池引用作用域",
+        "资源池引用",
+        "读取规则",
+    }
+    if unknown:
+        raise JsonDataError(f"数据读取规则存在未知字段：{'、'.join(sorted(unknown))}")
+    scopes = _nonempty_unique_strings(value.get("作用域"), "作用域")
+    number_definition_path = _required_string(
+        value.get("编号定义"),
+        "数据读取规则.编号定义",
+    )
+    file_reference_scopes = _declared_scopes(
+        value.get("文件名引用作用域"),
+        "文件名引用作用域",
+        scopes,
+    )
+    pool_reference_scopes = _declared_scopes(
+        value.get("资源池引用作用域"),
+        "资源池引用作用域",
+        scopes,
+    )
+    pool_references = value.get("资源池引用")
+    if not isinstance(pool_references, dict) or not pool_references:
+        raise JsonDataError("数据读取规则.资源池引用必须是非空对象")
+    reference_sections: dict[str, str] = {}
+    for key, section in pool_references.items():
+        field = str(key or "").strip()
+        target = str(section or "").strip()
+        if not field.endswith("池") or not target:
+            raise JsonDataError("资源池引用必须使用以“池”结尾的字段名和非空实体类别")
+        reference_sections[field] = target
+    rows = value.get("读取规则")
+    if not isinstance(rows, list) or not rows:
+        raise JsonDataError("数据读取规则.读取规则必须是非空字典数组")
+    rules: list[ReadRule] = []
+    patterns: set[str] = set()
+    for index, row in enumerate(rows):
+        rule = _parse_read_rule(row, index, scopes)
+        if rule.pattern in patterns:
+            raise JsonDataError(f"数据读取规则存在重复路径：{rule.pattern}")
+        patterns.add(rule.pattern)
+        rules.append(rule)
+    bootstrap = ROUTING_RULES_PATH.as_posix()
+    if sum(rule.matches(bootstrap, ROUTING_RULES_PATH.stem) for rule in rules) != 1:
+        raise JsonDataError(f"数据读取规则必须唯一匹配自身：{bootstrap}")
+    number_file_id = PurePosixPath(number_definition_path).stem
+    if sum(rule.matches(number_definition_path, number_file_id) for rule in rules) != 1:
+        raise JsonDataError(f"编号定义必须唯一匹配读取规则：{number_definition_path}")
+    by_scope: dict[str, list[ReadRule]] = {scope: [] for scope in scopes}
+    for rule in rules:
+        by_scope[PurePosixPath(rule.pattern).parts[0]].append(rule)
+    return DataReadRules(
+        scopes=scopes,
+        rules=tuple(rules),
+        rules_by_scope=MappingProxyType(
+            {scope: tuple(values) for scope, values in by_scope.items()}
+        ),
+        number_definition_path=number_definition_path,
+        file_reference_scopes=file_reference_scopes,
+        pool_reference_scopes=pool_reference_scopes,
+        pool_reference_sections=MappingProxyType(reference_sections),
+    )
+
+
+def _parse_read_rule(
+    value: Any,
+    index: int,
+    scopes: tuple[str, ...],
+) -> ReadRule:
+    path = f"数据读取规则.读取规则[{index}]"
+    if not isinstance(value, dict):
+        raise JsonDataError(f"{path}必须是对象")
+    allowed = {
+        "数据集",
+        "数据名",
+        "路径",
+        "文档形态",
+        "实体类别",
+        "编号类别",
+        "建立同名池",
+        "文件名等于父目录",
+    }
+    unknown = set(value) - allowed
+    if unknown:
+        raise JsonDataError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
+    dataset = _required_string(value.get("数据集"), f"{path}.数据集")
+    pattern = _required_string(value.get("路径"), f"{path}.路径")
+    shape = _required_string(value.get("文档形态"), f"{path}.文档形态")
+    data_name = _optional_string(value.get("数据名"), f"{path}.数据名")
+    section = _optional_string(value.get("实体类别"), f"{path}.实体类别")
+    number_category = _optional_string(value.get("编号类别"), f"{path}.编号类别")
+    source_pool = _optional_bool(value.get("建立同名池", False), f"{path}.建立同名池")
+    filename_matches_parent = _optional_bool(
+        value.get("文件名等于父目录", False),
+        f"{path}.文件名等于父目录",
+    )
+    pattern_path = PurePosixPath(pattern)
+    if pattern_path.is_absolute() or ".." in pattern_path.parts:
+        raise JsonDataError(f"{path}.路径必须是 data 内相对路径")
+    if not pattern.endswith(".json") or not pattern_path.parts:
+        raise JsonDataError(f"{path}.路径必须指向 JSON 文件")
+    if pattern_path.parts[0] not in scopes:
+        raise JsonDataError(f"{path}.路径不属于已声明作用域：{pattern}")
+    if any(character in pattern for character in "?[]"):
+        raise JsonDataError(f"{path}.路径只允许使用 * 通配符")
+    if shape not in DOCUMENT_SHAPES:
+        raise JsonDataError(f"{path}.文档形态不受支持：{shape}")
+    if shape in ENTITY_SHAPES and not section:
+        raise JsonDataError(f"{path}.实体类别不能为空")
+    if shape not in ENTITY_SHAPES and section:
+        raise JsonDataError(f"{path}的文档形态不能声明实体类别")
+    if shape == NUMBERED_ENTITY_LIST and not number_category:
+        raise JsonDataError(f"{path}.编号类别不能为空")
+    if shape != NUMBERED_ENTITY_LIST and number_category:
+        raise JsonDataError(f"{path}的文档形态不能声明编号类别")
+    if source_pool and shape not in {
+        NUMBERED_ENTITY_LIST,
+        NAMED_ENTITY_MAP,
+        NAMED_ENTITY,
+    }:
+        raise JsonDataError(f"{path}的文档形态不能建立同名池")
+    return ReadRule(
+        dataset=dataset,
+        pattern=pattern,
+        shape=shape,
+        matcher=_compile_path_pattern(pattern),
+        data_name=data_name,
+        section=section,
+        number_category=number_category,
+        source_pool=source_pool,
+        filename_matches_parent=filename_matches_parent,
+    )
+
+
+def _nonempty_unique_strings(value: Any, path: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise JsonDataError(f"数据读取规则.{path}必须是非空字符串数组")
+    result = tuple(_required_string(item, f"数据读取规则.{path}") for item in value)
+    if len(result) != len(set(result)):
+        raise JsonDataError(f"数据读取规则.{path}不能重复")
+    if any("/" in item or "\\" in item or item in {".", ".."} for item in result):
+        raise JsonDataError(f"数据读取规则.{path}只能包含目录名称")
+    return result
+
+
+def _declared_scopes(
+    value: Any,
+    path: str,
+    scopes: tuple[str, ...],
+) -> frozenset[str]:
+    result = frozenset(_nonempty_unique_strings(value, path))
+    unknown = result - set(scopes)
+    if unknown:
+        raise JsonDataError(
+            f"数据读取规则.{path}包含未声明作用域：{'、'.join(sorted(unknown))}"
+        )
+    return result
+
+
+def _required_string(value: Any, path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise JsonDataError(f"{path}必须是非空字符串")
+    return value.strip()
+
+
+def _optional_string(value: Any, path: str) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise JsonDataError(f"{path}必须是字符串")
+    return value.strip()
+
+
+def _optional_bool(value: Any, path: str) -> bool:
+    if not isinstance(value, bool):
+        raise JsonDataError(f"{path}必须是布尔值")
+    return value
+
+
+def _compile_path_pattern(pattern: str) -> re.Pattern[str]:
+    expression = re.escape(pattern).replace(r"\*", "[^/]*")
+    return re.compile(expression)
+
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
@@ -149,80 +438,3 @@ def _path_key(relative_path: str | Path) -> str:
     if value.suffix.lower() != ".json":
         value = value.with_suffix(".json")
     return value.as_posix().casefold()
-
-
-def _pool_entries(
-    document: JsonDocument,
-    section: str,
-) -> tuple[tuple[str, dict[str, Any]], ...]:
-    actual_section = content_section(document)
-    if actual_section != section:
-        raise JsonDataError(
-            f"资源池集合不匹配：{document.relative_path} 是 "
-            f"{actual_section or '未知内容'}，不是 {section}"
-        )
-    root = document.value
-    result: list[tuple[str, dict[str, Any]]] = []
-    if isinstance(root, list):
-        for index, raw in enumerate(root):
-            if not isinstance(raw, dict):
-                raise JsonDataError(
-                    f"资源池对象必须是字典：{document.relative_path} -> {section}[{index}]"
-                )
-            identity = str(raw.get("编号") or "").strip()
-            if not identity:
-                raise JsonDataError(
-                    f"资源池对象缺少编号：{document.relative_path} -> {section}[{index}]"
-                )
-            result.append((identity, raw))
-    elif isinstance(root, dict):
-        for raw_key, raw in root.items():
-            if not isinstance(raw, dict):
-                raise JsonDataError(
-                    f"资源池对象必须是字典：{document.relative_path} -> {section}.{raw_key}"
-                )
-            result.append((str(raw_key), raw))
-    else:
-        raise JsonDataError(
-            f"资源池根值必须是数组或对象：{document.relative_path} -> {section}"
-        )
-    return tuple(result)
-
-
-def content_section(document: JsonDocument) -> str | None:
-    """内容文件的稳定名称就是类别声明，JSON 根值不重复包装类别。"""
-
-    if document.scope != "内容":
-        return None
-    file_id = document.file_id
-    parts = PurePosixPath(document.relative_path).parts
-    if file_id == "地图规则":
-        return "世界"
-    if file_id.endswith("道侣"):
-        return "道侣"
-    if file_id.endswith("敌人"):
-        return "敌人"
-    if file_id.startswith("功法-"):
-        return "功法"
-    if file_id.startswith("物品-附魔-"):
-        return "附魔"
-    if file_id.startswith("物品-宝石-"):
-        return "宝石"
-    if file_id.startswith("物品-"):
-        return "物品"
-    if "战斗机制" in parts:
-        return "机制"
-    if len(parts) >= 4 and parts[1] == "世界" and file_id == parts[-2]:
-        return "区域" if len(parts) == 4 else "地点"
-    return None
-
-
-__all__ = [
-    "DATA_SCOPES",
-    "JsonDataCatalog",
-    "JsonDataError",
-    "JsonDataReader",
-    "JsonDocument",
-    "POOL_SECTIONS",
-    "content_section",
-]

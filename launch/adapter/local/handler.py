@@ -13,8 +13,8 @@ from launch.message_events import emit_message_event, event_from_incoming
 from ..base_handler import BaseMessageHandler
 from ..command_guard import CommandGuardContext, run_command_guards
 from ..context import (
-    AdapterCapabilities,
     CONVERSATION_PRIVATE,
+    AdapterCapabilities,
     MessageContext,
     ReplyTarget,
     reset_current_message_context,
@@ -24,8 +24,8 @@ from ..depends import call_with_dependencies
 from .event import LocalCommandEvent, local_command_event, local_message_identity
 from .manager import LocalDispatchResult, current_event, manager
 
-
-Command = Union[str, Pattern]
+TextCommands = Union[str, List[str], Tuple[str, ...]]
+RegexCommands = Union[Pattern, List[Pattern], Tuple[Pattern, ...]]
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,8 @@ class LocalEventHandler(BaseMessageHandler):
         active_push=False,
     )
 
-    exact_rules: dict[str, list[LocalCommandRule]] = {}
+    command_rules: dict[str, list[LocalCommandRule]] = {}
+    fullmatch_rules: dict[str, list[LocalCommandRule]] = {}
     regex_rules: dict[str, list[LocalCommandRule]] = {}
     regex_fallback: list[LocalCommandRule] = []
     regex_prefix_lengths: Set[int] = set()
@@ -128,24 +129,19 @@ class LocalEventHandler(BaseMessageHandler):
                     C.join(
                         C.warn("本地消息未命中命令"),
                         C.kv("client", event.client_id or "-"),
-                        C.kv("message", LocalEventHandler._short_text(event.raw_message)),
+                        C.kv(
+                            "message", LocalEventHandler._short_text(event.raw_message)
+                        ),
                     )
                 )
                 return result
 
-            if await LocalEventHandler._guard_blocked(matched[0], event):
+            execution_plan = LocalEventHandler._execution_plan(matched)
+            if await LocalEventHandler._guards_blocked(execution_plan, event):
                 return result
 
-            block_priority = None
-            for item in matched:
-                rule = item.rule
-                if block_priority is not None and rule.priority < block_priority:
-                    break
-
+            for item in execution_plan:
                 await LocalEventHandler._call_rule(item, event)
-
-                if rule.block:
-                    block_priority = rule.priority
 
             return result
         finally:
@@ -154,7 +150,7 @@ class LocalEventHandler(BaseMessageHandler):
 
     @staticmethod
     async def _guard_blocked(item: LocalCommandMatch, event: LocalCommandEvent) -> bool:
-        """命中业务回调前执行一次命令守卫。"""
+        """执行一条待调用规则自己的命令守卫。"""
 
         message_context = LocalEventHandler._message_context(item, event)
         context_token = set_current_message_context(message_context)
@@ -176,22 +172,96 @@ class LocalEventHandler(BaseMessageHandler):
             reset_current_message_context(context_token)
 
     @staticmethod
-    def handler(
-        cmd: Union[Command, List[Command]],
+    def _execution_plan(
+        matched: list[LocalCommandMatch],
+    ) -> list[LocalCommandMatch]:
+        """按 block 规则截取本次消息真正可能执行的回调。"""
+
+        planned: list[LocalCommandMatch] = []
+        block_priority: int | None = None
+        for item in matched:
+            if block_priority is not None and item.rule.priority < block_priority:
+                break
+            planned.append(item)
+            if item.rule.block:
+                block_priority = item.rule.priority
+        return planned
+
+    @staticmethod
+    async def _guards_blocked(
+        items: list[LocalCommandMatch], event: LocalCommandEvent
+    ) -> bool:
+        """先校验全部待执行回调，避免守卫失败前出现部分业务副作用。"""
+
+        for item in items:
+            if await LocalEventHandler._guard_blocked(item, event):
+                return True
+        return False
+
+    @staticmethod
+    def fullmatch(
+        cmd: TextCommands,
         priority: int = 0,
         block: bool = False,
         metadata: dict[str, Any] | None = None,
     ) -> Callable:
-        """注册本地命令处理函数。"""
+        """注册完整消息回调。"""
+
+        return LocalEventHandler._callback_wrapper(
+            LocalEventHandler._normalize_text_commands(cmd),
+            LocalEventHandler._register_fullmatch_command,
+            priority,
+            block,
+            metadata,
+        )
+
+    @staticmethod
+    def command(
+        cmd: TextCommands,
+        priority: int = 0,
+        block: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable:
+        """注册命令词加参数回调。"""
+
+        return LocalEventHandler._callback_wrapper(
+            LocalEventHandler._normalize_text_commands(cmd),
+            LocalEventHandler._register_command,
+            priority,
+            block,
+            metadata,
+        )
+
+    @staticmethod
+    def regex(
+        cmd: RegexCommands,
+        priority: int = 0,
+        block: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable:
+        """注册完整消息正则回调。"""
+
+        return LocalEventHandler._callback_wrapper(
+            LocalEventHandler._normalize_regex_commands(cmd),
+            LocalEventHandler._register_regex_command,
+            priority,
+            block,
+            metadata,
+        )
+
+    @staticmethod
+    def _callback_wrapper(
+        commands: list,
+        registrar: Callable,
+        priority: int,
+        block: bool,
+        metadata: dict[str, Any] | None,
+    ) -> Callable:
+        """把已校验的注册项绑定到业务回调。"""
 
         def wrapper(func: Callable) -> Callable:
-            for item in LocalEventHandler._normalize_commands(cmd):
-                if isinstance(item, str):
-                    LocalEventHandler._register_exact_command(item, func, priority, block, metadata)
-                elif isinstance(item, re.Pattern):
-                    LocalEventHandler._register_regex_command(item, func, priority, block, metadata)
-                else:
-                    raise TypeError("cmd 只支持 str、re.Pattern，或它们组成的 list/tuple/set")
+            for command in commands:
+                registrar(command, func, priority, block, metadata)
             return func
 
         return wrapper
@@ -200,22 +270,26 @@ class LocalEventHandler(BaseMessageHandler):
     async def _match_event(event: LocalCommandEvent) -> list[LocalCommandMatch]:
         """按本地消息正文匹配已注册命令。"""
 
-        command_text = event.raw_message.lstrip()
+        command_text = event.raw_message.strip()
         if not command_text:
             return []
 
-        command, message = LocalEventHandler._split_command(command_text)
         matched: list[LocalCommandMatch] = [
-            LocalCommandMatch(rule=rule, command=command, message=message)
-            for rule in LocalEventHandler.exact_rules.get(command, [])
+            LocalCommandMatch(rule=rule, command=command_text, message="")
+            for rule in LocalEventHandler.fullmatch_rules.get(command_text, [])
         ]
+        command, message = LocalEventHandler._split_command(command_text)
+        matched.extend(
+            LocalCommandMatch(rule=rule, command=command, message=message)
+            for rule in LocalEventHandler.command_rules.get(command, [])
+        )
 
-        for rule, match in await LocalEventHandler._match_regex_command(command):
+        for rule, match in await LocalEventHandler._match_regex_command(command_text):
             matched.append(
                 LocalCommandMatch(
                     rule=rule,
-                    command=command,
-                    message=LocalEventHandler._message_after_match(command_text, message, match),
+                    command=command_text,
+                    message="",
                     match=match,
                 )
             )
@@ -249,7 +323,9 @@ class LocalEventHandler(BaseMessageHandler):
             reset_current_message_context(context_token)
 
     @staticmethod
-    def _message_context(item: LocalCommandMatch, event: LocalCommandEvent) -> MessageContext:
+    def _message_context(
+        item: LocalCommandMatch, event: LocalCommandEvent
+    ) -> MessageContext:
         """生成本地驱动器的显式消息上下文。"""
 
         reply_target = ReplyTarget(
@@ -277,49 +353,63 @@ class LocalEventHandler(BaseMessageHandler):
         """整理命令索引和排序。"""
 
         LocalEventHandler.regex_prefix_lengths = {
-            len(prefix)
-            for prefix in LocalEventHandler.regex_rules
+            len(prefix) for prefix in LocalEventHandler.regex_rules
         }
 
-        for rules in LocalEventHandler.exact_rules.values():
+        for rules in LocalEventHandler.command_rules.values():
+            rules.sort(key=lambda rule: (-rule.priority, rule.order))
+        for rules in LocalEventHandler.fullmatch_rules.values():
             rules.sort(key=lambda rule: (-rule.priority, rule.order))
         for rules in LocalEventHandler.regex_rules.values():
             rules.sort(key=lambda rule: (-rule.priority, rule.order))
-        LocalEventHandler.regex_fallback.sort(key=lambda rule: (-rule.priority, rule.order))
+        LocalEventHandler.regex_fallback.sort(
+            key=lambda rule: (-rule.priority, rule.order)
+        )
 
     @staticmethod
     def _split_command(raw_message: str) -> Tuple[str, str]:
         """按第一个空格拆出命令片段和业务参数文本。"""
 
-        command, separator, message = raw_message.partition(" ")
-        if not separator:
+        parts = raw_message.split(maxsplit=1)
+        if len(parts) == 1:
             return raw_message, ""
-        return command, message.strip()
+        return parts[0], parts[1].strip()
 
     @staticmethod
-    def _message_after_match(
-        clean_message: str,
-        split_message: str,
-        match: Optional[re.Match],
-    ) -> str:
-        """计算正则命令命中片段之后留给业务的文本。"""
-
-        if match is None:
-            return split_message
-        return clean_message[match.end() :].lstrip()
-
-    @staticmethod
-    def _register_exact_command(
+    def _register_command(
         cmd: str,
         func: Callable,
         priority: int,
         block: bool,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """注册精确命令。"""
+        """注册命令词加参数回调。"""
 
-        rule = LocalEventHandler._make_rule(func=func, priority=priority, block=block, metadata=metadata)
-        LocalEventHandler.exact_rules.setdefault(cmd, []).append(rule)
+        command = cmd.strip()
+        if not command or any(char.isspace() for char in command):
+            raise ValueError("command 注册器需要一个不含空白的命令词")
+        rule = LocalEventHandler._make_rule(
+            func=func, priority=priority, block=block, metadata=metadata
+        )
+        LocalEventHandler.command_rules.setdefault(command, []).append(rule)
+
+    @staticmethod
+    def _register_fullmatch_command(
+        cmd: str,
+        func: Callable,
+        priority: int,
+        block: bool,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """注册必须完整匹配整条消息的回调。"""
+
+        command = cmd.strip()
+        if not command:
+            raise ValueError("fullmatch 注册器不接受空命令")
+        rule = LocalEventHandler._make_rule(
+            func=func, priority=priority, block=block, metadata=metadata
+        )
+        LocalEventHandler.fullmatch_rules.setdefault(command, []).append(rule)
 
     @staticmethod
     def _register_regex_command(
@@ -367,26 +457,24 @@ class LocalEventHandler(BaseMessageHandler):
 
     @staticmethod
     async def _match_regex_command(cmd: str) -> list[tuple[LocalCommandRule, re.Match]]:
-        """匹配正则命令。"""
+        """对完整消息执行正则匹配。"""
 
         matched = []
         key = cmd.casefold()
         seen_rules: Set[int] = set()
 
         for length in LocalEventHandler.regex_prefix_lengths:
-            if length > len(key):
-                continue
+            for rule in LocalEventHandler.regex_rules.get(key[:length], []):
+                rule_id = id(rule)
+                if rule_id in seen_rules:
+                    continue
 
-            for start in range(0, len(key) - length + 1):
-                for rule in LocalEventHandler.regex_rules.get(key[start : start + length], []):
-                    rule_id = id(rule)
-                    if rule_id in seen_rules:
-                        continue
-
-                    seen_rules.add(rule_id)
-                    match = rule.pattern.search(cmd) if rule.pattern is not None else None
-                    if match:
-                        matched.append((rule, match))
+                seen_rules.add(rule_id)
+                match = (
+                    rule.pattern.fullmatch(cmd) if rule.pattern is not None else None
+                )
+                if match:
+                    matched.append((rule, match))
 
         for rule in LocalEventHandler.regex_fallback:
             rule_id = id(rule)
@@ -394,7 +482,7 @@ class LocalEventHandler(BaseMessageHandler):
                 continue
 
             seen_rules.add(rule_id)
-            match = rule.pattern.search(cmd) if rule.pattern is not None else None
+            match = rule.pattern.fullmatch(cmd) if rule.pattern is not None else None
             if match:
                 matched.append((rule, match))
 
@@ -432,12 +520,22 @@ class LocalEventHandler(BaseMessageHandler):
         return "".join(prefix)
 
     @staticmethod
-    def _normalize_commands(value) -> list:
-        """把单个 cmd 或多个 cmd 统一成 list。"""
+    def _normalize_text_commands(value: TextCommands) -> list[str]:
+        """按声明顺序整理字符串命令。"""
 
-        if isinstance(value, (list, tuple, set)):
-            return list(value)
-        return [value]
+        commands = list(value) if isinstance(value, (list, tuple)) else [value]
+        if any(not isinstance(command, str) for command in commands):
+            raise TypeError("fullmatch 和 command 注册器只支持字符串命令")
+        return commands
+
+    @staticmethod
+    def _normalize_regex_commands(value: RegexCommands) -> list[Pattern]:
+        """按声明顺序整理正则命令。"""
+
+        commands = list(value) if isinstance(value, (list, tuple)) else [value]
+        if any(not isinstance(command, re.Pattern) for command in commands):
+            raise TypeError("regex 注册器只支持 re.Pattern")
+        return commands
 
     @staticmethod
     def _short_text(value: object, limit: int = 80) -> str:
@@ -448,4 +546,4 @@ class LocalEventHandler(BaseMessageHandler):
             return "-"
         if len(text) <= limit:
             return text
-        return f"{text[:limit - 1]}..."
+        return f"{text[: limit - 1]}..."

@@ -5,14 +5,16 @@ JSON 定义规则，Python 只保存一次战斗中实际发生的状态与结�
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 import copy
 import random
-from typing import Any, TYPE_CHECKING
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .engine import BattleEngine
+
+from .contracts import BattleEvent
 
 
 @dataclass(frozen=True)
@@ -247,6 +249,9 @@ class Fighter:
         return max(0.0, self.value("护盾上限", 0.0))
 
 
+ListenerEntry = tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]
+
+
 @dataclass
 class CombatObject:
     id: str
@@ -292,37 +297,7 @@ class ActionIntent:
 
 
 @dataclass(frozen=True)
-class BattleEvent:
-    turn: int
-    kind: str
-    source: str
-    target: str
-    text: str
-    amount: float = 0.0
-    values: Mapping[str, Any] = field(default_factory=dict)
-    tags: tuple[str, ...] = ()
-    mechanism: str = ""
-    source_id: str = ""
-    target_id: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "turn": self.turn,
-            "kind": self.kind,
-            "source": self.source,
-            "target": self.target,
-            "text": self.text,
-            "amount": self.amount,
-            "values": dict(self.values),
-            "tags": list(self.tags),
-            "mechanism": self.mechanism,
-            "source_id": self.source_id,
-            "target_id": self.target_id,
-        }
-
-
-@dataclass(frozen=True)
-class CombatantSnapshot:
+class RuntimeCombatantSnapshot:
     id: str
     name: str
     attributes: Mapping[str, float]
@@ -346,67 +321,6 @@ class CombatantSnapshot:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class CombatantResult:
-    id: str
-    name: str
-    attributes: Mapping[str, float]
-    level: int
-    kind: str
-    health: float
-    spirit: float
-    shield: float
-    statuses: tuple[StatusState, ...]
-    cooldowns: Mapping[str, int]
-    inventory: Mapping[str, int]
-    consumed_items: Mapping[str, int]
-    skill_cursor: int
-    form: str = "本相"
-    owner_id: str = ""
-    controller_id: str = ""
-    counts_for_victory: bool = True
-
-    @property
-    def alive(self) -> bool:
-        return self.health > 0
-
-
-@dataclass(frozen=True)
-class BattleOutcome:
-    left: CombatantResult
-    right: CombatantResult
-    actions: int
-    events: tuple[BattleEvent, ...]
-    trigger_activations: int = 0
-    left_team: tuple[CombatantResult, ...] = ()
-    right_team: tuple[CombatantResult, ...] = ()
-
-    @property
-    def left_results(self) -> tuple[CombatantResult, ...]:
-        return self.left_team or (self.left,)
-
-    @property
-    def right_results(self) -> tuple[CombatantResult, ...]:
-        return self.right_team or (self.right,)
-
-    @property
-    def winner_side(self) -> str | None:
-        left_alive = any(result.alive and result.counts_for_victory for result in self.left_results)
-        right_alive = any(result.alive and result.counts_for_victory for result in self.right_results)
-        if left_alive == right_alive:
-            return None
-        return "left" if left_alive else "right"
-
-    @property
-    def winner_id(self) -> str | None:
-        values = self.left_results if self.winner_side == "left" else self.right_results
-        return next((value.id for value in values if value.alive and value.counts_for_victory), None)
-
-    @property
-    def draw(self) -> bool:
-        return self.winner_id is None
 
 
 @dataclass
@@ -440,6 +354,15 @@ class BattleContext:
     action_intent: ActionIntent | None = None
     judgement_overrides: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     summon_serial: int = 0
+    # Runtime indexes are derived state. They are rebuilt when a transaction
+    # restores team membership or a summon enters the battle.
+    fighters_by_id: dict[str, Fighter] = field(default_factory=dict, init=False)
+    fighter_order: dict[str, int] = field(default_factory=dict, init=False)
+    _fighters_cache: tuple[Fighter, ...] = field(default_factory=tuple, init=False, repr=False)
+    listener_index: dict[str, tuple[ListenerEntry, ...]] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    listener_index_dirty: bool = field(default=True, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.left_team:
@@ -450,10 +373,25 @@ class BattleContext:
             fighter.side = 0
         for fighter in self.right_team:
             fighter.side = 1
+        self.rebuild_indexes()
+
+    def rebuild_indexes(self) -> None:
+        """Rebuild derived indexes after structural state restoration."""
+
+        self._fighters_cache = tuple((*self.left_team, *self.right_team))
+        self.fighters_by_id = {fighter.id: fighter for fighter in self._fighters_cache}
+        self.fighter_order = {
+            fighter.id: index for index, fighter in enumerate(self._fighters_cache)
+        }
+        self.listener_index.clear()
+        self.listener_index_dirty = True
+
+    def mark_listener_index_dirty(self) -> None:
+        self.listener_index_dirty = True
 
     @property
     def fighters(self) -> tuple[Fighter, ...]:
-        return tuple((*self.left_team, *self.right_team))
+        return self._fighters_cache
 
     @property
     def both_sides_alive(self) -> bool:
@@ -479,14 +417,16 @@ class BattleContext:
         return candidates[0] if len(candidates) == 1 else self.rng.choice(candidates)
 
     def fighter_by_id(self, fighter_id: str) -> Fighter | None:
-        return next((fighter for fighter in self.fighters if fighter.id == fighter_id), None)
+        return self.fighters_by_id.get(str(fighter_id))
 
     def add_fighter(self, fighter: Fighter) -> None:
         target = self.left_team if fighter.side == 0 else self.right_team
         if self.fighter_by_id(fighter.id) is not None:
             raise ValueError(f"战斗对象 ID 重复：{fighter.id}")
         target.append(fighter)
+        fighter.side = 0 if target is self.left_team else 1
         self.action_progress[fighter.id] = 0.0
+        self.rebuild_indexes()
 
     def event(
         self,
@@ -534,10 +474,3 @@ class BattleContext:
             )
         )
         return frame
-
-
-__all__ = [
-    "ActionIntent", "BattleContext", "BattleEvent", "BattleOutcome", "CombatCatalog",
-    "CombatObject", "CombatantResult", "CombatantSnapshot", "EventFrame", "Fighter",
-    "RuleNode", "Skill", "StatusState",
-]

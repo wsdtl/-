@@ -9,13 +9,15 @@ from datetime import datetime
 from typing import Any
 
 from .catalog import BattleReportCatalog
-from .models import BattleEvent, BattleOutcome, StatusState
+from .contracts import (
+    BattleEvent,
+    CombatResult,
+    StatusResult,
+)
 
 
 @dataclass(frozen=True)
-class BattleReportParticipant:
-    """生成战报所需的参战者公开快照。"""
-
+class RuntimeBattleReportParticipant:
     id: str
     name: str
     title: str
@@ -26,8 +28,8 @@ class BattleReportParticipant:
     final_spirit: float = 0.0
     initial_shield: float = 0.0
     final_shield: float = 0.0
-    initial_statuses: Sequence[StatusState | Mapping[str, Any]] = ()
-    statuses: Sequence[StatusState | Mapping[str, Any]] = ()
+    initial_statuses: Sequence[StatusResult | Mapping[str, Any]] = ()
+    statuses: Sequence[StatusResult | Mapping[str, Any]] = ()
     techniques: Sequence[Mapping[str, Any]] = ()
     moves: Sequence[str] = ()
     mechanisms: Sequence[str] = ()
@@ -39,8 +41,8 @@ class BattleReportParticipant:
 
 
 def build_battle_report(
-    outcome: BattleOutcome,
-    participants: Sequence[BattleReportParticipant],
+    outcome: CombatResult,
+    participants: Sequence[RuntimeBattleReportParticipant],
     *,
     catalog: BattleReportCatalog,
     seed: int | None = None,
@@ -158,7 +160,7 @@ def build_battle_report(
 
 
 def _participant_report(
-    participant: BattleReportParticipant,
+    participant: RuntimeBattleReportParticipant,
     *,
     number: int,
     color: str,
@@ -246,7 +248,7 @@ def _participant_report(
 def _event_report(
     event: BattleEvent,
     sequence: int,
-    participants: Mapping[str, BattleReportParticipant],
+    participants: Mapping[str, RuntimeBattleReportParticipant],
     colors: Mapping[str, str],
     catalog: BattleReportCatalog,
 ) -> dict[str, Any]:
@@ -311,7 +313,7 @@ def _event_report(
 def _actor_report(
     actor_id: str,
     fallback_name: str,
-    participants: Mapping[str, BattleReportParticipant],
+    participants: Mapping[str, RuntimeBattleReportParticipant],
     colors: Mapping[str, str],
     catalog: BattleReportCatalog,
 ) -> dict[str, Any]:
@@ -414,8 +416,8 @@ def _ability_executor(
     return ability
 
 
-def _status_report(value: StatusState | Mapping[str, Any]) -> dict[str, Any]:
-    status = value.to_dict() if isinstance(value, StatusState) else dict(value)
+def _status_report(value: StatusResult | Mapping[str, Any]) -> dict[str, Any]:
+    status = value.to_dict() if isinstance(value, StatusResult) else dict(value)
     return {
         "name": str(status.get("名称") or "未知状态"),
         "category": str(status.get("类别") or "中性"),
@@ -471,6 +473,3 @@ def _json_value(value: Any) -> Any:
     if isinstance(value, Sequence):
         return [_json_value(item) for item in value]
     return str(value)
-
-
-__all__ = ["BattleReportParticipant", "build_battle_report"]

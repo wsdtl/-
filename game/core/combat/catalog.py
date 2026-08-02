@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-import re
 from typing import Any
-
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -233,6 +232,3 @@ def _strings_in_order(value: Mapping[str, Any], key: str) -> tuple[str, ...]:
     if any(not item.strip() for item in result):
         raise ValueError(f"战报配置不能包含空值：{key}")
     return result
-
-
-__all__ = ["BattleReportCatalog"]

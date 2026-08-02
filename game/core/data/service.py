@@ -4,23 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock, RLock
 from typing import Any
 
-from .files import JsonDataError, JsonDataReader
+from .contracts import JsonDataError, JsonDataStatus
+from .files import JsonDataReader
 from .loading import GameDataLoader, LoadedGameData
-
-
-@dataclass(frozen=True)
-class JsonDataStatus:
-    """不暴露内部可变对象的数据微服务状态。"""
-
-    root: Path
-    loaded: bool
-    document_count: int
-    issue_count: int
 
 
 class JsonDataService:
@@ -43,7 +33,16 @@ class JsonDataService:
                 root=self._root,
                 loaded=loaded is not None,
                 document_count=len(loaded.catalog.documents) if loaded is not None else 0,
-                issue_count=len(loaded.issues) if loaded is not None else 0,
+                content_document_count=(
+                    sum(
+                        document.scope == "内容"
+                        for document in loaded.catalog.documents
+                    )
+                    if loaded is not None
+                    else 0
+                ),
+                entity_count=loaded.entity_count if loaded is not None else 0,
+                pool_count=loaded.pool_count if loaded is not None else 0,
             )
 
     def initialize(self) -> JsonDataStatus:
@@ -59,32 +58,19 @@ class JsonDataService:
                 self._loaded = loaded
             return self.status()
 
-    def read(self, relative_path: str | Path) -> Any:
-        """按 data 内相对路径返回文档副本。"""
+    def dataset(self, name: str) -> dict[str, Any]:
+        """按读取规则声明的数据名返回一个服务数据集副本。"""
 
+        dataset_name = str(name or "").strip()
         with self._state_lock:
-            loaded = self._require_loaded()
-            return deepcopy(loaded.catalog.read(relative_path))
-
-    def scope(self, name: str) -> dict[str, Any]:
-        """返回定义、规则、内容或展示作用域的完整副本。"""
-
-        scope_name = str(name or "").strip()
-        with self._state_lock:
-            loaded = self._require_loaded()
-            scopes: Mapping[str, Mapping[str, Any]] = {
-                "定义": loaded.definitions,
-                "规则": loaded.rules,
-                "内容": loaded.content,
-                "展示": loaded.presentation,
+            documents = self._require_loaded().catalog.dataset(dataset_name)
+            return {
+                document.descriptor.data_name: deepcopy(document.value)
+                for document in documents
             }
-            values = scopes.get(scope_name)
-            if values is None:
-                raise JsonDataError(f"未知数据作用域：{scope_name or '<空>'}")
-            return deepcopy(dict(values))
 
     def entity(self, section: str, identity: str) -> dict[str, Any]:
-        """按类别和稳定编号取得一个正式实体副本。"""
+        """按类别和稳定身份取得一个正式实体副本。"""
 
         section_name = str(section or "").strip()
         entity_id = str(identity or "").strip()
@@ -99,7 +85,7 @@ class JsonDataService:
             return deepcopy(dict(value))
 
     def entities(self, section: str) -> dict[str, dict[str, Any]]:
-        """取得一个类别的编号去重实体索引副本。"""
+        """取得一个类别的身份去重实体索引副本。"""
 
         section_name = str(section or "").strip()
         with self._state_lock:
@@ -109,35 +95,68 @@ class JsonDataService:
                 raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
             return deepcopy({identity: dict(value) for identity, value in values.items()})
 
-    def group(self, file_id: str, section: str) -> tuple[str, ...]:
-        """取得一份内容文件在指定类别下声明的实体编号。"""
+    def entity_fields(
+        self,
+        section: str,
+        fields: Sequence[str],
+    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+        """取得一个类别的指定实体字段，不复制完整实体正文。"""
 
-        group_id = str(file_id or "").strip().removesuffix(".json")
         section_name = str(section or "").strip()
+        field_names = _field_names(fields)
         with self._state_lock:
             loaded = self._require_loaded()
-            sections = loaded.groups.get(group_id)
-            if sections is None or section_name not in sections:
-                raise JsonDataError(f"内容分组不存在：{group_id or '<空>'} -> {section_name or '<空>'}")
-            return tuple(sections[section_name])
+            values = loaded.entities.get(section_name)
+            if values is None:
+                raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+            return tuple(
+                (identity, _select_fields(value, field_names))
+                for identity, value in values.items()
+            )
 
-    def expand_pool(
+    def pool_members(
         self,
         file_ids: Sequence[str],
         section: str,
         *,
         deduplicate: bool = True,
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
-        """展开资源池，并隔离调用方对实体正文的修改。"""
+    ) -> tuple[str, ...]:
+        """展开资源池，只返回稳定身份，不暴露实体正文。"""
 
         with self._state_lock:
             loaded = self._require_loaded()
-            values = loaded.expand_pool(tuple(file_ids), section, deduplicate=deduplicate)
-            return tuple((identity, deepcopy(value)) for identity, value in values)
+            values = loaded.resolve_pool(
+                tuple(file_ids),
+                section,
+                deduplicate=deduplicate,
+            )
+            return tuple(identity for identity, _ in values)
 
-    def issues(self) -> tuple[str, ...]:
+    def pool_fields(
+        self,
+        file_ids: Sequence[str],
+        section: str,
+        fields: Sequence[str],
+        *,
+        deduplicate: bool = True,
+    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+        """展开资源池，并仅复制调用方明确请求的实体字段。"""
+
+        field_names = _field_names(fields)
         with self._state_lock:
-            return tuple(self._require_loaded().issues)
+            loaded = self._require_loaded()
+            values = loaded.resolve_pool(
+                tuple(file_ids),
+                section,
+                deduplicate=deduplicate,
+            )
+            return tuple(
+                (
+                    identity,
+                    _select_fields(value, field_names),
+                )
+                for identity, value in values
+            )
 
     def document_paths(self) -> tuple[str, ...]:
         with self._state_lock:
@@ -151,4 +170,24 @@ class JsonDataService:
         return self._loaded
 
 
-__all__ = ["JsonDataService", "JsonDataStatus"]
+def _field_names(fields: Sequence[str]) -> tuple[str, ...]:
+    field_names = tuple(str(field or "").strip() for field in fields)
+    if not field_names or any(not field for field in field_names):
+        raise JsonDataError("实体字段不能为空")
+    if len(field_names) != len(set(field_names)):
+        raise JsonDataError("实体字段不能重复")
+    return field_names
+
+
+def _select_fields(
+    value: Mapping[str, Any],
+    fields: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        field: deepcopy(value[field])
+        for field in fields
+        if field in value
+    }
+
+
+__all__ = ["JsonDataService"]
