@@ -38,10 +38,9 @@ def test_world_documents_are_separated_by_json_read_rules() -> None:
 
 def _bootstrap_rule() -> dict[str, str]:
     return {
-        "数据集": "数据读取",
-        "数据名": "规则",
-        "路径": "定义/数据读取规则.json",
-        "文档形态": "对象",
+        "数据集": "读取定义",
+        "路径": "定义/读取规则.json",
+        "结构": "对象",
     }
 
 
@@ -49,14 +48,13 @@ def _write_rules(root: Path, rules: list[dict[str, str]]) -> None:
     for scope in ("定义", "规则", "内容", "展示"):
         (root / scope).mkdir(exist_ok=True)
     value = {
-        "作用域": ["定义", "规则", "内容", "展示"],
-        "编号定义": "定义/数据读取规则.json",
-        "文件名引用作用域": ["内容"],
-        "资源池引用作用域": ["规则", "内容"],
-        "资源池引用": {"功法池": "功法"},
+        "扫描目录": ["定义", "规则", "内容", "展示"],
+        "编号定义": "定义/读取规则.json",
+        "文件名唯一": ["内容"],
+        "资源池字段": {"功法池": "功法"},
         "读取规则": rules,
     }
-    (root / "定义" / "数据读取规则.json").write_text(
+    (root / "定义" / "读取规则.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from launch import C, OnEvent, config, logger
 
+from .config import game_config
 from .core.combat import CombatService
 from .core.data import JsonDataService
 from .core.pool import PoolService
@@ -79,10 +80,10 @@ def migrate_legacy_runtime_storage() -> None:
 
     runtime_root = config.base_dir / ".runtime"
     migrations = (
-        (config.base_dir / "data" / "game.db", config.database.path),
+        (config.base_dir / "data" / "game.db", game_config.database.path),
         (
             config.base_dir / "data" / "runtime_log.db",
-            config.database.runtime_log_path,
+            game_config.database.runtime_log_path,
         ),
         (config.base_dir / "data" / "backups", runtime_root / "backups"),
         (

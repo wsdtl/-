@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
-from game.core.data import JsonDataService
+from game.core.data import JsonDataService, materialize
 
 from .catalog import BattleReportCatalog
 from .contracts import (
@@ -37,7 +37,7 @@ class CombatService:
         if self._engine is not None:
             raise RuntimeError("战斗核心已经初始化")
         foundation = load_battle_foundation(self._data)
-        report_dataset = self._data.dataset("战报展示")
+        report_dataset = materialize(self._data.dataset("战斗展示"))
         report_catalog = BattleReportCatalog.from_mapping(
             report_dataset["战报"]
         )
@@ -105,7 +105,7 @@ class CombatService:
             identity = str(reference.identity or "").strip()
             if section not in BUILD_SECTIONS:
                 raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
-            definition = self._data.entity(section, identity)
+            definition = materialize(self._data.entity(section, identity))
             definition["实例"] = reference.instance_id or f"{value.id}:{section}:{index}"
             definition["出生序号"] = int(reference.born_order)
             definition["威力倍率"] = float(reference.power_multiplier)
@@ -147,7 +147,7 @@ class CombatService:
             if int(quantity) > 0
         }
         return {
-            identity: self._data.entity("物品", identity)
+            identity: materialize(self._data.entity("物品", identity))
             for identity in sorted(identities)
         }
 

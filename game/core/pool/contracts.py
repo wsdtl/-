@@ -17,10 +17,11 @@ class PoolStatus:
 
 @dataclass(frozen=True)
 class PoolRequest:
-    file_ids: tuple[str, ...]
     section: str
     count: int
     mode: str
+    file_ids: tuple[str, ...] = ()
+    full_pool: bool = False
     seed: int | None = None
 
 
@@ -36,6 +37,7 @@ class PoolResult:
     seed: int
     section: str
     source_files: tuple[str, ...]
+    full_pool: bool
     candidate_count: int
     entries: tuple[PoolEntry, ...]
 

@@ -40,6 +40,9 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "JsonDataError",
         "JsonDataService",
         "JsonDataStatus",
+        "JsonEntity",
+        "JsonValue",
+        "materialize",
     }
     assert set(pool_api.__all__) == {
         "ALLOW_REPEATS",
@@ -61,12 +64,12 @@ def test_runtime_business_does_not_import_core_internals() -> None:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 for module in _imported_modules(node):
-                    if folder.name == "cmd" and module.startswith("game.core"):
-                        violations.append(f"{path.relative_to(ROOT)}:{node.lineno} -> {module}")
-                    elif folder.name == "features" and (
+                    cmd_violation = folder.name == "cmd" and module.startswith("game.core")
+                    feature_violation = folder.name == "features" and (
                         module == "game.core"
                         or any(module.startswith(f"{package}.") for package in SERVICE_PACKAGES)
-                    ):
+                    )
+                    if cmd_violation or feature_violation:
                         violations.append(f"{path.relative_to(ROOT)}:{node.lineno} -> {module}")
     assert violations == []
 

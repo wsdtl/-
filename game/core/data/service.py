@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from copy import deepcopy
 from pathlib import Path
-from threading import Lock, RLock
+from threading import Lock
+from types import MappingProxyType
 from typing import Any
 
-from .contracts import JsonDataError, JsonDataStatus
+from .contracts import JsonDataError, JsonDataStatus, JsonEntity
 from .files import JsonDataReader
 from .loading import GameDataLoader, LoadedGameData
 
@@ -18,7 +18,6 @@ class JsonDataService:
 
     def __init__(self, root: str | Path) -> None:
         self._root = Path(root).expanduser().resolve()
-        self._state_lock = RLock()
         self._load_lock = Lock()
         self._loaded: LoadedGameData | None = None
 
@@ -27,73 +26,76 @@ class JsonDataService:
         return self._root
 
     def status(self) -> JsonDataStatus:
-        with self._state_lock:
-            loaded = self._loaded
-            return JsonDataStatus(
-                root=self._root,
-                loaded=loaded is not None,
-                document_count=len(loaded.catalog.documents) if loaded is not None else 0,
-                content_document_count=(
-                    sum(
-                        document.scope == "内容"
-                        for document in loaded.catalog.documents
-                    )
-                    if loaded is not None
-                    else 0
-                ),
-                entity_count=loaded.entity_count if loaded is not None else 0,
-                pool_count=loaded.pool_count if loaded is not None else 0,
-            )
+        loaded = self._loaded
+        return JsonDataStatus(
+            root=self._root,
+            loaded=loaded is not None,
+            document_count=len(loaded.catalog.documents) if loaded is not None else 0,
+            content_document_count=(
+                sum(document.scope == "内容" for document in loaded.catalog.documents)
+                if loaded is not None
+                else 0
+            ),
+            entity_count=loaded.entity_count if loaded is not None else 0,
+            pool_count=loaded.pool_count if loaded is not None else 0,
+        )
 
     def initialize(self) -> JsonDataStatus:
         """构建本进程唯一快照；数据更新必须通过重启服务生效。"""
 
         with self._load_lock:
-            with self._state_lock:
-                if self._loaded is not None:
-                    raise RuntimeError("正式 JSON 已加载；数据更新必须重启服务")
+            if self._loaded is not None:
+                raise RuntimeError("正式 JSON 已加载；数据更新必须重启服务")
 
             loaded = GameDataLoader(JsonDataReader(self._root)).load()
-            with self._state_lock:
-                self._loaded = loaded
+            self._loaded = loaded
             return self.status()
 
-    def dataset(self, name: str) -> dict[str, Any]:
-        """按读取规则声明的数据名返回一个服务数据集副本。"""
+    def dataset(self, name: str) -> Mapping[str, Any]:
+        """按读取规则声明的数据集返回文件名到不可变正文的视图。"""
 
         dataset_name = str(name or "").strip()
-        with self._state_lock:
-            documents = self._require_loaded().catalog.dataset(dataset_name)
-            return {
-                document.descriptor.data_name: deepcopy(document.value)
-                for document in documents
-            }
+        documents = self._require_loaded().catalog.dataset(dataset_name)
+        return MappingProxyType(
+            {document.descriptor.data_name: document.value for document in documents}
+        )
 
-    def entity(self, section: str, identity: str) -> dict[str, Any]:
-        """按类别和稳定身份取得一个正式实体副本。"""
+    def entity(self, section: str, identity: str) -> Mapping[str, Any]:
+        """按类别和稳定身份取得一个不可变正式实体。"""
 
         section_name = str(section or "").strip()
         entity_id = str(identity or "").strip()
-        with self._state_lock:
-            loaded = self._require_loaded()
-            values = loaded.entities.get(section_name)
-            if values is None:
-                raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
-            value = values.get(entity_id)
-            if value is None:
-                raise JsonDataError(f"实体不存在：{section_name} {entity_id or '<空>'}")
-            return deepcopy(dict(value))
+        loaded = self._require_loaded()
+        values = loaded.entities.get(section_name)
+        if values is None:
+            raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+        value = values.get(entity_id)
+        if value is None:
+            raise JsonDataError(f"实体不存在：{section_name} {entity_id or '<空>'}")
+        return value
 
-    def entities(self, section: str) -> dict[str, dict[str, Any]]:
-        """取得一个类别的身份去重实体索引副本。"""
+    def entities(self, section: str) -> Mapping[str, Mapping[str, Any]]:
+        """取得一个类别的身份去重不可变实体索引。"""
 
         section_name = str(section or "").strip()
-        with self._state_lock:
-            loaded = self._require_loaded()
-            values = loaded.entities.get(section_name)
-            if values is None:
-                raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
-            return deepcopy({identity: dict(value) for identity, value in values.items()})
+        loaded = self._require_loaded()
+        values = loaded.entities.get(section_name)
+        if values is None:
+            raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+        return values
+
+    def entity_record(self, section: str, identity: str) -> JsonEntity:
+        """取得实体类别、编号类别、源文件和不可变正文。"""
+
+        section_name = str(section or "").strip()
+        entity_id = str(identity or "").strip()
+        records = self._require_loaded().entity_records.get(section_name)
+        if records is None:
+            raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+        record = records.get(entity_id)
+        if record is None:
+            raise JsonDataError(f"实体不存在：{section_name} {entity_id or '<空>'}")
+        return record
 
     def entity_fields(
         self,
@@ -104,15 +106,19 @@ class JsonDataService:
 
         section_name = str(section or "").strip()
         field_names = _field_names(fields)
-        with self._state_lock:
-            loaded = self._require_loaded()
-            values = loaded.entities.get(section_name)
-            if values is None:
-                raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
-            return tuple(
-                (identity, _select_fields(value, field_names))
-                for identity, value in values.items()
-            )
+        loaded = self._require_loaded()
+        values = loaded.entities.get(section_name)
+        if values is None:
+            raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+        return tuple(
+            (identity, _select_fields(value, field_names))
+            for identity, value in values.items()
+        )
+
+    def all_members(self, section: str) -> tuple[str, ...]:
+        """返回一个实体类别的全池稳定身份，不需要额外全池 JSON。"""
+
+        return self._require_loaded().all_members(section)
 
     def pool_members(
         self,
@@ -123,14 +129,12 @@ class JsonDataService:
     ) -> tuple[str, ...]:
         """展开资源池，只返回稳定身份，不暴露实体正文。"""
 
-        with self._state_lock:
-            loaded = self._require_loaded()
-            values = loaded.resolve_pool(
-                tuple(file_ids),
-                section,
-                deduplicate=deduplicate,
-            )
-            return tuple(identity for identity, _ in values)
+        values = self._require_loaded().resolve_pool(
+            tuple(file_ids),
+            section,
+            deduplicate=deduplicate,
+        )
+        return tuple(identity for identity, _ in values)
 
     def pool_fields(
         self,
@@ -143,26 +147,20 @@ class JsonDataService:
         """展开资源池，并仅复制调用方明确请求的实体字段。"""
 
         field_names = _field_names(fields)
-        with self._state_lock:
-            loaded = self._require_loaded()
-            values = loaded.resolve_pool(
-                tuple(file_ids),
-                section,
-                deduplicate=deduplicate,
-            )
-            return tuple(
-                (
-                    identity,
-                    _select_fields(value, field_names),
-                )
-                for identity, value in values
-            )
+        values = self._require_loaded().resolve_pool(
+            tuple(file_ids),
+            section,
+            deduplicate=deduplicate,
+        )
+        return tuple(
+            (identity, _select_fields(value, field_names))
+            for identity, value in values
+        )
 
     def document_paths(self) -> tuple[str, ...]:
-        with self._state_lock:
-            return tuple(
-                document.relative_path for document in self._require_loaded().catalog.documents
-            )
+        return tuple(
+            document.relative_path for document in self._require_loaded().catalog.documents
+        )
 
     def _require_loaded(self) -> LoadedGameData:
         if self._loaded is None:
@@ -182,12 +180,22 @@ def _field_names(fields: Sequence[str]) -> tuple[str, ...]:
 def _select_fields(
     value: Mapping[str, Any],
     fields: Sequence[str],
-) -> dict[str, Any]:
-    return {
-        field: deepcopy(value[field])
+) -> Mapping[str, Any]:
+    return MappingProxyType({
+        field: value[field]
         for field in fields
         if field in value
-    }
+    })
 
 
-__all__ = ["JsonDataService"]
+def materialize(value: Any) -> Any:
+    """把不可变 JSON 视图转换为领域服务自己的可变运行值。"""
+
+    if isinstance(value, Mapping):
+        return {str(key): materialize(raw) for key, raw in value.items()}
+    if isinstance(value, tuple):
+        return [materialize(item) for item in value]
+    return value
+
+
+__all__ = ["JsonDataService", "materialize"]

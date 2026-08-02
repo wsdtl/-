@@ -30,7 +30,7 @@ class PoolService:
         self._initialized = False
         self._candidate_lock = RLock()
         self._candidate_cache: dict[
-            tuple[tuple[str, ...], str, bool],
+            tuple[tuple[str, ...], str, bool, bool],
             tuple[PoolEntry, ...],
         ] = {}
         self._weights: dict[str, dict[str, int]] = {}
@@ -63,15 +63,24 @@ class PoolService:
                 f"未知资源池抽取模式：{selected_mode or '<空>'}"
             )
         source_files = tuple(str(value).strip() for value in request.file_ids)
-        if not source_files or any(not value for value in source_files):
+        if any(not value for value in source_files):
             raise ValueError("资源池文件名不能为空")
+        if request.full_pool and source_files:
+            raise ValueError("全池抽取不能同时指定资源池文件")
+        if not request.full_pool and not source_files:
+            raise ValueError("指定池抽取必须提供资源池文件")
         section_name = str(request.section or "").strip()
         if section_name not in WEIGHTED_SECTIONS:
             raise ValueError(
                 f"该集合不使用权重抽取：{section_name or '<空>'}"
             )
         deduplicated = selected_mode == EXPAND_DEDUPLICATED
-        candidates = self._candidates(source_files, section_name, deduplicated)
+        candidates = self._candidates(
+            source_files,
+            section_name,
+            deduplicated,
+            request.full_pool,
+        )
         seed_value = _seed(request.seed)
         entries = inverse_weighted_sample(
             random.Random(seed_value),
@@ -85,6 +94,7 @@ class PoolService:
             seed=seed_value,
             section=section_name,
             source_files=source_files,
+            full_pool=request.full_pool,
             candidate_count=len(candidates),
             entries=tuple(entries),
         )
@@ -94,16 +104,21 @@ class PoolService:
         source_files: tuple[str, ...],
         section: str,
         deduplicated: bool,
+        full_pool: bool,
     ) -> tuple[PoolEntry, ...]:
-        cache_key = (source_files, section, deduplicated)
+        cache_key = (source_files, section, deduplicated, full_pool)
         with self._candidate_lock:
             cached = self._candidate_cache.get(cache_key)
             if cached is not None:
                 return cached
-            identities = self._data.pool_members(
-                source_files,
-                section,
-                deduplicate=deduplicated,
+            identities = (
+                self._data.all_members(section)
+                if full_pool
+                else self._data.pool_members(
+                    source_files,
+                    section,
+                    deduplicate=deduplicated,
+                )
             )
             candidates = tuple(
                 PoolEntry(identity=identity, weight=self._weights[section][identity])
@@ -123,7 +138,7 @@ def _seed(value: int | None) -> int:
     if value is None:
         return secrets.randbits(64)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("随机种子必须是整数")
+        raise TypeError("随机种子必须是整数")
     return value
 
 

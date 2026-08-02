@@ -7,15 +7,16 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from .contracts import JsonDataError
+from .contracts import JsonDataError, JsonEntity
 from .files import (
+    IDENTITY_POOL,
     NAMED_ENTITY,
-    NAMED_ENTITY_MAP,
+    NAMED_ENTITY_POOL,
     NUMBERED_ENTITY_LIST,
+    NUMBERED_ENTITY_POOL,
     OBJECT,
     OBJECT_LIST,
-    PLAIN_DOCUMENT,
-    REFERENCE_POOL,
+    SOURCE_POOL,
     JsonDataCatalog,
     JsonDataReader,
     JsonDocument,
@@ -33,6 +34,7 @@ class PoolDefinition:
 class LoadedGameData:
     catalog: JsonDataCatalog
     entities: Mapping[str, Mapping[str, Any]]
+    entity_records: Mapping[str, Mapping[str, JsonEntity]]
     pool_definitions: Mapping[str, PoolDefinition]
 
     @property
@@ -61,6 +63,7 @@ class LoadedGameData:
         if not result:
             joined = "、".join(str(value) for value in file_ids) or "<空>"
             raise JsonDataError(f"资源池为空：{joined} -> {section_name}")
+        result.sort(key=lambda entry: entry[0])
         if not deduplicate:
             return tuple(result)
         unique: list[tuple[str, Mapping[str, Any]]] = []
@@ -71,6 +74,13 @@ class LoadedGameData:
             seen.add(identity)
             unique.append((identity, value))
         return tuple(unique)
+
+    def all_members(self, section: str) -> tuple[str, ...]:
+        section_name = str(section or "").strip()
+        values = self.entities.get(section_name)
+        if values is None:
+            raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
+        return tuple(sorted(values))
 
     def _resolve_pool_file(
         self,
@@ -115,12 +125,15 @@ class GameDataLoader:
 
     def load(self) -> LoadedGameData:
         catalog = self.reader.load_catalog()
-        entities, pools = _index_content(catalog)
+        entities, records, pools = _index_content(catalog)
         _validate_number_prefixes(catalog)
         loaded = LoadedGameData(
             catalog=catalog,
             entities=MappingProxyType(
                 {section: MappingProxyType(values) for section, values in entities.items()}
+            ),
+            entity_records=MappingProxyType(
+                {section: MappingProxyType(values) for section, values in records.items()}
             ),
             pool_definitions=MappingProxyType(pools),
         )
@@ -131,7 +144,11 @@ class GameDataLoader:
 
 def _index_content(
     catalog: JsonDataCatalog,
-) -> tuple[dict[str, dict[str, Mapping[str, Any]]], dict[str, PoolDefinition]]:
+) -> tuple[
+    dict[str, dict[str, Mapping[str, Any]]],
+    dict[str, dict[str, JsonEntity]],
+    dict[str, PoolDefinition],
+]:
     sections = {
         document.descriptor.section
         for document in catalog.documents
@@ -141,13 +158,14 @@ def _index_content(
         section: {} for section in sorted(sections)
     }
     sources: dict[str, dict[str, str]] = {section: {} for section in entities}
+    records: dict[str, dict[str, JsonEntity]] = {section: {} for section in entities}
     pools: dict[str, PoolDefinition] = {}
     for document in catalog.documents:
         descriptor = document.descriptor
         _validate_document_shape(document)
         if not descriptor.section:
             continue
-        if descriptor.shape == REFERENCE_POOL:
+        if descriptor.shape in {IDENTITY_POOL, SOURCE_POOL}:
             pools[document.file_id] = _reference_pool(document, descriptor.section)
             continue
         entries = _document_entries(document)
@@ -164,13 +182,20 @@ def _index_content(
             if previous is None:
                 values[identity] = value
                 sources[descriptor.section][identity] = document.relative_path
+                records[descriptor.section][identity] = JsonEntity(
+                    identity=identity,
+                    section=descriptor.section,
+                    number_category=descriptor.number_category,
+                    source_file=document.file_id,
+                    value=value,
+                )
                 continue
             if _entity_identity(previous) != _entity_identity(value):
                 raise JsonDataError(
                     f"实体身份冲突：{descriptor.section} {identity} 同时定义于 "
                     f"{sources[descriptor.section][identity]} 与 {document.relative_path}"
                 )
-    return entities, pools
+    return entities, records, pools
 
 
 def _document_entries(
@@ -179,12 +204,12 @@ def _document_entries(
     descriptor = document.descriptor
     value = document.value
     section = descriptor.section
-    if descriptor.shape == NUMBERED_ENTITY_LIST:
+    if descriptor.shape in {NUMBERED_ENTITY_LIST, NUMBERED_ENTITY_POOL}:
         return _numbered_entries(value, document, section)
-    if descriptor.shape == NAMED_ENTITY_MAP:
+    if descriptor.shape == NAMED_ENTITY_POOL:
         return _named_collection_entries(value, document, section)
     if descriptor.shape == NAMED_ENTITY:
-        if not isinstance(value, dict):
+        if not isinstance(value, Mapping):
             raise JsonDataError(f"命名内容文件根值必须是对象：{document.relative_path}")
         identity = str(value.get("名称") or document.file_id).strip()
         if not identity:
@@ -198,14 +223,14 @@ def _numbered_entries(
     document: JsonDocument,
     section: str,
 ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
-    if not isinstance(value, list):
+    if not _is_array(value):
         raise JsonDataError(
             f"编号内容文件根值必须是数组：{document.relative_path} -> {section}"
         )
     result: list[tuple[str, Mapping[str, Any]]] = []
     seen: set[str] = set()
     for index, raw in enumerate(value):
-        if not isinstance(raw, dict):
+        if not isinstance(raw, Mapping):
             raise JsonDataError(
                 f"内容对象必须是字典：{document.relative_path} -> {section}[{index}]"
             )
@@ -228,13 +253,13 @@ def _named_collection_entries(
     document: JsonDocument,
     section: str,
 ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
-    if not isinstance(value, dict) or not value:
+    if not isinstance(value, Mapping) or not value:
         raise JsonDataError(
             f"命名内容集合必须是非空对象：{document.relative_path} -> {section}"
         )
     result = []
     for identity, raw in value.items():
-        if not isinstance(raw, dict):
+        if not isinstance(raw, Mapping):
             raise JsonDataError(
                 f"命名内容对象必须是字典：{document.relative_path} -> {section}.{identity}"
             )
@@ -244,33 +269,32 @@ def _named_collection_entries(
 
 def _reference_pool(document: JsonDocument, section: str) -> PoolDefinition:
     value = document.value
-    if not isinstance(value, list) or not value:
+    if not _is_array(value) or not value:
         raise JsonDataError(f"引用池必须是非空字符串数组：{document.relative_path}")
     if any(not isinstance(item, str) or not item.strip() for item in value):
         raise JsonDataError(f"引用池包含无效成员：{document.relative_path}")
     references = tuple(item.strip() for item in value)
     if len(references) != len(set(references)):
         raise JsonDataError(f"引用池包含重复成员：{document.relative_path}")
-    direct_flags = tuple(_looks_like_entity_id(item) for item in references)
-    if all(direct_flags):
+    if document.descriptor.shape == IDENTITY_POOL:
+        if not all(_looks_like_entity_id(item) for item in references):
+            raise JsonDataError(f"编号池只能保存六位实体编号：{document.relative_path}")
         return PoolDefinition(section=section, identities=references)
-    if any(direct_flags):
-        raise JsonDataError(f"引用池不能混用实体编号和源文件名：{document.relative_path}")
+    if any(_looks_like_entity_id(item) for item in references):
+        raise JsonDataError(f"源池只能保存源文件名：{document.relative_path}")
     return PoolDefinition(section=section, source_files=references)
 
 
 def _validate_document_shape(document: JsonDocument) -> None:
     shape = document.descriptor.shape
     value = document.value
-    if shape == PLAIN_DOCUMENT:
-        return
-    if shape == OBJECT and not isinstance(value, dict):
+    if shape == OBJECT and not isinstance(value, Mapping):
         raise JsonDataError(f"对象文档根值必须是对象：{document.relative_path}")
     if shape == OBJECT_LIST and (
-        not isinstance(value, list) or any(not isinstance(item, dict) for item in value)
+        not _is_array(value) or any(not isinstance(item, Mapping) for item in value)
     ):
         raise JsonDataError(f"字典列表文档根值必须是字典数组：{document.relative_path}")
-    if shape == NAMED_ENTITY and not isinstance(value, dict):
+    if shape == NAMED_ENTITY and not isinstance(value, Mapping):
         raise JsonDataError(f"命名实体文档根值必须是对象：{document.relative_path}")
 
 
@@ -282,7 +306,7 @@ def _validate_all_pools(loaded: LoadedGameData) -> None:
 def _validate_pool_references(loaded: LoadedGameData) -> None:
     expected_sections = loaded.catalog.read_rules.pool_reference_sections
     for document in loaded.catalog.documents:
-        if document.scope not in loaded.catalog.read_rules.pool_reference_scopes:
+        if document.descriptor.dataset == "读取定义":
             continue
         for key, reference in _iter_pool_references(document.value):
             expected = expected_sections.get(key)
@@ -305,17 +329,17 @@ def _validate_number_prefixes(
 ) -> None:
     number_definition_path = catalog.read_rules.number_definition_path
     number_definition = catalog.read(number_definition_path)
-    if not isinstance(number_definition, dict):
+    if not isinstance(number_definition, Mapping):
         raise JsonDataError(f"编号定义没有加载：{number_definition_path}")
     rule = number_definition.get("编号规则")
     prefix_rows = number_definition.get("编号前缀")
-    if not isinstance(rule, dict) or not isinstance(prefix_rows, list):
+    if not isinstance(rule, Mapping) or not _is_array(prefix_rows):
         raise JsonDataError("定义/编号.json 缺少编号规则或编号前缀")
     digits = int(rule.get("位数") or 0)
     prefix_digits = int(rule.get("前缀位数") or 0)
     allowed: dict[str, set[str]] = {}
     for row in prefix_rows:
-        if not isinstance(row, dict):
+        if not isinstance(row, Mapping):
             raise JsonDataError("定义/编号.json.编号前缀必须是字典数组")
         prefix = str(row.get("前缀") or "")
         category = str(row.get("类别") or "")
@@ -324,7 +348,7 @@ def _validate_number_prefixes(
         allowed.setdefault(category, set()).add(prefix)
     for document in catalog.documents:
         descriptor = document.descriptor
-        if descriptor.shape != NUMBERED_ENTITY_LIST:
+        if descriptor.shape not in {NUMBERED_ENTITY_LIST, NUMBERED_ENTITY_POOL}:
             continue
         category = descriptor.number_category
         prefixes = allowed.get(category, set())
@@ -349,20 +373,20 @@ def _iter_pool_references(value: Any) -> tuple[tuple[str, str], ...]:
     result: list[tuple[str, str]] = []
 
     def visit(current: Any) -> None:
-        if isinstance(current, dict):
+        if isinstance(current, Mapping):
             for raw_key, raw_value in current.items():
                 key = str(raw_key)
                 if key.endswith("池"):
                     if isinstance(raw_value, str):
                         result.append((key, raw_value))
-                    elif isinstance(raw_value, list) and all(
+                    elif _is_array(raw_value) and all(
                         isinstance(item, str) for item in raw_value
                     ):
                         result.extend((key, item) for item in raw_value)
                     else:
                         raise JsonDataError(f"资源池引用必须是文件名或文件名数组：{key}")
                 visit(raw_value)
-        elif isinstance(current, list):
+        elif _is_array(current):
             for item in current:
                 visit(item)
 
@@ -376,3 +400,7 @@ def _looks_like_entity_id(value: str) -> bool:
 
 def _entity_identity(value: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): raw for key, raw in value.items()}
+
+
+def _is_array(value: Any) -> bool:
+    return isinstance(value, Sequence) and not isinstance(value, str | bytes)

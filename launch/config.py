@@ -17,9 +17,9 @@
 import ast
 import os
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # 项目根目录。
@@ -76,21 +76,12 @@ ROUTER_ENV_KEYS = {
 }
 
 
-# 持久化基础设施配置；具体仓储仍由业务组合根显式组装。
-DATABASE_ENV_KEYS = {
-    "DATABASE_PATH",
-    "RUNTIME_LOG_DATABASE_PATH",
-    "DATABASE_BUSY_TIMEOUT_MS",
-}
-
-
 # 项目已经认识的配置键名；其他 .env 项会进入 config.custom。
 SYSTEM_ENV_KEYS = (
     PROJECT_ENV_KEYS
     | SERVER_ENV_KEYS
     | LOG_ENV_KEYS
     | ROUTER_ENV_KEYS
-    | DATABASE_ENV_KEYS
 )
 
 
@@ -167,7 +158,7 @@ class Env:
 
         raise ValueError(f"{name} 的值只能是 true/false、1/0、yes/no、on/off，当前值是：{raw}")
 
-    def get_list(self, name: str, default: Iterable[str] = ()) -> List[str]:
+    def get_list(self, name: str, default: Iterable[str] = ()) -> list[str]:
         """
         读取列表配置。
 
@@ -186,11 +177,11 @@ class Env:
             raise ValueError(f"{name} 必须写成列表，例如：{name}=['game']") from exc
 
         if not isinstance(value, list):
-            raise ValueError(f"{name} 必须是列表，例如：{name}=['game']")
+            raise TypeError(f"{name} 必须是列表，例如：{name}=['game']")
 
         for item in value:
             if not isinstance(item, str):
-                raise ValueError(f"{name} 里的每一项都必须是字符串，当前项是：{item!r}")
+                raise TypeError(f"{name} 里的每一项都必须是字符串，当前项是：{item!r}")
 
         return [item.strip() for item in value if item.strip()]
 
@@ -275,20 +266,11 @@ class RouterConfig:
         ROUTER_GROUPS=["示例路由组"]
     """
 
-    module_groups: List[str]
-    modules: List[str]
-    router_folders: List[str]
-    router_groups: List[str]
-    router_child_folders: List[str]
-
-
-@dataclass(frozen=True)
-class DatabaseConfig:
-    """正式游戏、短期消息流水的 SQLite 路径和统一锁等待配置。"""
-
-    path: Path
-    runtime_log_path: Path
-    busy_timeout_ms: int
+    module_groups: list[str]
+    modules: list[str]
+    router_folders: list[str]
+    router_groups: list[str]
+    router_child_folders: list[str]
 
 
 @dataclass(frozen=True)
@@ -325,7 +307,6 @@ class Config:
     server: ServerConfig
     log: LogConfig
     router: RouterConfig
-    database: DatabaseConfig
     custom: dict[str, str]
 
     def get(self, name: str, default: str = "") -> str:
@@ -411,17 +392,6 @@ def load_config() -> Config:
         router_child_folders=env.get_list("ROUTER_CHILD_FOLDERS", []),
     )
 
-    database = DatabaseConfig(
-        path=env.get_path("DATABASE_PATH", BASE_DIR / ".runtime" / "game.db"),
-        runtime_log_path=env.get_path(
-            "RUNTIME_LOG_DATABASE_PATH",
-            BASE_DIR / ".runtime" / "runtime_log.db",
-        ),
-        busy_timeout_ms=int(env.get("DATABASE_BUSY_TIMEOUT_MS", "5000") or "5000"),
-    )
-    if database.busy_timeout_ms < 1:
-        raise ValueError("DATABASE_BUSY_TIMEOUT_MS 必须大于 0")
-
     # 未被系统识别的键都作为自定义配置。
     custom = {key: value for key, value in raw.items() if key not in SYSTEM_ENV_KEYS}
 
@@ -433,7 +403,6 @@ def load_config() -> Config:
         server=server,
         log=log,
         router=router,
-        database=database,
         custom=custom,
     )
 

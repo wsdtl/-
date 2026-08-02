@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from game.core.data import JsonDataService
+from game.core.data import JsonDataService, materialize
 
 from .executors import EXECUTOR_CATEGORIES
 from .schema import RuleSchemaValidator
@@ -18,11 +18,21 @@ def load_battle_foundation(
 ) -> dict[str, Any]:
     if not data.status().loaded:
         raise RuntimeError("JSON 数据微服务必须先于战斗微服务启动")
-    result = data.dataset("战斗基石")
+    result = materialize(data.dataset("战斗定义"))
+    rules = materialize(data.dataset("战斗规则"))
+    result.update(
+        {
+            "伤害规则": rules["伤害"],
+            "行动规则": rules["行动"],
+            "状态反应": rules["状态反应"],
+        }
+    )
     if mechanisms is None:
         mechanism_nodes, mechanism_names = load_battle_mechanisms(data)
     else:
-        mechanism_nodes = {str(key): dict(value) for key, value in mechanisms.items()}
+        mechanism_nodes = {
+            str(key): materialize(value) for key, value in mechanisms.items()
+        }
         mechanism_names = {str(key): str(key) for key in mechanism_nodes}
     result["机制"] = mechanism_nodes
     result["机制名称"] = mechanism_names
@@ -40,7 +50,7 @@ def load_battle_mechanisms(
     name_sources: dict[str, str] = {}
     for identity, raw in data.entities("机制").items():
         path = f"机制[{identity}]"
-        entry = _mapping(raw, path)
+        entry = _mapping(materialize(raw), path)
         unknown = set(entry) - {"编号", "名称", "节点"}
         if unknown:
             raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from game.config import game_config
 from launch import C, config, logger
 from launch.adapter import dispatch_local_message
 from launch.message_events import (
@@ -236,7 +237,7 @@ class MessageConsoleService:
                 record = self._record(event)
                 self._records.append(record)
                 await self._publish(record)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - 消息观察器不能因单条记录停止
                 logger.opt(colors=True, exception=exc).warning(
                     C.warn("天道管理台消息写入失败")
                 )
@@ -400,9 +401,9 @@ def _image_suffix(value: bytes) -> str:
 
 service = MessageConsoleService(
     MessageFlowStore(
-        config.database.runtime_log_path,
+        game_config.database.runtime_log_path,
         retention_seconds=RETENTION_SECONDS,
-        busy_timeout_ms=config.database.busy_timeout_ms,
+        busy_timeout_ms=game_config.database.busy_timeout_ms,
     ),
     media_dir=config.base_dir / ".runtime" / "runtime_log_media",
 )

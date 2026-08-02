@@ -12,6 +12,7 @@ import pytest
 import game.app as game_app
 import launch.adapter.local.handler as local_handler_module
 import launch.adapter.qq.handler as qq_handler_module
+from game.config import load_game_config
 from launch.adapter.command_guard import CommandGuardDecision
 from launch.adapter.context import (
     AdapterCapabilities,
@@ -33,6 +34,7 @@ from launch.adapter.qq.rules import (
     QqCommandRegistry,
     QqCommandRule,
 )
+from launch.config import Config
 from launch.on_event import EventCallback, OnEvent
 
 lifespan_module = import_module("launch.lifespan")
@@ -70,8 +72,12 @@ def test_legacy_runtime_storage_moves_out_of_data(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(
         game_app,
         "config",
+        SimpleNamespace(base_dir=tmp_path),
+    )
+    monkeypatch.setattr(
+        game_app,
+        "game_config",
         SimpleNamespace(
-            base_dir=tmp_path,
             database=SimpleNamespace(
                 path=runtime / "game.db",
                 runtime_log_path=runtime / "runtime_log.db",
@@ -96,6 +102,28 @@ def test_legacy_runtime_storage_moves_out_of_data(tmp_path, monkeypatch) -> None
     assert (runtime / "runtime_log.db").read_bytes() == b"log"
     assert (runtime / "backups" / "snapshot.db").read_bytes() == b"backup"
     assert (runtime / "runtime_log_media" / "image.png").read_bytes() == b"image"
+
+
+def test_game_database_settings_use_framework_custom_values(tmp_path) -> None:
+    values = {
+        "DATABASE_PATH": "state/game.sqlite",
+        "RUNTIME_LOG_DATABASE_PATH": "state/runtime.sqlite",
+        "DATABASE_BUSY_TIMEOUT_MS": "2300",
+    }
+    source = SimpleNamespace(
+        base_dir=tmp_path,
+        get=lambda name, default="": values.get(name, default),
+    )
+
+    settings = load_game_config(source)
+
+    assert settings.database.path == tmp_path / "state" / "game.sqlite"
+    assert settings.database.runtime_log_path == tmp_path / "state" / "runtime.sqlite"
+    assert settings.database.busy_timeout_ms == 2300
+
+
+def test_framework_config_does_not_own_game_database_settings() -> None:
+    assert "database" not in Config.__dataclass_fields__
 
 
 def test_local_guards_preflight_every_planned_callback(monkeypatch) -> None:

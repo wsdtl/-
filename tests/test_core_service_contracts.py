@@ -16,7 +16,7 @@ def test_pool_returns_stable_ids_instead_of_entity_definitions() -> None:
     file_id = next(
         Path(path).stem
         for path in data.document_paths()
-        if Path(path).parent.as_posix() == "内容/物品/功法"
+        if Path(path).parent.as_posix() == "内容/功法"
     )
 
     result = pool.draw(
@@ -50,18 +50,12 @@ def test_data_service_indexes_every_formal_content_and_pool() -> None:
 def test_service_receives_named_dataset_instead_of_knowing_file_paths() -> None:
     data, _ = _services()
 
-    foundation = data.dataset("战斗基石")
-    report = data.dataset("战报展示")
+    definitions = data.dataset("战斗定义")
+    rules = data.dataset("战斗规则")
+    report = data.dataset("战斗展示")
 
-    assert set(foundation) == {
-        "属性",
-        "资源",
-        "事件",
-        "原子能力",
-        "伤害规则",
-        "行动规则",
-        "状态反应",
-    }
+    assert set(definitions) == {"属性", "资源", "事件", "原子能力"}
+    assert set(rules) == {"伤害", "行动", "状态反应"}
     assert set(report) == {"战报"}
 
 
@@ -70,7 +64,7 @@ def test_source_pool_and_direct_identity_pool_both_expand() -> None:
 
     source_result = pool.draw(
         PoolRequest(
-            file_ids=("入微敌人功法池",),
+            file_ids=("入微敌方修士功法池",),
             section="功法",
             count=3,
             mode=ALLOW_REPEATS,
@@ -79,7 +73,7 @@ def test_source_pool_and_direct_identity_pool_both_expand() -> None:
     )
     direct_result = pool.draw(
         PoolRequest(
-            file_ids=("500001-陆清和功法池",),
+            file_ids=("500001-功法池",),
             section="功法",
             count=3,
             mode=ALLOW_REPEATS,
@@ -97,13 +91,13 @@ def test_pool_field_projection_does_not_copy_complete_entities() -> None:
     data, _ = _services()
 
     values = data.pool_fields(
-        ("入微敌人宝石池",),
+        ("入微敌方修士宝石池",),
         "宝石",
         ("权重",),
     )
 
     assert len(values) == len(
-        data.pool_members(("入微敌人宝石池",), "宝石")
+        data.pool_members(("入微敌方修士宝石池",), "宝石")
     )
     assert all(set(fields) == {"权重"} for _, fields in values)
 
@@ -112,7 +106,25 @@ def test_pool_section_mismatch_is_rejected() -> None:
     data, _ = _services()
 
     with pytest.raises(JsonDataError, match="资源池集合不匹配"):
-        data.pool_members(("入微敌人功法池",), "宝石")
+        data.pool_members(("入微敌方修士功法池",), "宝石")
+
+
+def test_virtual_full_pool_uses_deduplicated_entity_index() -> None:
+    data, pool = _services()
+
+    result = pool.draw(
+        PoolRequest(
+            section="宝石",
+            count=5,
+            mode=ALLOW_REPEATS,
+            full_pool=True,
+            seed=1001,
+        )
+    )
+
+    assert result.full_pool is True
+    assert result.source_files == ()
+    assert result.candidate_count == len(data.entities("宝石"))
 
 
 def test_companion_collection_is_not_a_weighted_pool() -> None:
