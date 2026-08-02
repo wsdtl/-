@@ -51,6 +51,7 @@ class CombatantSpec:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
+    battle_pills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ class CombatantResult:
     owner_id: str = ""
     controller_id: str = ""
     counts_for_victory: bool = True
+    battle_pills: tuple[str, ...] = ()
 
     @property
     def alive(self) -> bool:

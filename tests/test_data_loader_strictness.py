@@ -31,6 +31,7 @@ def test_world_documents_are_separated_by_json_read_rules() -> None:
     root = Path(__file__).resolve().parents[1] / "data"
     catalog = JsonDataReader(root).load_catalog()
 
+    assert catalog.by_path["内容/世界/晓楠修仙界.json"].descriptor.dataset == "世界"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村.json"].descriptor.dataset == "地点"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村道侣.json"].descriptor.dataset == "道侣"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村敌人.json"].descriptor.dataset == "敌人"

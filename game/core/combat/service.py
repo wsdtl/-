@@ -110,6 +110,7 @@ class CombatService:
             definition["出生序号"] = int(reference.born_order)
             definition["威力倍率"] = float(reference.power_multiplier)
             techniques.append(definition)
+        battle_pills, pill_statuses = self._battle_pill_statuses(value)
         return RuntimeCombatantSnapshot(
             id=value.id,
             name=value.name,
@@ -121,7 +122,7 @@ class CombatService:
             health=value.health,
             spirit=value.spirit,
             shield=value.shield,
-            statuses=tuple(copy.deepcopy(value.statuses)),
+            statuses=tuple((*copy.deepcopy(value.statuses), *pill_statuses)),
             cooldowns=copy.deepcopy(dict(value.cooldowns)),
             inventory=copy.deepcopy(dict(value.inventory)),
             auto_medicine=value.auto_medicine,
@@ -134,7 +135,81 @@ class CombatService:
             tags=tuple(value.tags),
             tactic=tuple(copy.deepcopy(value.tactic)),
             battle_profile=copy.deepcopy(dict(value.battle_profile)),
+            battle_pills=battle_pills,
         )
+
+    def _battle_pill_statuses(
+        self,
+        combatant: CombatantSpec,
+    ) -> tuple[tuple[str, ...], tuple[dict[str, Any], ...]]:
+        identities = tuple(str(value).strip() for value in combatant.battle_pills)
+        if any(not value for value in identities):
+            raise ValueError("战丹编号不能为空")
+        if not identities:
+            return (), ()
+
+        alchemy_rules = materialize(self._data.dataset("炼药规则"))
+        battle_pill_rules = dict(alchemy_rules["丹则"]["战丹"])
+        repeat_rule = str(battle_pill_rules["同丹重复"])
+        if repeat_rule not in {"允许", "禁止"}:
+            raise ValueError(f"未知战丹重复规则：{repeat_rule}")
+        if repeat_rule == "禁止" and len(identities) != len(set(identities)):
+            raise ValueError("同一名参战者不能重复寄存同一枚战丹")
+        strength_rules = {
+            int(rule["强度"]): dict(rule)
+            for rule in alchemy_rules["战丹"]["强度规则"]
+        }
+        slot_limit = int(battle_pill_rules["丹位上限"])
+        used_slots = 0
+        statuses: list[dict[str, Any]] = []
+        for identity in identities:
+            item = materialize(self._data.entity("物品", identity))
+            effect = dict(item.get("使用效果") or {})
+            if effect.get("类型") != "寄存战丹":
+                raise ValueError(f"{identity}不是战丹")
+            slots = int(item.get("丹位", 0))
+            strength = int(item.get("强度", 0))
+            strength_rule = strength_rules.get(strength)
+            if strength_rule is None or slots < 1:
+                raise ValueError(f"{identity}缺少有效的强度或丹位")
+            expected_slots = int(strength_rule["丹位"])
+            if slots != expected_slots:
+                raise ValueError(
+                    f"战丹{identity}强度{strength}应占用{expected_slots}个丹位"
+                )
+            used_slots += slots
+
+            status = copy.deepcopy(dict(effect.get("战前状态") or {}))
+            if status.get("持续单位") != "整场战斗":
+                raise ValueError(f"{identity}的战前状态必须持续整场战斗")
+            mechanism_ids = tuple(str(value) for value in effect.get("战斗机制") or ())
+            listeners = list(copy.deepcopy(status.get("监听") or ()))
+            for mechanism_id in mechanism_ids:
+                mechanism = materialize(self._data.entity("机制", mechanism_id))
+                node = copy.deepcopy(dict(mechanism["节点"]))
+                if node.get("能力") != "监听事件":
+                    raise ValueError(
+                        f"战丹{identity}只能装配监听型战斗机制：{mechanism_id}"
+                    )
+                listeners.append(node)
+            status["监听"] = listeners
+            status["来源"] = combatant.id
+            status["来源名称"] = str(item.get("名称") or identity)
+            record = copy.deepcopy(dict(status.get("记录") or {}))
+            record.update(
+                {
+                    "战丹编号": identity,
+                    "战斗机制": list(mechanism_ids),
+                    "强度": strength,
+                    "丹位": slots,
+                }
+            )
+            status["记录"] = record
+            statuses.append(status)
+
+        if used_slots > slot_limit:
+            raise ValueError(f"寄存战丹占用{used_slots}个丹位，超过上限{slot_limit}")
+        return identities, tuple(statuses)
 
     def _inventory_definitions(
         self,

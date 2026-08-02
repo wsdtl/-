@@ -278,7 +278,10 @@ class MechanismRuntime:
             return context.listener_index
 
         listener_order = tuple(self.catalog.action_rules["被动技能结算"]["排序"])
-        grouped: dict[str, list[tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]]] = {}
+        grouped: dict[
+            str,
+            list[tuple[tuple[Any, ...], Fighter, str, str, Mapping[str, Any]]],
+        ] = {}
         participant_order = context.fighter_order
 
         def add_listener(
@@ -303,8 +306,15 @@ class MechanismRuntime:
                 "物品编号": str(item_id),
                 "能力序号": (int(ability_order), int(effect_order)),
             }
-            key = tuple(values[field] for field in listener_order) + (str(listener_id),)
-            grouped.setdefault(event_name, []).append((key, owner, listener_id, node))
+            activation_id = (
+                f"{item_id}:{listener_id}:{ability_order}:{effect_order}"
+                if item_id
+                else str(listener_id)
+            )
+            key = tuple(values[field] for field in listener_order) + (activation_id,)
+            grouped.setdefault(event_name, []).append(
+                (key, owner, activation_id, str(listener_id), node)
+            )
 
         for owner in context.fighters:
             for passive in owner.passives:
@@ -321,8 +331,23 @@ class MechanismRuntime:
                         effect_order=int(passive.get("效果序号", 0)),
                     )
             for status in owner.statuses:
+                mechanism_ids = tuple(
+                    str(value) for value in status.values.get("战斗机制", ())
+                )
+                item_id = str(status.values.get("战丹编号") or status.name)
                 for index, node in enumerate(status.listeners):
-                    add_listener(owner, f"{status.name}:{index}", node, item_id=status.name, ability_order=index)
+                    listener_id = (
+                        mechanism_ids[index]
+                        if index < len(mechanism_ids)
+                        else f"{status.name}:{index}"
+                    )
+                    add_listener(
+                        owner,
+                        listener_id,
+                        node,
+                        item_id=item_id,
+                        ability_order=index,
+                    )
         for obj in context.combat_objects.values():
             if not obj.active:
                 continue
@@ -369,14 +394,14 @@ class MechanismRuntime:
         context.event_depth += 1
         try:
             listeners = self._compiled_listeners(context).get(kind, ())
-            for _, owner, listener_id, node in listeners:
+            for _, owner, activation_id, mechanism_id, node in listeners:
                 if not self._listener_relation_matches(context, owner, frame, node):
                     continue
                 if not self._conditions_allow(
                     context, owner, frame.target, node.get("条件") or (), frame.amount, frame.facts, tuple(frame.tags)
                 ):
                     continue
-                activation = (owner.id, listener_id)
+                activation = (owner.id, activation_id)
                 if activation in context.trigger_stack:
                     continue
                 per_action = int(node.get("每次行动最多触发", 0) or 0)
@@ -389,7 +414,7 @@ class MechanismRuntime:
                 context.battle_trigger_counts[activation] = context.battle_trigger_counts.get(activation, 0) + 1
                 context.trigger_stack.add(activation)
                 previous = context.current_mechanism
-                context.current_mechanism = listener_id
+                context.current_mechanism = mechanism_id
                 try:
                     self._run_effects(
                         context,

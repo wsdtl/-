@@ -220,6 +220,7 @@ class Fighter:
     tags: set[str] = field(default_factory=set)
     tactic: list[Mapping[str, Any]] = field(default_factory=list)
     battle_profile: dict[str, Any] = field(default_factory=dict)
+    battle_pills: tuple[str, ...] = ()
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -249,7 +250,13 @@ class Fighter:
         return max(0.0, self.value("护盾上限", 0.0))
 
 
-ListenerEntry = tuple[tuple[Any, ...], Fighter, str, Mapping[str, Any]]
+ListenerEntry = tuple[
+    tuple[Any, ...],
+    Fighter,
+    str,
+    str,
+    Mapping[str, Any],
+]
 
 
 @dataclass
@@ -321,6 +328,7 @@ class RuntimeCombatantSnapshot:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
+    battle_pills: tuple[str, ...] = ()
 
 
 @dataclass

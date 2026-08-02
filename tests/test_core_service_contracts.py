@@ -47,6 +47,15 @@ def test_data_service_indexes_every_formal_content_and_pool() -> None:
     assert status.pool_count > 0
 
 
+def test_world_uses_xiaonan_cultivation_realm_as_its_stable_identity() -> None:
+    data, _ = _services()
+
+    world = data.entity("世界", "晓楠修仙界")
+    assert world["出生地"] == "青溪村"
+    with pytest.raises(JsonDataError, match="实体不存在"):
+        data.entity("世界", "青岚山境")
+
+
 def test_service_receives_named_dataset_instead_of_knowing_file_paths() -> None:
     data, _ = _services()
 

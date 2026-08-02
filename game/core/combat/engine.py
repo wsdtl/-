@@ -5,8 +5,8 @@ from __future__ import annotations
 import copy
 import math
 import random
-from collections.abc import Mapping
-from typing import Any, Callable
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from .contracts import CombatantResult, CombatResult, StatusResult
 from .damage import DamageEngine, DamageRequest
@@ -259,6 +259,7 @@ class BattleEngine(MechanismRuntime):
             controller_id=str(snapshot.controller_id or snapshot.id), form=str(snapshot.form or "本相"),
             forms=copy.deepcopy(dict(snapshot.forms)), tags=set(snapshot.tags), tactic=copy.deepcopy(list(snapshot.tactic)),
             battle_profile=self._normalize_battle_profile(snapshot.battle_profile),
+            battle_pills=tuple(snapshot.battle_pills),
         )
 
     @staticmethod
@@ -278,6 +279,7 @@ class BattleEngine(MechanismRuntime):
             consumed_items=dict(fighter.consumed_items), skill_cursor=fighter.skill_cursor,
             form=fighter.form, owner_id=fighter.owner_id, controller_id=fighter.controller_id,
             counts_for_victory=fighter.counts_for_victory,
+            battle_pills=tuple(fighter.battle_pills),
         )
 
     @staticmethod
@@ -559,7 +561,7 @@ class BattleEngine(MechanismRuntime):
             if rate > 0:
                 self._mechanism_recover_resource(context, source, source, {"目标": {"能力": "选择目标", "范围": "自身"}, "资源": "血气", "数值": resolution.health_damage * rate}, 1)
         if allow_followups and resolution.actual_damage > 0 and target.alive and self._judgement(context, "连击", self._percent(source, "连击率")):
-            self._deal_attack(context, source, target, power * self._percent(source, "连击伤害", 1), "连击", tags=tuple((*tags, "连击", "派生伤害")), allow_followups=False)
+            self._deal_attack(context, source, target, power * self._percent(source, "连击伤害", 1), "连击", tags=(*tags, "连击", "派生伤害"), allow_followups=False)
         return resolution.actual_damage
 
     def _apply_damage(self, context, source, target, amount, *, ignore_defense=False, label="伤害", damage_form="直接", defense_rule="普通", can_miss=False, can_critical=True, can_block=True, tags=(), allow_reactions=True):
@@ -666,7 +668,14 @@ class BattleEngine(MechanismRuntime):
             for item_id, quantity in fighter.inventory.items():
                 use = (context.item_definitions.get(item_id) or {}).get("使用效果") or {}
                 if quantity > 0 and use.get("类型") == effect_type:
-                    candidates.append((float(use.get("恢复量", 0)), item_id))
+                    if "恢复百分比" in use:
+                        percentage = float(use.get("恢复百分比", 0))
+                        if percentage < 0:
+                            raise ValueError(f"{item_id}的恢复百分比不能小于 0")
+                        amount = maximum * percentage / 100.0
+                    else:
+                        amount = max(0.0, float(use.get("恢复量", 0)))
+                    candidates.append((amount, item_id))
             if not candidates:
                 continue
             amount, item_id = min(candidates)
