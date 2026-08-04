@@ -33,6 +33,7 @@ class JsonEntity:
     section: str
     number_category: str
     source_file: str
+    directory_owner: str
     value: Mapping[str, JsonValue]
 
 

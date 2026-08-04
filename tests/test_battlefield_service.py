@@ -15,7 +15,7 @@ from game.core.combat import (
     CombatService,
 )
 from game.core.data import JsonDataService
-from game.core.world import WorldService
+from game.core.world import SurfaceCoordinate, WorldService
 
 
 def test_surface_field_accepts_location_name_and_exact_xy() -> None:
@@ -30,6 +30,28 @@ def test_surface_field_accepts_location_name_and_exact_xy() -> None:
     assert by_name.altitude == 2360
     assert by_name.terrain == "溪谷"
     assert battlefield.status().surface_terrain_count == 54
+
+
+def test_surface_field_accepts_unregistered_xy_from_region_terrain() -> None:
+    _, world, battlefield, _ = _services()
+
+    field = battlefield.surface_at(1, 1)
+
+    assert world.region_at(1, 1).identity == "青岚州"
+    assert field.scene == "松风林"
+    assert field.terrain == "松林"
+    assert field.coordinate == (1, 1)
+    assert field.altitude == world.altitude(SurfaceCoordinate(1, 1))
+
+
+def test_battlefield_environment_is_only_a_selection_reference() -> None:
+    _, _, battlefield, _ = _services()
+
+    environment = battlefield.environment("610049")
+
+    assert environment.identity == "610049"
+    assert environment.name == "溪谷"
+    assert not hasattr(environment, "stages")
 
 
 def test_every_terrain_owns_one_json_document() -> None:

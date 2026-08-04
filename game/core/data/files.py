@@ -58,6 +58,7 @@ class ReadRule:
     section: str = ""
     number_category: str = ""
     filename_matches_parent: bool = False
+    directory_owner_depth: int = 0
 
     def matches(self, relative_path: str, file_id: str) -> bool:
         if self.matcher.fullmatch(relative_path) is None:
@@ -89,6 +90,10 @@ class DataReadRules:
             patterns = "、".join(rule.pattern for rule in matches)
             raise JsonDataError(f"数据文件匹配多条读取规则：{relative_path} -> {patterns}")
         rule = matches[0]
+        directory_owner = ""
+        if rule.directory_owner_depth:
+            parts = PurePosixPath(relative_path).parts
+            directory_owner = parts[-1 - rule.directory_owner_depth]
         return DocumentDescriptor(
             dataset=rule.dataset,
             data_name=file_id,
@@ -96,6 +101,7 @@ class DataReadRules:
             section=rule.section,
             number_category=rule.number_category,
             source_pool=rule.shape in {NUMBERED_ENTITY_POOL, NAMED_ENTITY_POOL},
+            directory_owner=directory_owner,
         )
 
 
@@ -109,6 +115,7 @@ class DocumentDescriptor:
     section: str = ""
     number_category: str = ""
     source_pool: bool = False
+    directory_owner: str = ""
 
 
 @dataclass(frozen=True)
@@ -320,6 +327,7 @@ def _parse_read_rule(
         "实体类别",
         "编号类别",
         "目录主体",
+        "归属目录层级",
     }
     unknown = set(value) - allowed
     if unknown:
@@ -332,6 +340,10 @@ def _parse_read_rule(
     filename_matches_parent = _optional_bool(
         value.get("目录主体", False),
         f"{path}.目录主体",
+    )
+    directory_owner_depth = _optional_nonnegative_int(
+        value.get("归属目录层级", 0),
+        f"{path}.归属目录层级",
     )
     pattern_path = PurePosixPath(pattern)
     if pattern_path.is_absolute() or ".." in pattern_path.parts:
@@ -352,6 +364,10 @@ def _parse_read_rule(
         raise JsonDataError(f"{path}.编号类别不能为空")
     if shape not in {NUMBERED_ENTITY_LIST, NUMBERED_ENTITY_POOL} and number_category:
         raise JsonDataError(f"{path}的结构不能声明编号类别")
+    if directory_owner_depth and shape not in ENTITY_SHAPES:
+        raise JsonDataError(f"{path}的结构不能声明归属目录层级")
+    if directory_owner_depth >= len(pattern_path.parts):
+        raise JsonDataError(f"{path}.归属目录层级超出路径深度")
     return ReadRule(
         dataset=dataset,
         pattern=pattern,
@@ -360,6 +376,7 @@ def _parse_read_rule(
         section=section,
         number_category=number_category,
         filename_matches_parent=filename_matches_parent,
+        directory_owner_depth=directory_owner_depth,
     )
 
 
@@ -405,6 +422,12 @@ def _optional_string(value: Any, path: str) -> str:
 def _optional_bool(value: Any, path: str) -> bool:
     if not isinstance(value, bool):
         raise JsonDataError(f"{path}必须是布尔值")
+    return value
+
+
+def _optional_nonnegative_int(value: Any, path: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise JsonDataError(f"{path}必须是非负整数")
     return value
 
 

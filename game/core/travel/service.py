@@ -1,4 +1,4 @@
-"""按正式路网自动选择最优行程并生成叙事。"""
+"""按全地表通行规则自动选择最优行程并生成叙事。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from game.core.world import (
 )
 
 from .contracts import (
+    TravelEndpoint,
     TravelError,
     TravelMetrics,
     TravelPlan,
@@ -31,6 +32,7 @@ METRIC_UNITS = MappingProxyType(
     {
         "水平距离": "米",
         "道路段数": "段",
+        "地形段数": "段",
         "最低海拔": "米",
         "最高海拔": "米",
         "累计爬升": "米",
@@ -50,8 +52,9 @@ TRAVEL_FACTS = frozenset(
         "终点所属区域",
         "经由地点",
         "经由道路",
-        "首段道路",
-        "末段道路",
+        "经由地形",
+        "首段通行",
+        "末段通行",
         "地势转折地点",
         "水平距离",
         "最低海拔",
@@ -64,20 +67,12 @@ TRAVEL_FACTS = frozenset(
 
 
 @dataclass(frozen=True)
-class _RoadProfile:
-    horizontal: float
-    ascent: int
-    descent: int
+class _Step:
+    start: SurfaceCoordinate
+    destination: SurfaceCoordinate
+    kind: str
+    name: str
     adjusted: float
-
-
-@dataclass(frozen=True)
-class _DirectedRoad:
-    road_type: str
-    start: str
-    destination: str
-    coordinates: tuple[SurfaceCoordinate, ...]
-    profile: _RoadProfile
 
 
 class TravelService:
@@ -88,19 +83,19 @@ class TravelService:
         self._world = world
         self._metrics: tuple[str, ...] = ()
         self._sort_metrics: tuple[str, ...] = ()
-        self._graph: dict[str, tuple[_DirectedRoad, ...]] = {}
+        self._road_edges: dict[tuple[SurfaceCoordinate, SurfaceCoordinate], str] = {}
         self._road_count = 0
         self._road_multipliers: dict[str, float] = {}
+        self._terrain_multipliers: dict[str, float] = {}
+        self._terrain_cache: dict[SurfaceCoordinate, str] = {}
         self._horizontal_weight = 0.0
         self._ascent_weight = 0.0
         self._descent_weight = 0.0
         self._diagonal_multiplier = 0.0
         self._allowed_steps: frozenset[tuple[int, int]] = frozenset()
-        self._must_include_start = True
-        self._must_include_destination = True
-        self._allow_repeated_coordinates = False
         self._default_bidirectional = True
-        self._require_connected = True
+        self._road_coordinates_must_be_continuous = True
+        self._allow_offroad = True
         self._narrative_order: tuple[str, ...] = ()
         self._realm_effects: TravelRealmEffects | None = None
         self._display: Mapping[str, Any] | None = None
@@ -121,13 +116,13 @@ class TravelService:
             {
                 "道路来源",
                 "地势来源",
+                "地形来源",
                 "水平尺度来源",
                 "展示来源",
-                "道路坐标",
+                "坐标规则",
                 "路网要求",
                 "自动选路",
                 "路程折算",
-                "道路折算倍率",
                 "行程事实",
                 "境界影响",
             },
@@ -135,33 +130,17 @@ class TravelService:
         )
         self._validate_sources(raw_rule)
         self._metrics = self._load_metrics(definitions)
-        coordinate_rule = _mapping(raw_rule.get("道路坐标"), "道路坐标规则")
+        coordinate_rule = _mapping(raw_rule.get("坐标规则"), "坐标规则")
         _strict_fields(
             coordinate_rule,
-            {
-                "维数",
-                "必须包含起点",
-                "必须包含终点",
-                "允许重复坐标",
-                "默认双向",
-                "允许相邻步",
-                "斜向距离倍率",
-            },
-            "道路坐标规则",
+            {"维数", "允许相邻步", "斜向距离倍率"},
+            "坐标规则",
         )
         if _positive_int(coordinate_rule.get("维数"), "道路坐标维数") != 2:
             raise TravelError("道路坐标维数必须是 2")
-        self._must_include_start = _boolean(
-            coordinate_rule.get("必须包含起点"), "必须包含起点"
-        )
-        self._must_include_destination = _boolean(
-            coordinate_rule.get("必须包含终点"), "必须包含终点"
-        )
-        self._allow_repeated_coordinates = _boolean(
-            coordinate_rule.get("允许重复坐标"), "允许重复坐标"
-        )
         self._default_bidirectional = _boolean(
-            coordinate_rule.get("默认双向"), "默认双向"
+            _mapping(raw_rule.get("路网要求"), "路网要求").get("道路默认双向"),
+            "道路默认双向",
         )
         self._allowed_steps = self._load_allowed_steps(
             coordinate_rule.get("允许相邻步")
@@ -185,10 +164,20 @@ class TravelService:
             conversion.get("下降每米"), "下降每米折算"
         )
         self._road_multipliers = self._load_road_multipliers(
-            raw_rule.get("道路折算倍率")
+            self._data.dataset("道路通行规则")
         )
         if set(self._road_multipliers) != set(self._world.world().road_types):
             raise TravelError("道路折算倍率与世界道路不一致")
+        self._terrain_multipliers = self._load_terrain_multipliers(
+            self._data.dataset("地形通行规则")
+        )
+        expected_terrains = {
+            partition.terrain
+            for region in self._world.regions()
+            for partition in region.terrain_partitions
+        }
+        if set(self._terrain_multipliers) != expected_terrains:
+            raise TravelError("地形通行倍率与区域地形分区不一致")
         self._load_network_rules(raw_rule)
         self._sort_metrics = self._load_sort_metrics(raw_rule)
         self._validate_travel_facts(raw_rule.get("行程事实"))
@@ -201,10 +190,8 @@ class TravelService:
         except KeyError as exc:
             raise TravelError(f"行程展示不存在：{display_name}") from exc
         self._load_display_contract(self._display)
-        self._graph = self._build_graph(self._world.roads())
+        self._road_edges = self._build_road_edges(self._world.roads())
         self._road_count = len(self._world.roads())
-        if self._require_connected:
-            self._validate_connectivity()
         return self.status()
 
     def status(self) -> TravelStatus:
@@ -221,62 +208,69 @@ class TravelService:
 
     def plan(self, request: TravelRequest) -> TravelPlan:
         self._require_initialized()
-        start_location = self._world.location(request.start)
-        destination_location = self._world.location(request.destination)
-        start = start_location.identity
-        destination = destination_location.identity
-        if start == destination:
+        start = self._resolve_endpoint(request.start)
+        destination = self._resolve_endpoint(request.destination)
+        if start.coordinate == destination.coordinate:
             raise TravelError("行程起点与终点不能相同")
-        roads = self._find_route(start, destination)
-        points = self._route_points(roads)
-        metrics = self._metrics_for(roads, points)
-        via_locations = tuple(road.destination for road in roads[:-1])
-        turning = self._turning_location(roads, start, destination)
+        steps = self._find_route(start.coordinate, destination.coordinate)
+        points = self._route_points(steps)
+        metrics = self._metrics_for(steps, points)
+        via_locations = self._via_locations(
+            points, start.coordinate, destination.coordinate
+        )
+        road_types = self._run_names(steps, "道路")
+        terrain_types = self._run_names(steps, "地形")
+        turning_coordinate = self._turning_coordinate(steps)
+        turning = self._turning_label(turning_coordinate)
         narrative = self._narrative(
-            start=start,
-            destination=destination,
+            start=start.label,
+            destination=destination.label,
             via_locations=via_locations,
-            roads=roads,
+            steps=steps,
             turning=turning,
             metrics=metrics,
         )
         return TravelPlan(
-            start=start,
-            destination=destination,
-            destination_region=destination_location.region,
+            start=start.label,
+            destination=destination.label,
+            destination_region=self._world.region_at(destination.coordinate).identity,
             via_locations=via_locations,
-            road_types=tuple(road.road_type for road in roads),
+            road_types=road_types,
+            terrain_types=terrain_types,
             terrain_turning_location=turning,
+            terrain_turning_coordinate=turning_coordinate,
             points=points,
             metrics=metrics,
             narrative=narrative,
         )
 
-    def _build_graph(
+    def _build_road_edges(
         self,
         roads: tuple[RoadDefinition, ...],
-    ) -> dict[str, tuple[_DirectedRoad, ...]]:
-        graph: dict[str, list[_DirectedRoad]] = {
-            location.identity: [] for location in self._world.locations()
-        }
+    ) -> dict[tuple[SurfaceCoordinate, SurfaceCoordinate], str]:
+        edges: dict[tuple[SurfaceCoordinate, SurfaceCoordinate], str] = {}
         for road in roads:
             coordinates = self._validated_coordinates(road)
-            forward = self._directed_road(
-                road.road_type, road.start, road.destination, coordinates
-            )
-            graph[forward.start].append(forward)
-            if self._default_bidirectional:
-                backward = self._directed_road(
-                    road.road_type,
-                    road.destination,
-                    road.start,
-                    tuple(reversed(coordinates)),
-                )
-                graph[backward.start].append(backward)
-        return {
-            name: tuple(sorted(values, key=lambda value: (value.destination, value.road_type)))
-            for name, values in graph.items()
-        }
+            for left, right in itertools.pairwise(coordinates):
+                self._register_road_edge(edges, left, right, road.road_type)
+                if self._default_bidirectional:
+                    self._register_road_edge(edges, right, left, road.road_type)
+        return edges
+
+    def _register_road_edge(
+        self,
+        edges: dict[tuple[SurfaceCoordinate, SurfaceCoordinate], str],
+        start: SurfaceCoordinate,
+        destination: SurfaceCoordinate,
+        road_type: str,
+    ) -> None:
+        key = (start, destination)
+        previous = edges.get(key)
+        if (
+            previous is None
+            or self._road_multipliers[road_type] < self._road_multipliers[previous]
+        ):
+            edges[key] = road_type
 
     def _validated_coordinates(
         self,
@@ -285,15 +279,11 @@ class TravelService:
         coordinates = list(road.coordinates)
         start = self._world.location(road.start).coordinate
         destination = self._world.location(road.destination).coordinate
-        if self._must_include_start and coordinates[0] != start:
+        if coordinates[0] != start:
             raise TravelError(f"道路起点坐标不一致：{road.start}")
-        if not self._must_include_start and coordinates[0] != start:
-            coordinates.insert(0, start)
-        if self._must_include_destination and coordinates[-1] != destination:
+        if coordinates[-1] != destination:
             raise TravelError(f"道路终点坐标不一致：{road.destination}")
-        if not self._must_include_destination and coordinates[-1] != destination:
-            coordinates.append(destination)
-        if not self._allow_repeated_coordinates and len(coordinates) != len(set(coordinates)):
+        if len(coordinates) != len(set(coordinates)):
             raise TravelError(f"道路存在重复坐标：{road.start} -> {road.destination}")
         for left, right in itertools.pairwise(coordinates):
             step = (right.x - left.x, right.y - left.y)
@@ -303,93 +293,182 @@ class TravelService:
                 )
         return tuple(coordinates)
 
-    def _directed_road(
+    def _find_route(
         self,
-        road_type: str,
-        start: str,
-        destination: str,
-        coordinates: tuple[SurfaceCoordinate, ...],
-    ) -> _DirectedRoad:
-        horizontal = 0.0
-        ascent = 0
-        descent = 0
-        scale = self._world.world().meters_per_grid
-        for left, right in itertools.pairwise(coordinates):
-            diagonal = left.x != right.x and left.y != right.y
-            horizontal += scale * (self._diagonal_multiplier if diagonal else 1.0)
-            difference = self._world.altitude(right) - self._world.altitude(left)
-            if difference > 0:
-                ascent += difference
-            else:
-                descent -= difference
-        adjusted = self._road_multipliers[road_type] * (
-            horizontal * self._horizontal_weight
-            + ascent * self._ascent_weight
-            + descent * self._descent_weight
-        )
-        return _DirectedRoad(
-            road_type=road_type,
-            start=start,
-            destination=destination,
-            coordinates=coordinates,
-            profile=_RoadProfile(
-                horizontal=horizontal,
-                ascent=ascent,
-                descent=descent,
-                adjusted=adjusted,
-            ),
-        )
-
-    def _find_route(self, start: str, destination: str) -> tuple[_DirectedRoad, ...]:
+        start: SurfaceCoordinate,
+        destination: SurfaceCoordinate,
+    ) -> tuple[_Step, ...]:
         serial = itertools.count()
         zero = self._route_sort_key(0.0, 0, 0.0)
-        queue: list[tuple[tuple[float, ...], int, str, float, int, float]] = [
-            (zero, next(serial), start, 0.0, 0, 0.0)
+        initial_state = (start, "", "")
+        queue: list[
+            tuple[
+                tuple[float, ...],
+                int,
+                tuple[SurfaceCoordinate, str, str],
+                tuple[float, ...],
+                float,
+                int,
+                float,
+            ]
+        ] = [
+            (
+                self._priority(zero, start, destination),
+                next(serial),
+                initial_state,
+                zero,
+                0.0,
+                0,
+                0.0,
+            )
         ]
-        best: dict[str, tuple[float, ...]] = {start: zero}
-        previous: dict[str, tuple[str, _DirectedRoad]] = {}
+        best: dict[tuple[SurfaceCoordinate, str, str], tuple[float, ...]] = {
+            initial_state: zero
+        }
+        previous: dict[
+            tuple[SurfaceCoordinate, str, str],
+            tuple[tuple[SurfaceCoordinate, str, str], _Step],
+        ] = {}
+        goal_states: dict[tuple[SurfaceCoordinate, str, str], tuple[float, ...]] = {}
+        goal_adjusted = math.inf
         while queue:
-            cost, _, node, adjusted, segments, horizontal = heapq.heappop(queue)
-            if cost != best.get(node):
+            _, _, state, cost, adjusted, road_segments, horizontal = heapq.heappop(
+                queue
+            )
+            if cost != best.get(state):
                 continue
+            node, previous_kind, previous_name = state
             if node == destination:
-                break
-            for road in self._graph[node]:
-                next_adjusted = adjusted + road.profile.adjusted
-                next_segments = segments + 1
-                next_horizontal = horizontal + road.profile.horizontal
+                goal_states[state] = cost
+                goal_adjusted = min(goal_adjusted, adjusted)
+                continue
+            if (
+                goal_adjusted < math.inf
+                and adjusted + self._heuristic(node, destination) > goal_adjusted
+            ):
+                continue
+            for neighbor in self._neighbors(node):
+                step = self._step(node, neighbor)
+                next_adjusted = adjusted + step.adjusted
+                next_segments = road_segments + int(
+                    step.kind == "道路"
+                    and (previous_kind != "道路" or previous_name != step.name)
+                )
+                next_horizontal = horizontal + self._horizontal_distance(node, neighbor)
                 next_cost = self._route_sort_key(
                     next_adjusted,
                     next_segments,
                     next_horizontal,
                 )
+                next_state = (neighbor, step.kind, step.name)
                 if next_cost >= best.get(
-                    road.destination,
-                    tuple(math.inf for _ in self._sort_metrics),
+                    next_state, tuple(math.inf for _ in self._sort_metrics)
                 ):
                     continue
-                best[road.destination] = next_cost
-                previous[road.destination] = (node, road)
+                best[next_state] = next_cost
+                previous[next_state] = (state, step)
                 heapq.heappush(
                     queue,
                     (
-                        next_cost,
+                        self._priority(next_cost, neighbor, destination),
                         next(serial),
-                        road.destination,
+                        next_state,
+                        next_cost,
                         next_adjusted,
                         next_segments,
                         next_horizontal,
                     ),
                 )
-        if destination not in previous:
-            raise TravelError(f"正式路网没有路线：{start} -> {destination}")
-        route: list[_DirectedRoad] = []
-        node = destination
-        while node != start:
-            node, road = previous[node]
-            route.append(road)
+        if not goal_states:
+            raise TravelError(
+                f"地表没有可行路线：({start.x}, {start.y}) -> ({destination.x}, {destination.y})"
+            )
+        goal_state = min(goal_states, key=lambda state: goal_states[state])
+        route: list[_Step] = []
+        state = goal_state
+        while state != initial_state:
+            state, step = previous[state]
+            route.append(step)
         route.reverse()
         return tuple(route)
+
+    def _priority(
+        self,
+        cost: tuple[float, ...],
+        coordinate: SurfaceCoordinate,
+        destination: SurfaceCoordinate,
+    ) -> tuple[float, ...]:
+        values = list(cost)
+        if values:
+            values[0] += self._heuristic(coordinate, destination)
+        return tuple(values)
+
+    def _heuristic(
+        self, coordinate: SurfaceCoordinate, destination: SurfaceCoordinate
+    ) -> float:
+        dx = abs(destination.x - coordinate.x)
+        dy = abs(destination.y - coordinate.y)
+        horizontal_steps = max(dx, dy) + (self._diagonal_multiplier - 1) * min(dx, dy)
+        minimum_multiplier = min(
+            (*self._road_multipliers.values(), *self._terrain_multipliers.values())
+        )
+        return (
+            horizontal_steps
+            * self._world.world().meters_per_grid
+            * self._horizontal_weight
+            * minimum_multiplier
+        )
+
+    def _neighbors(
+        self, coordinate: SurfaceCoordinate
+    ) -> tuple[SurfaceCoordinate, ...]:
+        result = []
+        bounds = self._world.world().bounds
+        for dx, dy in self._allowed_steps:
+            neighbor = SurfaceCoordinate(coordinate.x + dx, coordinate.y + dy)
+            if bounds.contains(neighbor):
+                result.append(neighbor)
+        return tuple(result)
+
+    def _step(self, start: SurfaceCoordinate, destination: SurfaceCoordinate) -> _Step:
+        road_type = self._road_edges.get((start, destination))
+        if road_type is not None:
+            name = road_type
+            kind = "道路"
+            multiplier = self._road_multipliers[road_type]
+        else:
+            left = self._terrain(start)
+            right = self._terrain(destination)
+            name = left if left == right else f"{left}与{right}交界"
+            kind = "地形"
+            multiplier = (
+                self._terrain_multipliers[left] + self._terrain_multipliers[right]
+            ) / 2
+        horizontal = self._horizontal_distance(start, destination)
+        difference = self._world.altitude(destination) - self._world.altitude(start)
+        ascent = max(difference, 0)
+        descent = max(-difference, 0)
+        adjusted = multiplier * (
+            horizontal * self._horizontal_weight
+            + ascent * self._ascent_weight
+            + descent * self._descent_weight
+        )
+        return _Step(start, destination, kind, name, adjusted)
+
+    def _terrain(self, coordinate: SurfaceCoordinate) -> str:
+        terrain = self._terrain_cache.get(coordinate)
+        if terrain is None:
+            terrain = self._world.terrain_at(coordinate)
+            self._terrain_cache[coordinate] = terrain
+        return terrain
+
+    def _horizontal_distance(
+        self, start: SurfaceCoordinate, destination: SurfaceCoordinate
+    ) -> float:
+        diagonal = start.x != destination.x and start.y != destination.y
+        return self._world.world().meters_per_grid * (
+            self._diagonal_multiplier if diagonal else 1.0
+        )
 
     def _route_sort_key(
         self,
@@ -404,21 +483,38 @@ class TravelService:
         }
         return tuple(values[name] for name in self._sort_metrics)
 
-    def _route_points(self, roads: tuple[_DirectedRoad, ...]) -> tuple[SurfacePoint, ...]:
-        coordinates: list[SurfaceCoordinate] = []
-        for index, road in enumerate(roads):
-            coordinates.extend(road.coordinates if index == 0 else road.coordinates[1:])
+    def _route_points(self, steps: tuple[_Step, ...]) -> tuple[SurfacePoint, ...]:
+        coordinates = [steps[0].start]
+        coordinates.extend(step.destination for step in steps)
         return tuple(self._world.surface_point(value) for value in coordinates)
 
     def _metrics_for(
         self,
-        roads: tuple[_DirectedRoad, ...],
+        steps: tuple[_Step, ...],
         points: tuple[SurfacePoint, ...],
     ) -> TravelMetrics:
-        horizontal = sum(road.profile.horizontal for road in roads)
-        ascent = sum(road.profile.ascent for road in roads)
-        descent = sum(road.profile.descent for road in roads)
-        adjusted = sum(road.profile.adjusted for road in roads)
+        horizontal = sum(
+            self._horizontal_distance(step.start, step.destination) for step in steps
+        )
+        ascent = 0
+        descent = 0
+        adjusted = sum(step.adjusted for step in steps)
+        road_segments = 0
+        terrain_segments = 0
+        previous: tuple[str, str] | None = None
+        for step in steps:
+            current = (step.kind, step.name)
+            if current != previous:
+                if step.kind == "道路":
+                    road_segments += 1
+                else:
+                    terrain_segments += 1
+            previous = current
+            difference = self._world.altitude(step.destination) - self._world.altitude(
+                step.start
+            )
+            ascent += max(difference, 0)
+            descent += max(-difference, 0)
         step_up = 0
         step_down = 0
         uphill = 0.0
@@ -428,9 +524,7 @@ class TravelService:
             difference = right.altitude - left.altitude
             dx = abs(right.coordinate.x - left.coordinate.x)
             dy = abs(right.coordinate.y - left.coordinate.y)
-            step_distance = scale * (
-                self._diagonal_multiplier if dx and dy else 1.0
-            )
+            step_distance = scale * (self._diagonal_multiplier if dx and dy else 1.0)
             if difference > 0:
                 step_up = max(step_up, difference)
                 uphill = max(uphill, difference / step_distance * 1000)
@@ -440,7 +534,8 @@ class TravelService:
         altitudes = tuple(point.altitude for point in points)
         return TravelMetrics(
             horizontal_distance=round(horizontal),
-            road_segments=len(roads),
+            road_segments=road_segments,
+            terrain_segments=terrain_segments,
             minimum_altitude=min(altitudes),
             maximum_altitude=max(altitudes),
             total_ascent=ascent,
@@ -452,20 +547,48 @@ class TravelService:
             adjusted_distance=round(adjusted),
         )
 
+    def _via_locations(
+        self,
+        points: tuple[SurfacePoint, ...],
+        start: SurfaceCoordinate,
+        destination: SurfaceCoordinate,
+    ) -> tuple[str, ...]:
+        by_coordinate = {
+            location.coordinate: location.identity
+            for location in self._world.locations()
+        }
+        return tuple(
+            by_coordinate[point.coordinate]
+            for point in points[1:-1]
+            if point.coordinate in by_coordinate
+            and point.coordinate not in {start, destination}
+        )
+
     @staticmethod
-    def _turning_location(
-        roads: tuple[_DirectedRoad, ...],
-        start: str,
-        destination: str,
-    ) -> str:
-        candidates = [
-            road
-            for road in roads
-            if road.start not in {start, destination} and road.profile.ascent > 0
-        ]
-        if not candidates:
+    def _run_names(steps: tuple[_Step, ...], kind: str) -> tuple[str, ...]:
+        result = []
+        for step in steps:
+            if step.kind == kind and (not result or result[-1] != step.name):
+                result.append(step.name)
+        return tuple(result)
+
+    def _turning_coordinate(self, steps: tuple[_Step, ...]) -> SurfaceCoordinate | None:
+        candidates = []
+        for step in steps:
+            difference = self._world.altitude(step.destination) - self._world.altitude(
+                step.start
+            )
+            if difference > 0:
+                candidates.append((difference, step.destination))
+        return max(candidates, default=(0, None), key=lambda value: value[0])[1]
+
+    def _turning_label(self, coordinate: SurfaceCoordinate | None) -> str:
+        if coordinate is None:
             return ""
-        return max(candidates, key=lambda road: road.profile.ascent).start
+        for location in self._world.locations():
+            if location.coordinate == coordinate:
+                return location.identity
+        return f"({coordinate.x}, {coordinate.y})"
 
     def _narrative(
         self,
@@ -473,34 +596,32 @@ class TravelService:
         start: str,
         destination: str,
         via_locations: tuple[str, ...],
-        roads: tuple[_DirectedRoad, ...],
+        steps: tuple[_Step, ...],
         turning: str,
         metrics: TravelMetrics,
     ) -> str:
         display = self._require_initialized()
         narrative = _mapping(display.get("叙事"), "行程叙事")
-        road_words = {
-            _text(row.get("道路"), "道路措辞名称"): row
-            for row in (
-                _mapping(value, "道路措辞")
-                for value in _sequence(display.get("道路措辞"), "道路措辞")
-            )
-        }
-        first = roads[0]
-        direction = self._direction_word(first.coordinates[0], first.coordinates[1])
-        first_words = _mapping(road_words[first.road_type], "首段道路措辞")
+        first = steps[0]
+        direction = self._direction_word(first.start, first.destination)
+        first_words = self._passage_words(first)
         start_text = _text(narrative.get("起程"), "起程模板").format(
             起点=start,
-            首段道路措辞=_text(first_words.get("起行"), "道路起行措辞").format(
-                方向=direction
+            首段通行措辞=_text(first_words.get("起行"), "起行措辞").format(
+                方向=direction,
+                地形=first.name,
             ),
         )
         transitions = []
-        for previous, current in itertools.pairwise(roads):
-            if current.road_type == previous.road_type:
+        for previous, current in itertools.pairwise(steps):
+            if (current.kind, current.name) == (previous.kind, previous.name):
                 continue
-            current_words = _mapping(road_words[current.road_type], "转入道路措辞")
-            transitions.append(_text(current_words.get("转入"), "道路转入措辞"))
+            current_words = self._passage_words(current)
+            transitions.append(
+                _text(current_words.get("转入"), "通行转入措辞").format(
+                    地形=current.name
+                )
+            )
         via_text = ""
         if via_locations:
             transition_text = ""
@@ -508,8 +629,12 @@ class TravelService:
                 transition_text = "，" + "，再".join(transitions)
             via_text = _text(narrative.get("经由"), "经由模板").format(
                 经由地点="、".join(via_locations),
-                转入道路措辞=transition_text,
+                转入通行措辞=transition_text,
             )
+        elif transitions:
+            via_text = _text(
+                narrative.get("没有经由地点", ""), "无地点模板", allow_empty=True
+            ).format(转入通行措辞="，".join(transitions))
         climb_word = self._threshold_word(
             display.get("爬升措辞"), "累计爬升上限", metrics.total_ascent
         )
@@ -522,9 +647,11 @@ class TravelService:
             地势转折地点=turning,
             爬升措辞=climb_word,
         )
-        last_words = _mapping(road_words[roads[-1].road_type], "末段道路措辞")
+        last_words = self._passage_words(steps[-1])
         destination_text = _text(narrative.get("抵达"), "抵达模板").format(
-            末段道路收束=_text(last_words.get("收束"), "道路收束措辞"),
+            末段通行措辞=_text(last_words.get("收束"), "通行收束措辞").format(
+                地形=steps[-1].name
+            ),
             终点=destination,
         )
         distance = _mapping(display.get("距离"), "行程距离展示")
@@ -543,7 +670,9 @@ class TravelService:
         sections = {
             "起程": start_text,
             "经由": via_text
-            or _text(narrative.get("没有经由地点", ""), "没有经由地点模板", allow_empty=True),
+            or _text(
+                narrative.get("没有经由地点", ""), "没有经由地点模板", allow_empty=True
+            ).format(转入通行措辞=", ".join(transitions)),
             "地势": terrain_text,
             "抵达": destination_text,
             "总览": overview,
@@ -552,12 +681,41 @@ class TravelService:
             sections[name] for name in self._narrative_order if sections[name]
         )
 
+    def _passage_words(self, step: _Step) -> Mapping[str, Any]:
+        display = self._require_initialized()
+        if step.kind == "道路":
+            rows = {
+                _text(row.get("道路"), "道路措辞名称"): row
+                for row in (
+                    _mapping(value, "道路措辞")
+                    for value in _sequence(display.get("道路措辞"), "道路措辞")
+                )
+            }
+            return _mapping(rows.get(step.name), f"道路措辞 {step.name}")
+        return _mapping(display.get("地形措辞"), "地形措辞")
+
+    def _resolve_endpoint(self, reference: Any) -> TravelEndpoint:
+        if isinstance(reference, TravelEndpoint):
+            label = _text(reference.label, "行路端点名称")
+            self._world.surface_point(reference.coordinate)
+            return TravelEndpoint(label=label, coordinate=reference.coordinate)
+        if isinstance(reference, str):
+            location = self._world.location(reference)
+            return TravelEndpoint(location.identity, location.coordinate)
+        coordinate = _coordinate(reference, "行路端点坐标")
+        self._world.surface_point(coordinate)
+        for location in self._world.locations():
+            if location.coordinate == coordinate:
+                return TravelEndpoint(location.identity, coordinate)
+        return TravelEndpoint(f"({coordinate.x}, {coordinate.y})", coordinate)
+
     def _validate_sources(self, rule: Mapping[str, Any]) -> None:
         world = self._world.world()
         expected = {
             "道路来源": f"{world.identity}.道路",
-            "地势来源": f"{world.identity}.地势",
-            "水平尺度来源": f"{world.identity}.水平每格米数",
+            "地势来源": "地势.地表高度",
+            "地形来源": "区域.地形分区",
+            "水平尺度来源": "地势.水平每格米数",
         }
         for field, value in expected.items():
             if _text(rule.get(field), field) != value:
@@ -582,8 +740,7 @@ class TravelService:
     @staticmethod
     def _load_allowed_steps(value: Any) -> frozenset[tuple[int, int]]:
         steps = frozenset(
-            _integer_pair(raw, "允许相邻步")
-            for raw in _sequence(value, "允许相邻步")
+            _integer_pair(raw, "允许相邻步") for raw in _sequence(value, "允许相邻步")
         )
         if not steps or (0, 0) in steps:
             raise TravelError("允许相邻步不能为空且不能包含原地停留")
@@ -592,8 +749,8 @@ class TravelService:
     @staticmethod
     def _load_road_multipliers(value: Any) -> dict[str, float]:
         result: dict[str, float] = {}
-        for raw in _sequence(value, "道路折算倍率"):
-            row = _mapping(raw, "道路倍率")
+        for raw in _dataset_rows(value, "道路通行规则"):
+            row = _mapping(raw, "道路通行倍率")
             _strict_fields(row, {"道路", "倍率"}, "道路倍率")
             name = _text(row.get("道路"), "道路倍率名称")
             if name in result:
@@ -601,14 +758,33 @@ class TravelService:
             result[name] = _positive_number(row.get("倍率"), "道路倍率")
         return result
 
+    @staticmethod
+    def _load_terrain_multipliers(value: Any) -> dict[str, float]:
+        result: dict[str, float] = {}
+        for raw in _dataset_rows(value, "地形通行规则"):
+            row = _mapping(raw, "地形通行倍率")
+            _strict_fields(row, {"地形", "倍率"}, "地形倍率")
+            name = _text(row.get("地形"), "地形倍率名称")
+            if name in result:
+                raise TravelError(f"地形倍率重复：{name}")
+            result[name] = _positive_number(row.get("倍率"), "地形倍率")
+        return result
+
     def _load_network_rules(self, rule: Mapping[str, Any]) -> None:
         network = _mapping(rule.get("路网要求"), "路网要求")
-        _strict_fields(network, {"全部地点连通", "没有路线"}, "路网要求")
-        self._require_connected = _boolean(
-            network.get("全部地点连通"), "全部地点连通"
+        _strict_fields(
+            network,
+            {"道路坐标必须连续", "道路默认双向", "道路之外允许行走"},
+            "路网要求",
         )
-        if _text(network.get("没有路线"), "没有路线") != "数据错误":
-            raise TravelError("当前行程契约只允许把无路线视为数据错误")
+        self._road_coordinates_must_be_continuous = _boolean(
+            network.get("道路坐标必须连续"), "道路坐标必须连续"
+        )
+        self._allow_offroad = _boolean(
+            network.get("道路之外允许行走"), "道路之外允许行走"
+        )
+        if not self._allow_offroad:
+            raise TravelError("当前全地表行路契约必须允许道路之外行走")
 
     @staticmethod
     def _load_sort_metrics(rule: Mapping[str, Any]) -> tuple[str, ...]:
@@ -658,7 +834,15 @@ class TravelService:
     def _load_display_contract(self, value: Mapping[str, Any]) -> None:
         _strict_fields(
             value,
-            {"距离", "方向措辞", "道路措辞", "爬升措辞", "海拔措辞", "叙事"},
+            {
+                "距离",
+                "方向措辞",
+                "道路措辞",
+                "地形措辞",
+                "爬升措辞",
+                "海拔措辞",
+                "叙事",
+            },
             "行程展示",
         )
         narrative = _mapping(value.get("叙事"), "行程叙事")
@@ -704,22 +888,6 @@ class TravelService:
                 return _text(row.get("措辞"), "阈值措辞")
         raise TravelError("阈值措辞没有兜底项")
 
-    def _validate_connectivity(self) -> None:
-        locations = tuple(self._graph)
-        if not locations:
-            raise TravelError("世界没有地点")
-        visited = {locations[0]}
-        pending = [locations[0]]
-        while pending:
-            node = pending.pop()
-            for road in self._graph[node]:
-                if road.destination not in visited:
-                    visited.add(road.destination)
-                    pending.append(road.destination)
-        if visited != set(locations):
-            missing = "、".join(sorted(set(locations) - visited))
-            raise TravelError(f"世界路网没有全部连通：{missing}")
-
     def _require_initialized(self) -> Mapping[str, Any]:
         if self._display is None:
             raise RuntimeError("行程微服务尚未初始化")
@@ -736,6 +904,29 @@ def _sequence(value: Any, label: str) -> Sequence[Any]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
         raise TravelError(f"{label} 必须是列表")
     return value
+
+
+def _dataset_rows(value: Any, label: str) -> Sequence[Any]:
+    if isinstance(value, Mapping):
+        if len(value) != 1:
+            raise TravelError(f"{label}必须只包含一个文件列表")
+        value = next(iter(value.values()))
+    return _sequence(value, label)
+
+
+def _coordinate(value: Any, label: str) -> SurfaceCoordinate:
+    if isinstance(value, SurfaceCoordinate):
+        return value
+    if (
+        isinstance(value, (str, bytes))
+        or not isinstance(value, Sequence)
+        or len(value) != 2
+    ):
+        raise TravelError(f"{label}必须是包含两个整数的坐标")
+    values = tuple(value)
+    if any(isinstance(item, bool) or not isinstance(item, int) for item in values):
+        raise TravelError(f"{label}必须是包含两个整数的坐标")
+    return SurfaceCoordinate(x=values[0], y=values[1])
 
 
 def _text(value: Any, label: str, *, allow_empty: bool = False) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import game.core as core_namespace
@@ -44,6 +45,8 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "CombatBuildRef",
         "CombatFieldResult",
         "CombatFieldSpec",
+        "CombatFormationResult",
+        "CombatFormationSpec",
         "CombatReportSpec",
         "CombatRequest",
         "CombatResult",
@@ -104,6 +107,7 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
     }
     assert set(travel_api.__all__) == {
         "TravelError",
+        "TravelEndpoint",
         "TravelMetrics",
         "TravelPlan",
         "TravelRequest",
@@ -205,6 +209,45 @@ def test_core_services_only_use_other_services_public_packages() -> None:
                             violations.append(
                                 f"{path.relative_to(ROOT)}:{node.lineno} -> {module}"
                             )
+    assert violations == []
+
+
+def test_domain_services_do_not_reconstruct_json_directory_ownership() -> None:
+    violations: list[str] = []
+    for package in SERVICE_PACKAGES:
+        if package == "game.core.data":
+            continue
+        folder = ROOT.joinpath(*package.split("."))
+        for path in folder.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "document_paths"
+                ):
+                    violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert violations == []
+
+
+def test_domain_services_do_not_know_json_physical_paths() -> None:
+    violations: list[str] = []
+    path_literal = re.compile(r"(?:data/)?(?:定义|规则|内容|展示)/")
+    for package in SERVICE_PACKAGES:
+        if package == "game.core.data":
+            continue
+        folder = ROOT.joinpath(*package.split("."))
+        for path in folder.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and path_literal.search(node.value)
+                ):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{node.lineno} -> {node.value}"
+                    )
     assert violations == []
 
 

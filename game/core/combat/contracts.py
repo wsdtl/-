@@ -18,6 +18,7 @@ class CombatStatus:
     ability_count: int
     event_count: int
     environment_count: int
+    formation_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,16 @@ class CombatFieldSpec:
     coordinate: tuple[int, int] | None = None
     altitude: int | None = None
     terrain: str = ""
+
+
+@dataclass(frozen=True)
+class CombatFormationSpec:
+    """战场级阵法引用；阵法不占角色构筑位。"""
+
+    identity: str
+    grade: str = "黄"
+    position: int = 0
+    materials: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -113,6 +124,8 @@ class CombatRequest:
     medicine_definitions: tuple[ItemMedicineDefinition, ...] = ()
     report: CombatReportSpec | None = None
     field: CombatFieldSpec | None = None
+    left_formation: CombatFormationSpec | None = None
+    right_formation: CombatFormationSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +147,21 @@ class CombatFieldResult:
         if self.health_basis <= 0:
             return 0.0
         return self.accumulated_damage / self.health_basis
+
+
+@dataclass(frozen=True)
+class CombatFormationResult:
+    identity: str
+    name: str
+    grade: str
+    side: int
+    position: int
+    capacity: float
+    remaining_capacity: float
+    impact: float
+    nodes: int
+    rotations: int
+    collapsed: bool
 
 
 @dataclass(frozen=True)
@@ -243,6 +271,7 @@ class CombatResult:
     report: Mapping[str, Any] | None = None
     presentation: tuple[Mapping[str, Any], Mapping[str, Any]] | None = None
     field: CombatFieldResult | None = None
+    formations: tuple[CombatFormationResult, ...] = ()
 
     @property
     def left_results(self) -> tuple[CombatantResult, ...]:
@@ -286,6 +315,8 @@ __all__ = [
     "CombatBuildRef",
     "CombatFieldResult",
     "CombatFieldSpec",
+    "CombatFormationResult",
+    "CombatFormationSpec",
     "CombatReportSpec",
     "CombatRequest",
     "CombatResult",

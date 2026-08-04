@@ -277,7 +277,7 @@ class MechanismRuntime:
         if not context.listener_index_dirty:
             return context.listener_index
 
-        listener_order = tuple(self.catalog.action_rules["被动技能结算"]["排序"])
+        listener_order = tuple(self.catalog.timing["事件监听"]["排序"])
         grouped: dict[
             str,
             list[tuple[tuple[Any, ...], Fighter, str, str, Mapping[str, Any]]],
@@ -294,11 +294,13 @@ class MechanismRuntime:
             item_id: str = "",
             ability_order: int = 0,
             effect_order: int = 0,
+            source_category: str = "功法",
         ) -> None:
             event_name = str(node.get("事件") or "")
             if not event_name:
                 return
             values = {
+                "来源层级升序": self._source_layer(source_category),
                 "监听优先级降序": -int(node.get("优先级", 0)),
                 "结算顺序升序": int(settlement_order),
                 "参战位序": participant_order.get(owner.id, len(participant_order)),
@@ -329,6 +331,7 @@ class MechanismRuntime:
                         item_id=str(passive.get("物品编号") or ""),
                         ability_order=int(passive.get("能力序号", 0)),
                         effect_order=int(passive.get("效果序号", 0)),
+                        source_category=str(passive.get("来源类别") or "功法"),
                     )
             for status in owner.statuses:
                 mechanism_ids = tuple(
@@ -347,6 +350,7 @@ class MechanismRuntime:
                         node,
                         item_id=item_id,
                         ability_order=index,
+                        source_category="战丹",
                     )
         if context.field is not None:
             field = context.field
@@ -358,13 +362,14 @@ class MechanismRuntime:
                     settlement_order=0,
                     item_id=f"环境:{field.definition.environment_id}",
                     ability_order=index,
+                    source_category="战场环境",
                 )
         for obj in context.combat_objects.values():
             if not obj.active:
                 continue
             owner = context.fighter_by_id(obj.owner_id) or context.left
             for index, node in enumerate(obj.listeners):
-                add_listener(owner, f"{obj.id}:{index}", node, item_id=obj.id, ability_order=index)
+                add_listener(owner, f"{obj.id}:{index}", node, item_id=obj.id, ability_order=index, source_category="战斗对象")
         for index, rule in enumerate(context.battle_rules):
             owner = context.fighter_by_id(str(rule.get("来源") or "")) or context.left
             for listener_index, node in enumerate(rule.get("监听") or ()):
@@ -374,6 +379,7 @@ class MechanismRuntime:
                     node,
                     item_id=f"战场:{index}",
                     ability_order=listener_index,
+                    source_category="战场规则",
                 )
 
         context.listener_index = {
@@ -382,6 +388,13 @@ class MechanismRuntime:
         }
         context.listener_index_dirty = False
         return context.listener_index
+
+    def _source_layer(self, source: str) -> int:
+        layers = self.catalog.timing.get("来源层级") or ()
+        for entry in layers:
+            if str(entry.get("来源") or "") == str(source):
+                return int(entry["序位"])
+        raise ValueError(f"战斗时序未登记来源层级：{source}")
 
     def _mechanism_reference(self, context, source, target, effect, multiplier, **kwargs):
         return self._execute_mechanism_reference(
@@ -485,7 +498,7 @@ class MechanismRuntime:
     def _passive_node(passive: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
         raw = passive.get("节点")
         if not isinstance(raw, Mapping):
-            raise ValueError("被动技能缺少监听节点")
+            raise TypeError("被动技能缺少监听节点")
         return str(passive.get("机制") or "内联被动"), dict(raw)
 
     def _listener_relation_matches(self, context, owner, frame, node) -> bool:
@@ -574,7 +587,7 @@ class MechanismRuntime:
         elif obj == "技能":
             skill = self._skill_by_key(source, str(event_values.get("技能键") or source.current_skill))
             actual = set(skill.tags if skill else ())
-        expected = set(str(value) for value in condition.get("标签") or ())
+        expected = {str(value) for value in condition.get("标签") or ()}
         relation = str(condition.get("关系") or "包含任一")
         if relation == "包含任一":
             return bool(actual & expected)
@@ -636,7 +649,7 @@ class MechanismRuntime:
                 amount *= max(0.0, 1.0 + self._percent(source, "护盾加成"))
             before, maximum = self._resource_values(destination, requested_resource)
             event = "恢复前" if requested_resource == "血气" else "获得护盾前" if requested_resource == "护盾" else "资源恢复前"
-            frame = self._dispatch_event(context, kind=event, source=source, target=destination, amount=amount, values={"资源": requested_resource, "变化前数值": before, "上限": maximum}, tags=tuple((*effect.get("标签", ()), "恢复", requested_resource)))
+            frame = self._dispatch_event(context, kind=event, source=source, target=destination, amount=amount, values={"资源": requested_resource, "变化前数值": before, "上限": maximum}, tags=(*effect.get("标签", ()), "恢复", requested_resource))
             if frame.cancelled:
                 continue
             resource = requested_resource
@@ -657,9 +670,9 @@ class MechanismRuntime:
             self._set_resource(destination, resource, before + applied)
             after_event = "恢复后" if resource == "血气" else "获得护盾后" if resource == "护盾" else "资源恢复后"
             values = {"资源": resource, "变化前数值": before, "变化后数值": before + applied, "实际数值": applied, "溢出数值": max(0.0, received - applied)}
-            event_tags = tuple((*frame.tags, "恢复", resource))
+            event_tags = (*frame.tags, "恢复", resource)
             self._dispatch_event(context, kind=after_event, source=source, target=destination, amount=applied, values=values, tags=event_tags)
-            self._dispatch_event(context, kind="资源变化后", source=source, target=destination, amount=applied, values=values, tags=tuple((*frame.tags, "增加", resource)))
+            self._dispatch_event(context, kind="资源变化后", source=source, target=destination, amount=applied, values=values, tags=(*frame.tags, "增加", resource))
             changed = changed or applied > 0
         return changed
 
@@ -677,8 +690,8 @@ class MechanismRuntime:
             applied = min(before, max(0.0, frame.amount))
             self._set_resource(destination, resource, before - applied)
             values = {"资源": resource, "变化前数值": before, "变化后数值": before - applied, "实际数值": applied}
-            self._dispatch_event(context, kind="资源消耗后", source=source, target=destination, amount=applied, values=values, tags=tuple((*frame.tags, "消耗", resource)))
-            self._dispatch_event(context, kind="资源变化后", source=source, target=destination, amount=-applied, values=values, tags=tuple((*frame.tags, "减少", resource)))
+            self._dispatch_event(context, kind="资源消耗后", source=source, target=destination, amount=applied, values=values, tags=(*frame.tags, "消耗", resource))
+            self._dispatch_event(context, kind="资源变化后", source=source, target=destination, amount=-applied, values=values, tags=(*frame.tags, "减少", resource))
             changed = changed or applied > 0
         return changed
 
@@ -743,9 +756,7 @@ class MechanismRuntime:
             immunities = self._immunities(destination)
             if frame.cancelled:
                 failure = "被取消"
-            elif "状态" in immunities:
-                failure = "状态免疫"
-            elif "负面状态" in immunities and definition.get("类别") == "负面":
+            elif "状态" in immunities or "负面状态" in immunities and definition.get("类别") == "负面":
                 failure = "状态免疫"
             elif "控制" in immunities and is_control:
                 failure = "控制免疫"
@@ -839,7 +850,7 @@ class MechanismRuntime:
     def _matching_statuses(self, fighter, selector):
         name = str(selector.get("名称") or "")
         category = str(selector.get("分类") or "")
-        tags = set(str(value) for value in selector.get("标签") or ())
+        tags = {str(value) for value in selector.get("标签") or ()}
         values = [status for status in fighter.statuses if (not name or status.name == name) and (not category or status.category == category) and (not tags or tags <= set(status.tags))]
         order = str(selector.get("排序") or "获得顺序")
         if order == "层数从高到低":
@@ -917,7 +928,7 @@ class MechanismRuntime:
                     source=source,
                     target=receiver,
                     values={"状态": copied.name, "状态定义": copied.as_dict()},
-                    tags=tuple((*copied.tags, "复制")),
+                    tags=(*copied.tags, "复制"),
                 )
                 if frame.cancelled:
                     continue
@@ -1071,7 +1082,7 @@ class MechanismRuntime:
         del source, target, multiplier
         frame = self._current_event(context)
         self._require_event_mutation(frame, "标签")
-        values = set(str(value) for value in effect.get("标签") or ())
+        values = {str(value) for value in effect.get("标签") or ()}
         mode = str(effect.get("方式") or "添加")
         frame.tags = values if mode == "设置" else frame.tags - values if mode == "移除" else frame.tags | values
         frame.facts["标签"] = sorted(frame.tags)
@@ -1167,7 +1178,7 @@ class MechanismRuntime:
                         after = int(after)
                 elif attr in {"tags", "effects"}:
                     values = tuple(copy.deepcopy(value or ()))
-                    after = values if mode == "设置" else tuple((*before, *values))
+                    after = values if mode == "设置" else (*before, *values)
                 else:
                     after = bool(value) if attr == "disabled" else str(value)
                 setattr(skill, attr, after)
@@ -1334,12 +1345,12 @@ class MechanismRuntime:
                 owner_id=source.id,
                 controller_id=source.controller_id or source.id,
                 summoned=True,
-                tags=set(str(value) for value in definition.get("标签") or ()),
+                tags={str(value) for value in definition.get("标签") or ()},
             )
             context.add_fighter(fighter)
             event_target = fighter
         else:
-            obj = CombatObject(object_id, name, kind, side, source.id, int(definition.get("持续行动", 0)), float(definition.get("耐久", 0)), list(copy.deepcopy(definition.get("监听") or ())), copy.deepcopy(dict(definition.get("记录") or {})), set(str(value) for value in definition.get("标签") or ()))
+            obj = CombatObject(object_id, name, kind, side, source.id, int(definition.get("持续行动", 0)), float(definition.get("耐久", 0)), list(copy.deepcopy(definition.get("监听") or ())), copy.deepcopy(dict(definition.get("记录") or {})), {str(value) for value in definition.get("标签") or ()})
             context.combat_objects[object_id] = obj
             context.mark_listener_index_dirty()
             durability = max(1.0, obj.health or 1.0)
@@ -1512,7 +1523,7 @@ class MechanismRuntime:
     def _resolve_value(self, context, value, source, target, event_amount=0.0, event_values=None):
         result = self._resolve_any(context, value, source, target, event_amount, event_values or {})
         if isinstance(result, bool) or not isinstance(result, (int, float)):
-            raise ValueError(f"战斗数值必须是数字：{result!r}")
+            raise TypeError(f"战斗数值必须是数字：{result!r}")
         return float(result)
 
     def _resolve_any(self, context, value, source, target, event_amount=0.0, event_values=None):
@@ -1614,7 +1625,7 @@ class MechanismRuntime:
         if value is None:
             return [target]
         if not isinstance(value, Mapping):
-            raise ValueError("目标字段必须使用选择目标")
+            raise TypeError("目标字段必须使用选择目标")
         node = self.catalog.parse_node(value)
         if node.executor != "选择目标":
             raise ValueError("目标字段必须使用选择目标")
@@ -1762,11 +1773,12 @@ class MechanismRuntime:
     def _skill_order_key(self, skill):
         values = {
             "释放顺序": int(skill.release_order),
+            "来源层级升序": self._source_layer(skill.source_category),
             "装配位序": int(skill.born_order),
             "物品编号": str(skill.source_id),
             "能力序号": int(skill.ability_order),
         }
-        order = self.catalog.action_rules["主动技能轮转"]["排序"]
+        order = self.catalog.timing["主动技能"]["排序"]
         return tuple(values[field] for field in order) + (str(skill.key),)
 
     @staticmethod

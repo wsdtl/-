@@ -33,7 +33,9 @@ def test_world_documents_are_separated_by_json_read_rules() -> None:
     catalog = JsonDataReader(root).load_catalog()
 
     assert catalog.by_path["内容/世界/晓楠修仙界.json"].descriptor.dataset == "世界"
-    assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村.json"].descriptor.dataset == "地点"
+    location = catalog.by_path["内容/世界/青岚州/青溪村/青溪村.json"].descriptor
+    assert location.dataset == "地点"
+    assert location.directory_owner == "青岚州"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村道侣.json"].descriptor.dataset == "道侣"
     assert catalog.by_path["内容/世界/青岚州/青溪村/青溪村敌人.json"].descriptor.dataset == "敌人"
 
@@ -47,6 +49,7 @@ def test_named_entity_cannot_override_filename_identity(tmp_path: Path) -> None:
             "结构": "命名实体",
             "实体类别": "地点",
             "目录主体": True,
+            "归属目录层级": 2,
         },
     ]
     _write_rules(tmp_path, rules)

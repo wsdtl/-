@@ -8,7 +8,13 @@ import random
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from .contracts import CombatantResult, CombatFieldResult, CombatResult, StatusResult
+from .contracts import (
+    CombatantResult,
+    CombatFieldResult,
+    CombatFormationResult,
+    CombatResult,
+    StatusResult,
+)
 from .damage import DamageEngine, DamageRequest
 from .mechanics import MechanismRuntime
 from .models import (
@@ -17,8 +23,10 @@ from .models import (
     CombatCatalog,
     Fighter,
     PreparedCombatField,
+    PreparedFormation,
     RuntimeCombatantSnapshot,
     RuntimeCombatField,
+    RuntimeFormation,
     Skill,
     StatusState,
 )
@@ -119,6 +127,7 @@ class BattleEngine(MechanismRuntime):
         action_limit: int,
         share_left_inventory: bool = False,
         field: PreparedCombatField | None = None,
+        formations: tuple[PreparedFormation, ...] = (),
     ) -> CombatResult:
         if not left or not right:
             raise ValueError("战斗双方都必须至少有一名参战者")
@@ -131,6 +140,7 @@ class BattleEngine(MechanismRuntime):
             for fighter in left_fighters[1:]:
                 fighter.inventory = left_fighters[0].inventory
         runtime_field = self._build_field(field, (*left_fighters, *right_fighters))
+        runtime_formations = [self._build_formation(value) for value in formations]
         context = BattleContext(
             rng=random.Random(int(seed)),
             left=left_fighters[0],
@@ -139,11 +149,13 @@ class BattleEngine(MechanismRuntime):
             field=runtime_field,
             left_team=left_fighters,
             right_team=right_fighters,
+            formations=runtime_formations,
         )
         context.engine = self
         context.action_progress = {fighter.id: 0.0 for fighter in context.fighters}
         if context.field is not None:
             self._form_field(context)
+        self._form_formations(context)
         context.event(
             "战斗开始", context.left, context.right,
             f"{'、'.join(value.name for value in left_fighters)}与{'、'.join(value.name for value in right_fighters)}进入战斗",
@@ -176,6 +188,47 @@ class BattleEngine(MechanismRuntime):
             trigger_activations=sum(context.battle_trigger_counts.values()),
             left_team=left_results, right_team=right_results,
             field=self._field_result(context),
+            formations=tuple(self._formation_result(value) for value in context.formations),
+        )
+
+    @staticmethod
+    def _build_formation(definition: PreparedFormation) -> RuntimeFormation:
+        stage = definition.stages[0]
+        interval = max(1, math.ceil(12 * stage.cycle_multiplier / max(1.0, definition.transmission)))
+        return RuntimeFormation(definition, definition.capacity, interval)
+
+    def _form_formations(self, context: BattleContext) -> None:
+        for formation in sorted(context.formations, key=lambda value: (value.definition.side, value.definition.position, value.definition.identity)):
+            context.event(
+                "阵法展开",
+                context.left if formation.side == 0 else context.right,
+                context.right if formation.side == 0 else context.left,
+                f"{formation.definition.name}以{formation.definition.grade}品展开",
+                values={
+                    "阵法编号": formation.definition.identity,
+                    "阵法名称": formation.definition.name,
+                    "品级": formation.definition.grade,
+                    "方位": formation.definition.position,
+                    "阵基承载": formation.definition.capacity,
+                    "阵眼冲击": formation.definition.impact,
+                    "节点数量": formation.definition.nodes,
+                },
+            )
+
+    @staticmethod
+    def _formation_result(value: RuntimeFormation) -> CombatFormationResult:
+        return CombatFormationResult(
+            identity=value.definition.identity,
+            name=value.definition.name,
+            grade=value.definition.grade,
+            side=value.definition.side,
+            position=value.definition.position,
+            capacity=round(value.definition.capacity, 3),
+            remaining_capacity=round(max(0.0, value.remaining_capacity), 3),
+            impact=round(value.definition.impact, 3),
+            nodes=value.definition.nodes,
+            rotations=value.rotations,
+            collapsed=value.collapsed,
         )
 
     @staticmethod
@@ -359,6 +412,125 @@ class BattleEngine(MechanismRuntime):
         context.action_intent = None
         self._advance_lifecycles(context, actor)
         context.event("行动结束", actor, actor, f"{actor.name}结束行动", values={"行动": context.action_number, "行动者": actor.id})
+        self._rotate_formations(context)
+
+    def _rotate_formations(self, context: BattleContext) -> None:
+        active = [value for value in context.formations if value.active]
+        due = [value for value in active if context.action_number >= value.next_rotation]
+        if not due:
+            return
+        stage_index = context.field.stage_index if context.field is not None else 0
+        prepared: list[tuple[RuntimeFormation, float, Fighter | RuntimeFormation]] = []
+        for formation in sorted(due, key=lambda value: (value.definition.side, value.definition.position, value.definition.identity)):
+            stage = formation.definition.stages[min(stage_index, len(formation.definition.stages) - 1)]
+            interval = max(1, math.ceil(12 * stage.cycle_multiplier / max(1.0, formation.definition.transmission)))
+            formation.next_rotation = context.action_number + interval
+            formation.rotations += 1
+            impact = formation.definition.impact * stage.impact_multiplier
+            enemy_formations = [value for value in active if value.side != formation.side and value.active]
+            target: Fighter | RuntimeFormation
+            if enemy_formations:
+                target = min(enemy_formations, key=lambda value: (value.definition.position, value.definition.identity))
+            else:
+                enemies = context.right_team if formation.side == 0 else context.left_team
+                alive = [value for value in enemies if value.alive and value.counts_for_victory]
+                if not alive:
+                    continue
+                target = alive[0]
+            prepared.append((formation, impact, target))
+            context.event(
+                "阵法轮转后",
+                context.left if formation.side == 0 else context.right,
+                context.right if formation.side == 0 else context.left,
+                f"{formation.definition.name}完成第{formation.rotations}次轮转",
+                values={
+                    "阵法编号": formation.definition.identity,
+                    "方位": formation.definition.position,
+                    "轮转次数": formation.rotations,
+                    "阵势倍率": stage.impact_multiplier,
+                    "行动周期倍率": stage.cycle_multiplier,
+                },
+            )
+        formation_damage: dict[int, float] = {}
+        fighter_damage: dict[str, float] = {}
+        impact_events: list[tuple[Fighter, Fighter, float, Mapping[str, Any]]] = []
+        for formation, impact, target in prepared:
+            if isinstance(target, RuntimeFormation):
+                formation_damage[id(target)] = formation_damage.get(id(target), 0.0) + impact
+            else:
+                fighter_damage[target.id] = fighter_damage.get(target.id, 0.0) + impact
+            source = context.left if formation.side == 0 else context.right
+            target_fighter = context.left if target.side == 0 else context.right if isinstance(target, RuntimeFormation) else target
+            impact_events.append((
+                source,
+                target_fighter,
+                impact,
+                {
+                    "阵法编号": formation.definition.identity,
+                    "方位": formation.definition.position,
+                    "冲击目标": target.definition.identity if isinstance(target, RuntimeFormation) else target.id,
+                    "冲击数值": impact,
+                    "是否命中阵法": isinstance(target, RuntimeFormation),
+                },
+            ))
+        collapsed: list[RuntimeFormation] = []
+        for formation in active:
+            damage = formation_damage.get(id(formation), 0.0)
+            if damage <= 0:
+                continue
+            formation.remaining_capacity = max(0.0, formation.remaining_capacity - damage)
+            if formation.remaining_capacity <= 0 and not formation.collapsed:
+                formation.collapsed = True
+                collapsed.append(formation)
+        for fighter in context.fighters:
+            damage = fighter_damage.get(fighter.id, 0.0)
+            if damage > 0 and fighter.alive:
+                was_alive = fighter.alive
+                fighter.health = max(0.0, fighter.health - damage)
+                if was_alive and not fighter.alive:
+                    source = context.left if fighter.side == 1 else context.right
+                    values = {"实际数值": damage, "伤害形式": "阵法冲击"}
+                    self._dispatch_event(
+                        context,
+                        kind="死亡后",
+                        source=source,
+                        target=fighter,
+                        amount=damage,
+                        values=values,
+                        tags=("阵法", "宏观冲击"),
+                    )
+                    self._dispatch_event(
+                        context,
+                        kind="击杀后",
+                        source=source,
+                        target=fighter,
+                        amount=damage,
+                        values=values,
+                        tags=("阵法", "宏观冲击"),
+                    )
+                    self._remove_source_lifetimes(context, fighter)
+        for source, target, impact, values in impact_events:
+            context.event(
+                "阵法冲击后",
+                source,
+                target,
+                "阵势完成宏观冲击",
+                impact,
+                values=values,
+            )
+        for formation in collapsed:
+            context.event(
+                "阵法崩解后",
+                context.left if formation.side == 0 else context.right,
+                context.right if formation.side == 0 else context.left,
+                f"{formation.definition.name}阵基崩解",
+                values={
+                    "阵法编号": formation.definition.identity,
+                    "方位": formation.definition.position,
+                    "原因": "阵基承载归零",
+                    "累计轮转": formation.rotations,
+                },
+            )
 
     def _decide_action(self, context, actor, default_target) -> ActionIntent:
         for rule in sorted(actor.tactic, key=lambda value: int(value.get("优先级", 0)), reverse=True):
@@ -574,7 +746,7 @@ class BattleEngine(MechanismRuntime):
         skills.append(Skill(
             key=f"{instance.get('实例', source_name)}:{index}", name=str(node.get("名称") or source_name),
             born_order=int(instance.get("出生序号", 0)), release_order=int(node.get("释放顺序", index + 1)),
-            source_id=source_id, ability_order=index,
+            source_id=source_id, source_category=str(instance.get("来源类别") or "功法"), ability_order=index,
             multiplier=float(instance.get("威力倍率", 1)), spirit_cost=max(0.0, float(node.get("精神消耗", 0))),
             cooldown_actions=max(0, int(node.get("冷却行动", 0))), effects=tuple(copy.deepcopy(node.get("效果") or ())),
             tags=tuple(str(value) for value in node.get("标签") or ()), costs=tuple(copy.deepcopy(node.get("额外代价") or ())),
@@ -593,6 +765,7 @@ class BattleEngine(MechanismRuntime):
                 "结算顺序": int(node.get("结算顺序", 1)),
                 "装配位序": born_order,
                 "物品编号": source_id,
+                "来源类别": str(instance.get("来源类别") or "功法"),
                 "能力序号": index,
                 "效果序号": effect_index,
                 "节点": copy.deepcopy(dict(raw)),

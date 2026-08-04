@@ -30,8 +30,10 @@ class CombatCatalog:
     resources: Mapping[str, Mapping[str, Any]]
     damage_rules: Mapping[str, Any]
     action_rules: Mapping[str, Any]
+    timing: Mapping[str, Any]
     status_reactions: tuple[Mapping[str, Any], ...]
     environments: Mapping[str, Mapping[str, Any]]
+    formations: Mapping[str, Mapping[str, Any]]
     environment_rules: Mapping[str, Any]
 
     @classmethod
@@ -39,7 +41,7 @@ class CombatCatalog:
         source = value or {}
         raw_events = source.get("事件") or {}
         if not isinstance(raw_events, Mapping):
-            raise ValueError("战斗事件必须使用事件契约对象")
+            raise TypeError("战斗事件必须使用事件契约对象")
         events = {str(key): dict(definition) for key, definition in raw_events.items()}
         return cls(
             attributes=dict(source.get("属性") or {}),
@@ -53,8 +55,10 @@ class CombatCatalog:
             resources=dict(source.get("资源") or {}),
             damage_rules=dict(source.get("伤害规则") or {}),
             action_rules=dict(source.get("行动规则") or {}),
+            timing=dict(source.get("时序") or {}),
             status_reactions=tuple(copy.deepcopy(source.get("状态反应") or ())),
             environments=dict(source.get("战场环境") or {}),
+            formations=dict(source.get("阵法") or {}),
             environment_rules=dict(source.get("环境规则") or {}),
         )
 
@@ -174,6 +178,7 @@ class Skill:
     born_order: int = 0
     release_order: int = 1
     source_id: str = ""
+    source_category: str = "功法"
     ability_order: int = 0
     multiplier: float = 1.0
     spirit_cost: float = 0.0
@@ -356,6 +361,44 @@ class PreparedCombatField:
     stages: tuple[PreparedFieldStage, ...]
 
 
+@dataclass(frozen=True)
+class PreparedFormationStage:
+    threshold_multiplier: float
+    cycle_multiplier: float
+    impact_multiplier: float
+
+
+@dataclass(frozen=True)
+class PreparedFormation:
+    identity: str
+    name: str
+    grade: str
+    side: int
+    position: int
+    capacity: float
+    impact: float
+    nodes: int
+    transmission: float
+    stages: tuple[PreparedFormationStage, ...]
+
+
+@dataclass
+class RuntimeFormation:
+    definition: PreparedFormation
+    remaining_capacity: float
+    next_rotation: int
+    rotations: int = 0
+    collapsed: bool = False
+
+    @property
+    def side(self) -> int:
+        return self.definition.side
+
+    @property
+    def active(self) -> bool:
+        return not self.collapsed and self.remaining_capacity > 0
+
+
 @dataclass
 class RuntimeCombatField:
     definition: PreparedCombatField
@@ -382,6 +425,7 @@ class BattleContext:
     right: Fighter
     medicine_definitions: dict[str, ItemMedicineDefinition]
     field: RuntimeCombatField | None = None
+    formations: list[RuntimeFormation] = dataclass_field(default_factory=list)
     left_team: list[Fighter] = dataclass_field(default_factory=list)
     right_team: list[Fighter] = dataclass_field(default_factory=list)
     events: list[BattleEvent] = dataclass_field(default_factory=list)
@@ -431,7 +475,7 @@ class BattleContext:
     def rebuild_indexes(self) -> None:
         """Rebuild derived indexes after structural state restoration."""
 
-        self._fighters_cache = tuple((*self.left_team, *self.right_team))
+        self._fighters_cache = (*self.left_team, *self.right_team)
         self.fighters_by_id = {fighter.id: fighter for fighter in self._fighters_cache}
         self.fighter_order = {
             fighter.id: index for index, fighter in enumerate(self._fighters_cache)

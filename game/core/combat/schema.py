@@ -115,7 +115,7 @@ class RuleSchemaValidator:
                     f"{path}.{ability_name}.字段.{field_name}",
                 )
 
-    def validate_mechanisms(self, path: str = "data/内容/战斗机制/*.json") -> None:
+    def validate_mechanisms(self, path: str = "战斗机制") -> None:
         if not self.mechanisms:
             raise RuleSchemaError(f"{path}：不能为空")
         for mechanism_name, node in self.mechanisms.items():
@@ -275,7 +275,7 @@ class RuleSchemaValidator:
         if field_type != "机制引用":
             self._choice(reference, spec, path)
             return
-        target_path = f"data/内容/战斗机制/*.json -> {reference}.节点"
+        target_path = f"战斗机制 -> {reference}.节点"
         target = self._object(self.mechanisms[reference], target_path)
         target_category = self.category_of(target, target_path)
         target_executor = self.executor_of(target, target_path)
@@ -325,9 +325,7 @@ class RuleSchemaValidator:
             return False
         if "等于" in condition and node[field_name] != condition["等于"]:
             return False
-        if "属于" in condition and node[field_name] not in condition["属于"]:
-            return False
-        return True
+        return "属于" not in condition or node[field_name] in condition["属于"]
 
     def _validate_field_spec(self, raw_spec: Any, path: str) -> None:
         spec = self._object(raw_spec, path)
@@ -502,7 +500,7 @@ class RuleSchemaValidator:
 
     @staticmethod
     def _allow_value(value: str, allowed: Iterable[str] | None, path: str, label: str) -> None:
-        if allowed is not None and value not in set(str(item) for item in allowed):
+        if allowed is not None and value not in {str(item) for item in allowed}:
             raise RuleSchemaError(f"{path}：{label} {value} 不在当前节点允许范围内")
 
     @staticmethod

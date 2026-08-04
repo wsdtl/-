@@ -9,6 +9,7 @@ from pathlib import Path
 from game.core.combat import (
     CombatantSpec,
     CombatBuildRef,
+    CombatFormationSpec,
     CombatReportSpec,
     CombatRequest,
     CombatService,
@@ -66,6 +67,30 @@ def test_async_team_battle_preserves_seeded_result() -> None:
     assert asynchronous == direct
     assert asynchronous.report is not None
     assert asynchronous.presentation is not None
+
+
+def test_formations_are_battlefield_objects_with_saint_material_scaling() -> None:
+    root = Path(__file__).resolve().parents[1]
+    data = JsonDataService(root / "data")
+    data.initialize()
+    combat = CombatService(data)
+    status = combat.initialize()
+    assert status.formation_count == 46
+    request = CombatRequest(
+        left_team=(_combatant("left"),),
+        right_team=(_combatant("right"),),
+        seed=1,
+        action_limit=30,
+        left_formation=CombatFormationSpec("530001", "圣", materials={"兽宝": 1944, "灵矿": 5832, "灵植": 3888}),
+        right_formation=CombatFormationSpec("530002"),
+    )
+
+    result = combat._execute_sync(request)
+
+    assert [value.side for value in result.formations] == [0, 1]
+    assert result.formations[0].grade == "圣"
+    assert result.formations[0].capacity > 0
+    assert result.formations[0].rotations > 0
 
 
 def _fighter(identity: str) -> Fighter:

@@ -187,6 +187,7 @@ def _index_content(
                     section=descriptor.section,
                     number_category=descriptor.number_category,
                     source_file=document.file_id,
+                    directory_owner=descriptor.directory_owner,
                     value=value,
                 )
                 continue

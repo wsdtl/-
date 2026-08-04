@@ -4,23 +4,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from game.core.world import LocationReference, SurfacePoint
+from game.core.world import LocationReference, SurfaceCoordinate, SurfacePoint
 
 
 class TravelError(ValueError):
-    """行程请求无效或正式路网无法形成路线。"""
+    """行程请求无效或地表无法形成路线。"""
+
+
+@dataclass(frozen=True)
+class TravelEndpoint:
+    """行路端点；动态业务只需提供展示名和二维地表坐标。"""
+
+    label: str
+    coordinate: SurfaceCoordinate
 
 
 @dataclass(frozen=True)
 class TravelRequest:
-    start: LocationReference
-    destination: LocationReference
+    start: LocationReference | TravelEndpoint
+    destination: LocationReference | TravelEndpoint
 
 
 @dataclass(frozen=True)
 class TravelMetrics:
     horizontal_distance: int
     road_segments: int
+    terrain_segments: int
     minimum_altitude: int
     maximum_altitude: int
     total_ascent: int
@@ -39,7 +48,9 @@ class TravelPlan:
     destination_region: str
     via_locations: tuple[str, ...]
     road_types: tuple[str, ...]
+    terrain_types: tuple[str, ...]
     terrain_turning_location: str
+    terrain_turning_coordinate: SurfaceCoordinate | None
     points: tuple[SurfacePoint, ...]
     metrics: TravelMetrics
     narrative: str
@@ -62,6 +73,7 @@ class TravelRealmEffects:
 
 
 __all__ = [
+    "TravelEndpoint",
     "TravelError",
     "TravelMetrics",
     "TravelPlan",

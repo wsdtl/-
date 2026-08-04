@@ -46,6 +46,13 @@ class AltitudeRange:
 
 
 @dataclass(frozen=True)
+class RegionTerrainDefinition:
+    name: str
+    bounds: SurfaceBounds
+    terrain: str
+
+
+@dataclass(frozen=True)
 class WorldDefinition:
     identity: str
     description: str
@@ -63,6 +70,7 @@ class RegionDefinition:
     category: str
     bounds: SurfaceBounds
     altitude_range: AltitudeRange
+    terrain_partitions: tuple[RegionTerrainDefinition, ...]
     description: str
 
 
@@ -114,6 +122,7 @@ __all__ = [
     "LocationFeatureDefinition",
     "LocationReference",
     "RegionDefinition",
+    "RegionTerrainDefinition",
     "RoadDefinition",
     "SurfaceBounds",
     "SurfaceCoordinate",

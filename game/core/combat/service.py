@@ -14,6 +14,7 @@ from .contracts import (
     BUILD_SECTIONS,
     CombatantSpec,
     CombatFieldSpec,
+    CombatFormationSpec,
     CombatRequest,
     CombatResult,
     CombatStatus,
@@ -21,7 +22,13 @@ from .contracts import (
 )
 from .engine import BattleEngine
 from .foundation import load_battle_foundation
-from .models import PreparedCombatField, PreparedFieldStage, RuntimeCombatantSnapshot
+from .models import (
+    PreparedCombatField,
+    PreparedFieldStage,
+    PreparedFormation,
+    PreparedFormationStage,
+    RuntimeCombatantSnapshot,
+)
 from .presentation import build_battle_report_presentation
 from .report import RuntimeBattleReportParticipant, build_battle_report
 
@@ -54,6 +61,7 @@ class CombatService:
             ability_count=len(engine.catalog.abilities),
             event_count=len(engine.catalog.events),
             environment_count=len(engine.catalog.environments),
+            formation_count=len(engine.catalog.formations),
         )
 
     async def execute(self, request: CombatRequest) -> CombatResult:
@@ -66,6 +74,8 @@ class CombatService:
         right = tuple(self._runtime_snapshot(value) for value in request.right_team)
         medicine_definitions = self._medicine_definitions(request)
         field = self._prepared_field(request.field)
+        left_formation = self._prepared_formation(request.left_formation, side=0)
+        right_formation = self._prepared_formation(request.right_formation, side=1)
         result = self._simulate_runtime_teams(
             left=left,
             right=right,
@@ -74,6 +84,7 @@ class CombatService:
             action_limit=request.action_limit,
             share_left_inventory=request.share_left_inventory,
             field=field,
+            formations=tuple(value for value in (left_formation, right_formation) if value is not None),
         )
         if request.report is None:
             return result
@@ -89,6 +100,7 @@ class CombatService:
         action_limit: int,
         share_left_inventory: bool = False,
         field: PreparedCombatField | None = None,
+        formations: tuple[PreparedFormation, ...] = (),
     ) -> CombatResult:
         """供战斗服务自身测试和基准使用的内部同步入口。"""
 
@@ -100,7 +112,51 @@ class CombatService:
             action_limit=action_limit,
             share_left_inventory=share_left_inventory,
             field=field,
+            formations=formations,
         )
+
+    def _prepared_formation(
+        self, spec: CombatFormationSpec | None, *, side: int
+    ) -> PreparedFormation | None:
+        if spec is None:
+            return None
+        identity = str(spec.identity or "").strip()
+        try:
+            raw = self._require_engine().catalog.formations[identity]
+        except KeyError as exc:
+            raise ValueError(f"战斗核心未登记阵法：{identity or '<空>'}") from exc
+        grade_name = str(spec.grade or "黄").strip()
+        grades = {str(value["品级"]): value for value in raw["品级"]}
+        if grade_name not in grades:
+            raise ValueError(f"阵法品级不存在：{identity} / {grade_name}")
+        grade = grades[grade_name]
+        if grade_name == "圣":
+            minimum = {str(k): float(v) for k, v in grade["最低消耗"].items()}
+            actual = {str(k): float(v) for k, v in dict(spec.materials).items()}
+            if any(actual.get(key, 0) < value for key, value in minimum.items()):
+                raise ValueError(f"圣品阵法材料不足：{identity}")
+            weights = {str(k): float(v) for k, v in grade["圣品权重"].items()}
+            total = 1.0
+            for key, component in (("兽宝", "阵眼"), ("灵矿", "阵基"), ("灵植", "节点")):
+                total *= max(1.0, actual.get(key, 0) / minimum[key]) ** weights[component]
+            capacity = float(grade["阵基"]["基础承载"]) * total
+            impact = float(grade["阵眼"]["基础冲击"]) * total
+            nodes = max(1, int(float(grade["节点"]["起始数量"]) * total))
+            transmission = float(grade["节点"]["基础传导"]) * total
+        else:
+            capacity = float(grade["阵基"]["承载"])
+            impact = float(grade["阵眼"]["冲击"])
+            nodes = int(grade["节点"]["数量"])
+            transmission = float(grade["节点"]["传导"])
+        stages = tuple(
+            PreparedFormationStage(
+                threshold_multiplier=float(value["环境阶段阈值倍率"]),
+                cycle_multiplier=float(value["行动周期倍率"]),
+                impact_multiplier=float(value["阵势倍率"]),
+            )
+            for value in grade["地势阶段"]
+        )
+        return PreparedFormation(identity, str(raw["名称"]), grade_name, side, int(spec.position), capacity, impact, nodes, transmission, stages)
 
     def _prepared_field(
         self,
@@ -123,7 +179,7 @@ class CombatService:
             if coordinate is None or len(coordinate) != 2:
                 raise ValueError("地表战场必须提供 xy")
             if altitude is None or not terrain:
-                raise ValueError("地表战场必须提供海拔和地点地形")
+                raise ValueError("地表战场必须提供海拔和区域地形")
             coordinate = (int(coordinate[0]), int(coordinate[1]))
             altitude = int(altitude)
         elif coordinate is not None or altitude is not None:
@@ -156,6 +212,7 @@ class CombatService:
             if section not in BUILD_SECTIONS:
                 raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
             definition = materialize(self._data.entity(section, identity))
+            definition["来源类别"] = section
             definition["实例"] = (
                 reference.instance_id or f"{value.id}:{section}:{index}"
             )

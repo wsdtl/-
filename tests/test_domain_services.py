@@ -24,7 +24,7 @@ from game.core.forge import ForgeService
 from game.core.item import ItemService
 from game.core.pool import PoolService
 from game.core.role import RoleService
-from game.core.travel import TravelRequest, TravelService
+from game.core.travel import TravelEndpoint, TravelRequest, TravelService
 from game.core.world import SurfaceCoordinate, WorldService
 
 
@@ -84,6 +84,41 @@ def test_travel_builds_a_connected_route_and_json_narrative() -> None:
     assert coordinate_plan.metrics == plan.metrics
     assert travel.realm_effects().travel_speed is True
     assert travel.realm_effects().destination_reachability is False
+
+
+def test_travel_accepts_dynamic_surface_endpoints_without_world_locations() -> None:
+    _, world, travel, _, _ = _services()
+
+    plan = travel.plan(
+        TravelRequest(
+            start=TravelEndpoint("太玄宗", SurfaceCoordinate(37, 62)),
+            destination=TravelEndpoint("荒野驻地", SurfaceCoordinate(42, 67)),
+        )
+    )
+
+    assert plan.start == "太玄宗"
+    assert plan.destination == "荒野驻地"
+    assert plan.points[0].coordinate == SurfaceCoordinate(37, 62)
+    assert plan.points[-1].coordinate == SurfaceCoordinate(42, 67)
+    assert plan.destination_region == world.region_at(42, 67).identity
+    assert plan.metrics.terrain_segments >= 1
+    assert plan.terrain_types
+    assert "途中。" not in plan.narrative
+
+
+def test_travel_dynamic_endpoints_can_join_a_formal_road_midpoint() -> None:
+    _, _, travel, _, _ = _services()
+
+    plan = travel.plan(
+        TravelRequest(
+            start=TravelEndpoint("路旁山门", SurfaceCoordinate(9, 15)),
+            destination=TravelEndpoint("路旁别院", SurfaceCoordinate(15, 18)),
+        )
+    )
+
+    assert plan.road_types == ("官道",)
+    assert plan.metrics.road_segments == 1
+    assert plan.metrics.terrain_segments == 0
 
 
 def test_item_service_separates_definitions_from_inventory_instances() -> None:

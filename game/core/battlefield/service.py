@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from game.core.combat import CombatFieldSpec
 from game.core.data import JsonDataService
-from game.core.world import LocationReference, WorldService
+from game.core.world import (
+    LocationReference,
+    SurfaceCoordinate,
+    WorldDataError,
+    WorldService,
+)
 
 from .contracts import (
     BattlefieldEnvironment,
@@ -39,21 +44,11 @@ class BattlefieldService:
         )
         environments: dict[str, BattlefieldEnvironment] = {}
         by_name: dict[str, BattlefieldEnvironment] = {}
-        for identity, raw_value in self._data.entities("战场环境").items():
-            value = _mapping(raw_value, f"战场环境 {identity}")
-            name = _text(value.get("名称"), f"战场环境 {identity} 名称")
-            stages = tuple(
-                _text(
-                    _mapping(raw_stage, f"战场环境 {identity} 阶段").get("名称"),
-                    f"战场环境 {identity} 阶段名称",
-                )
-                for raw_stage in _sequence(
-                    value.get("阶段"), f"战场环境 {identity} 阶段"
-                )
-            )
-            if not stages:
-                raise BattlefieldError(f"战场环境 {identity} 没有阶段")
-            environment = BattlefieldEnvironment(identity, name, stages)
+        for identity, fields in self._data.entity_fields(
+            "战场环境", ("名称",)
+        ):
+            name = _text(fields["名称"], f"战场环境 {identity} 名称")
+            environment = BattlefieldEnvironment(identity, name)
             if name in by_name:
                 raise BattlefieldError(f"战场环境名称重复：{name}")
             environments[identity] = environment
@@ -61,21 +56,21 @@ class BattlefieldService:
 
         try:
             realm_environment = environments[default_environment]
-            realm_raw = self._data.entity("战场环境", default_environment)
         except KeyError as exc:
             raise BattlefieldError("秘境默认环境不存在") from exc
-        realm_stages = _sequence(realm_raw.get("阶段"), "秘境默认环境阶段")
-        if len(realm_stages) != 1:
-            raise BattlefieldError("秘境默认环境必须只有一个阶段")
-        realm_stage = _mapping(realm_stages[0], "秘境默认环境阶段")
-        if realm_stage.get("入阶能力") or realm_stage.get("常驻能力"):
-            raise BattlefieldError("秘境默认环境必须完全没有战斗能力")
 
-        terrain_names = {location.terrain for location in self._world.locations()}
+        terrain_names = {
+            location.terrain for location in self._world.locations()
+        }
+        terrain_names.update(
+            partition.terrain
+            for region in self._world.regions()
+            for partition in region.terrain_partitions
+        )
         missing = terrain_names - set(by_name)
         if missing:
             raise BattlefieldError(
-                "地点地形没有对应战场环境：" + "、".join(sorted(missing))
+                "区域地形没有对应战场环境：" + "、".join(sorted(missing))
             )
         self._environments = environments
         self._environment_by_name = by_name
@@ -100,24 +95,48 @@ class BattlefieldService:
             raise BattlefieldError(f"战场环境不存在：{key}") from exc
 
     def surface(self, reference: LocationReference) -> CombatFieldSpec:
-        """登记地点或其精确 xy 是地表战斗坐标的唯一来源。"""
+        """按地点名或任意精确 xy 解析地表战场。"""
 
         self._require_initialized()
-        location = self._world.location(reference)
+        if isinstance(reference, str):
+            location = self._world.location(reference)
+            coordinate = location.coordinate
+            scene = location.identity
+        else:
+            coordinate = _coordinate_reference(reference)
+            location = self._try_location(coordinate)
+            scene = (
+                location.identity
+                if location
+                else self._world.terrain_zone_at(coordinate)
+            )
+        terrain = self._world.terrain_at(coordinate)
+        altitude = self._world.altitude(coordinate)
         try:
-            environment = self._environment_by_name[location.terrain]
+            environment = self._environment_by_name[terrain]
         except KeyError as exc:
             raise BattlefieldError(
-                f"地点地形没有对应战场环境：{location.terrain}"
+                f"地表地形没有对应战场环境：{terrain}"
             ) from exc
         return CombatFieldSpec(
             environment_id=environment.identity,
-            scene=location.identity,
+            scene=scene,
             origin="地表",
-            coordinate=(location.coordinate.x, location.coordinate.y),
-            altitude=location.altitude,
-            terrain=location.terrain,
+            coordinate=(coordinate.x, coordinate.y),
+            altitude=altitude,
+            terrain=terrain,
         )
+
+    def surface_at(self, x: int, y: int) -> CombatFieldSpec:
+        """解析未登记地点也可使用的地表战场。"""
+
+        return self.surface((x, y))
+
+    def _try_location(self, coordinate):
+        try:
+            return self._world.location(coordinate)
+        except WorldDataError:
+            return None
 
     def realm(
         self,
@@ -147,16 +166,27 @@ def _mapping(value: Any, label: str) -> Mapping[str, Any]:
     return value
 
 
-def _sequence(value: Any, label: str) -> Sequence[Any]:
-    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        raise BattlefieldError(f"{label}必须是列表")
-    return value
-
-
 def _text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise BattlefieldError(f"{label}必须是非空字符串")
     return value.strip()
+
+
+def _coordinate_reference(value: LocationReference) -> SurfaceCoordinate:
+    if isinstance(value, SurfaceCoordinate):
+        return value
+    if isinstance(value, (tuple, list)) and len(value) == 2:
+        return _coordinate(value)
+    raise BattlefieldError("地表坐标必须是 (x, y) 或 SurfaceCoordinate")
+
+
+def _coordinate(value: Any):
+    if not isinstance(value, (tuple, list)) or len(value) != 2:
+        raise BattlefieldError("地表坐标必须包含 x 和 y")
+    x, y = value
+    if isinstance(x, bool) or not isinstance(x, int) or isinstance(y, bool) or not isinstance(y, int):
+        raise BattlefieldError("地表坐标必须是整数")
+    return SurfaceCoordinate(x=x, y=y)
 
 
 __all__ = ["BattlefieldService"]

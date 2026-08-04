@@ -11,9 +11,10 @@ class BattlefieldError(ValueError):
 
 @dataclass(frozen=True)
 class BattlefieldEnvironment:
+    """供地点选择使用的环境引用，不携带战斗阶段正文。"""
+
     identity: str
     name: str
-    stages: tuple[str, ...]
 
 
 @dataclass(frozen=True)

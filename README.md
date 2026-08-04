@@ -8,11 +8,17 @@
 data/                       正式定义、规则、内容与展示 JSON
 database/                   游戏数据库与运行日志数据库，不进入版本库
 .runtime/                   历史备份与控制台媒体，不进入版本库
-game/core/                  JSON、SQLite、时间等基础能力
-game/core/data/             第一个核心微服务：正式 JSON 只读快照与索引
-game/core/combat/           第二个核心微服务：行动条、CD、事件与战报
-game/core/pool/             第三个核心微服务：资源池展开与逆权重抽取
-game/core/forge/            炼器微服务：兽引、铸法、器律与本命武器四孔
+game/core/data/             正式 JSON 只读快照、实体元数据与资源池索引
+game/core/combat/           行动条、CD、事件、环境执行与战报
+game/core/pool/             资源池展开与逆权重抽取
+game/core/build/            功法、附魔、宝石构筑与相冲裁决
+game/core/world/            世界、区域、地点、地势与道路事实
+game/core/battlefield/      地点或秘境到战场环境编号的选择
+game/core/travel/           自动选路、行程指标与行程叙事
+game/core/item/             物品分类、定义与使用效果
+game/core/forge/            兽引、铸法、器律与本命武器四孔
+game/core/role/             人物、道侣、敌人与成长规则
+game/core/alchemy/          药引、炉法、丹方与战丹准备
 game/config.py              从框架自定义项中解释游戏配置
 game/app.py                 游戏微服务的唯一组合根
 game/features/              不依赖命令协议的具体玩法微服务
@@ -26,7 +32,7 @@ static/battle-report/       战报前端
 tools/                      游戏外校核、评分、平衡与维护脚本
 ```
 
-控制台和战报属于公共入口，当前放在 `game/cmd/web`。`game/core` 放全局基础微服务，`game/features` 放具体玩法微服务，`game/cmd` 只负责命令、按钮和 HTTP 触发，`game/app.py` 是唯一组合根。人物、修士、功法装配、地点、闭关、探险、纳戒等旧业务实现仍未恢复，后续必须按正式 JSON 契约逐个建立。
+控制台和战报属于公共入口，当前放在 `game/cmd/web`。`game/core` 放全局基础微服务，`game/features` 放具体玩法微服务，`game/cmd` 只负责命令、按钮和 HTTP 触发，`game/app.py` 是唯一组合根。人物资料、构筑、世界、战场、行程、物品、炼药和炼器已有核心解释服务；人物实例、闭关、探险、纳戒、阵法等可玩业务仍未建立，后续必须按正式 JSON 契约逐个接入。
 
 `launch/config.py` 只解释框架自身的项目、监听、日志和路由配置。数据库、控制台凭据及其他业务环境变量必须进入 `config.custom`；游戏侧需要类型转换或校验时统一在 `game/config.py` 完成，不得向框架 `Config` 增加业务字段。
 

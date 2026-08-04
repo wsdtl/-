@@ -18,7 +18,7 @@ class BattleReportCatalog:
     raw: Mapping[str, Any]
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "BattleReportCatalog":
+    def from_mapping(cls, value: Mapping[str, Any]) -> BattleReportCatalog:
         raw = deepcopy(dict(value))
         catalog = cls(raw)
         catalog._validate()
@@ -212,14 +212,14 @@ def _mapping(value: Mapping[str, Any], key: str) -> Mapping[str, Any]:
 
 def _mapping_value(value: Any, path: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise ValueError(f"战报配置必须是对象：{path}")
+        raise TypeError(f"战报配置必须是对象：{path}")
     return value
 
 
 def _sequence(value: Mapping[str, Any], key: str) -> Sequence[Any]:
     result = value.get(key)
     if not isinstance(result, list | tuple):
-        raise ValueError(f"战报配置必须是数组：{key}")
+        raise TypeError(f"战报配置必须是数组：{key}")
     return result
 
 

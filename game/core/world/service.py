@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import PurePosixPath
 from typing import Any
 
 from game.core.data import JsonDataService
@@ -14,6 +13,7 @@ from .contracts import (
     LocationFeatureDefinition,
     LocationReference,
     RegionDefinition,
+    RegionTerrainDefinition,
     RoadDefinition,
     SurfaceBounds,
     SurfaceCoordinate,
@@ -51,25 +51,17 @@ class WorldService:
         _strict_fields(
             raw_world,
             {
-                "坐标边界",
-                "海拔范围",
-                "水平每格米数",
                 "道路",
                 "出生地",
-                "地势",
                 "说明",
                 "行程规则",
             },
             "世界",
         )
-        bounds = _bounds(raw_world.get("坐标边界"), "世界坐标边界")
-        altitude_range = _altitude_range(raw_world.get("海拔范围"), "世界海拔范围")
-        meters_per_grid = _positive_int(raw_world.get("水平每格米数"), "水平每格米数")
         road_types = _strings(raw_world.get("道路", ()), "世界道路")
         birthplace = _text(raw_world.get("出生地"), "世界出生地")
-        terrain_name = _text(raw_world.get("地势"), "世界地势")
 
-        self._load_terrain(terrain_name, bounds, altitude_range)
+        bounds, altitude_range, meters_per_grid = self._load_terrain()
         self._features = self._load_features()
         self._regions = self._load_regions(bounds)
         self._validate_region_partition(bounds)
@@ -122,6 +114,22 @@ class WorldService:
         except KeyError as exc:
             raise WorldDataError(f"区域不存在：{key}") from exc
 
+    def region_at(self, x: int | SurfaceCoordinate, y: int | None = None) -> RegionDefinition:
+        """返回任意地表 xy 所属的区域。"""
+
+        self.world()
+        coordinate = _coordinate_arguments(x, y, "区域坐标")
+        if not self.world().bounds.contains(coordinate):
+            raise WorldDataError(
+                f"坐标超出世界边界：({coordinate.x}, {coordinate.y})"
+            )
+        for region in self._regions.values():
+            if region.bounds.contains(coordinate):
+                return region
+        raise WorldDataError(
+            f"地表坐标未归属区域：({coordinate.x}, {coordinate.y})"
+        )
+
     def locations(self) -> tuple[LocationDefinition, ...]:
         self.world()
         return tuple(self._locations.values())
@@ -157,6 +165,32 @@ class WorldService:
         world = self.world()
         return self._terrain_altitude(world.bounds, coordinate)
 
+    def terrain_at(self, x: int | SurfaceCoordinate, y: int | None = None) -> str:
+        """只按区域地形分区解析任意 xy 的战场地形。"""
+
+        self.world()
+        coordinate = _coordinate_arguments(x, y, "地形坐标")
+        self.altitude(coordinate)
+        region = self.region_at(coordinate)
+        return _region_terrain(region, coordinate).terrain
+
+    def terrain_zone_at(
+        self, x: int | SurfaceCoordinate, y: int | None = None
+    ) -> str:
+        """返回地形分区或地点名称，供战场展示场景使用。"""
+
+        self.world()
+        coordinate = _coordinate_arguments(x, y, "地形分区坐标")
+        self.altitude(coordinate)
+        location = self._locations_by_coordinate.get(coordinate)
+        if location is not None:
+            return location.identity
+        region = self.region_at(coordinate)
+        for partition in region.terrain_partitions:
+            if partition.bounds.contains(coordinate):
+                return partition.name
+        return region.identity
+
     def _terrain_altitude(
         self,
         bounds: SurfaceBounds,
@@ -181,15 +215,11 @@ class WorldService:
 
     def _load_terrain(
         self,
-        terrain_name: str,
-        bounds: SurfaceBounds,
-        altitude_range: AltitudeRange,
-    ) -> None:
+    ) -> tuple[SurfaceBounds, AltitudeRange, int]:
         terrain_dataset = self._data.dataset("地势")
-        try:
-            raw = terrain_dataset[terrain_name]
-        except KeyError as exc:
-            raise WorldDataError(f"地势不存在：{terrain_name}") from exc
+        if len(terrain_dataset) != 1:
+            raise WorldDataError("当前世界要求且只允许一份地势数据")
+        terrain_name, raw = next(iter(terrain_dataset.items()))
         _strict_fields(
             raw,
             {
@@ -198,19 +228,21 @@ class WorldService:
                 "海平面",
                 "坐标边界",
                 "海拔范围",
+                "水平每格米数",
                 "地表高度",
             },
             f"地势 {terrain_name}",
         )
         resolution = _positive_int(raw.get("分辨率"), "地势分辨率")
+        bounds = _bounds(raw.get("坐标边界"), "地势坐标边界")
+        altitude_range = _altitude_range(raw.get("海拔范围"), "地势海拔范围")
+        meters_per_grid = _positive_int(
+            raw.get("水平每格米数"), "地势水平每格米数"
+        )
         if _text(raw.get("高度单位"), "地势高度单位") != "米":
             raise WorldDataError("地势高度单位必须是米")
         if _integer(raw.get("海平面"), "地势海平面") != 0:
             raise WorldDataError("当前世界地势海平面必须是 0 米")
-        if _bounds(raw.get("坐标边界"), "地势坐标边界") != bounds:
-            raise WorldDataError("地势坐标边界与世界不一致")
-        if _altitude_range(raw.get("海拔范围"), "地势海拔范围") != altitude_range:
-            raise WorldDataError("地势海拔范围与世界不一致")
         rows = _sequence(raw.get("地表高度"), "地表高度")
         expected_rows = (bounds.y_max - bounds.y_min) // resolution + 1
         expected_columns = (bounds.x_max - bounds.x_min) // resolution + 1
@@ -227,9 +259,10 @@ class WorldService:
             maximum=max(max(row) for row in terrain),
         )
         if actual != altitude_range:
-            raise WorldDataError("世界海拔范围不是地势的真实最小值与最大值")
+            raise WorldDataError("地势海拔范围不是真实最小值与最大值")
         self._terrain = tuple(terrain)
         self._terrain_resolution = resolution
+        return bounds, altitude_range, meters_per_grid
 
     def _load_features(self) -> dict[str, LocationFeatureDefinition]:
         definitions = self._data.dataset("世界定义")
@@ -274,26 +307,25 @@ class WorldService:
         for identity, raw in self._data.entities("区域").items():
             _strict_fields(
                 raw,
-                {"坐标范围", "海拔范围", "类别", "说明"},
+                {"坐标范围", "类别", "地形分区", "说明"},
                 f"区域 {identity}",
             )
             bounds = _bounds(raw.get("坐标范围"), f"区域 {identity} 坐标范围")
-            declared = _altitude_range(
-                raw.get("海拔范围"), f"区域 {identity} 海拔范围"
-            )
             values = [
                 self._terrain_altitude(world_bounds, SurfaceCoordinate(x, y))
                 for y in range(bounds.y_min, bounds.y_max + 1, self._terrain_resolution)
                 for x in range(bounds.x_min, bounds.x_max + 1, self._terrain_resolution)
             ]
             actual = AltitudeRange(min(values), max(values))
-            if actual != declared:
-                raise WorldDataError(f"区域 {identity} 海拔范围与地势不一致")
+            partitions = _load_terrain_partitions(
+                raw.get("地形分区"), bounds, identity
+            )
             regions[identity] = RegionDefinition(
                 identity=identity,
                 category=_text(raw.get("类别"), f"区域 {identity} 类别"),
                 bounds=bounds,
-                altitude_range=declared,
+                altitude_range=actual,
+                terrain_partitions=partitions,
                 description=_text(raw.get("说明"), f"区域 {identity} 说明"),
             )
         return regions
@@ -322,7 +354,6 @@ class WorldService:
                 {
                     "坐标",
                     "地点类型",
-                    "地形",
                     "灵植池",
                     "灵矿池",
                     "说明",
@@ -360,7 +391,7 @@ class WorldService:
                 coordinate=coordinate,
                 altitude=self._terrain_altitude(world_bounds, coordinate),
                 location_type=_text(raw.get("地点类型"), f"地点 {identity} 类型"),
-                terrain=_text(raw.get("地形"), f"地点 {identity} 地形"),
+                terrain=_region_terrain(region, coordinate).terrain,
                 description=_text(raw.get("说明"), f"地点 {identity} 说明"),
                 available_features=available_features,
                 plant_pools=_strings(raw.get("灵植池", ()), "灵植池"),
@@ -405,20 +436,16 @@ class WorldService:
                 )
 
     def _location_regions(self) -> dict[str, str]:
-        result: dict[str, str] = {}
-        for value in self._data.document_paths():
-            path = PurePosixPath(value)
-            parts = path.parts
-            if len(parts) != 5 or parts[:2] != ("内容", "世界"):
-                continue
-            region, folder, filename = parts[2:]
-            if filename != f"{folder}.json":
-                continue
-            if folder in result:
-                raise WorldDataError(f"地点目录身份重复：{folder}")
-            result[folder] = region
-        if set(result) != set(self._data.entities("地点")):
-            raise WorldDataError("地点数据集与世界目录主体不一致")
+        result = {
+            identity: self._data.entity_record("地点", identity).directory_owner
+            for identity in self._data.entities("地点")
+        }
+        missing = sorted(identity for identity, owner in result.items() if not owner)
+        if missing:
+            raise WorldDataError(f"地点缺少目录归属：{'、'.join(missing)}")
+        unknown = sorted(set(result.values()) - set(self._regions))
+        if unknown:
+            raise WorldDataError(f"地点引用未知区域目录：{'、'.join(unknown)}")
         return result
 
     def _load_roads(
@@ -538,6 +565,90 @@ def _coordinate_reference(value: Any, label: str) -> SurfaceCoordinate:
     if isinstance(value, SurfaceCoordinate):
         return value
     return _coordinate(value, label)
+
+
+def _coordinate_arguments(
+    x: int | SurfaceCoordinate, y: int | None, label: str
+) -> SurfaceCoordinate:
+    if isinstance(x, SurfaceCoordinate):
+        if y is not None:
+            raise WorldDataError(f"{label}不能同时传入坐标对象和 y")
+        return x
+    if y is None:
+        raise WorldDataError(f"{label}必须同时包含 x 和 y")
+    return _coordinate((x, y), label)
+
+
+def _load_terrain_partitions(
+    value: Any, region_bounds: SurfaceBounds, region_name: str
+) -> tuple[RegionTerrainDefinition, ...]:
+    rows = _sequence(value, f"区域 {region_name} 地形分区")
+    partitions: list[RegionTerrainDefinition] = []
+    for raw in rows:
+        mapping = _mapping(raw, f"区域 {region_name} 地形分区")
+        _strict_fields(
+            mapping,
+            {"名称", "坐标范围", "地形"},
+            f"区域 {region_name} 地形分区",
+        )
+        name = _text(mapping.get("名称"), f"区域 {region_name} 地形分区名称")
+        bounds = _bounds(
+            mapping.get("坐标范围"), f"区域 {region_name} 地形分区 {name} 坐标范围"
+        )
+        terrain = _text(
+            mapping.get("地形"), f"区域 {region_name} 地形分区 {name} 地形"
+        )
+        if not (
+            region_bounds.contains(SurfaceCoordinate(bounds.x_min, bounds.y_min))
+            and region_bounds.contains(SurfaceCoordinate(bounds.x_max, bounds.y_max))
+        ):
+            raise WorldDataError(f"区域 {region_name} 地形分区 {name} 超出区域范围")
+        if any(
+            _bounds_overlap(bounds, existing.bounds) for existing in partitions
+        ):
+            raise WorldDataError(f"区域 {region_name} 地形分区重叠：{name}")
+        if any(name == existing.name for existing in partitions):
+            raise WorldDataError(f"区域 {region_name} 地形分区重名：{name}")
+        partitions.append(
+            RegionTerrainDefinition(name=name, bounds=bounds, terrain=terrain)
+        )
+    if not partitions:
+        raise WorldDataError(f"区域 {region_name} 地形分区不能为空")
+    for y in range(region_bounds.y_min, region_bounds.y_max + 1):
+        for x in range(region_bounds.x_min, region_bounds.x_max + 1):
+            coordinate = SurfaceCoordinate(x, y)
+            owners = tuple(
+                partition.name
+                for partition in partitions
+                if partition.bounds.contains(coordinate)
+            )
+            if len(owners) != 1:
+                raise WorldDataError(
+                    f"区域 {region_name} 坐标必须唯一属于一个地形分区："
+                    f"({x}, {y}) -> {owners}"
+                )
+    return tuple(partitions)
+
+
+def _region_terrain(
+    region: RegionDefinition, coordinate: SurfaceCoordinate
+) -> RegionTerrainDefinition:
+    for partition in region.terrain_partitions:
+        if partition.bounds.contains(coordinate):
+            return partition
+    raise WorldDataError(
+        f"区域 {region.identity} 坐标没有地形分区："
+        f"({coordinate.x}, {coordinate.y})"
+    )
+
+
+def _bounds_overlap(left: SurfaceBounds, right: SurfaceBounds) -> bool:
+    return not (
+        left.x_max < right.x_min
+        or right.x_max < left.x_min
+        or left.y_max < right.y_min
+        or right.y_max < left.y_min
+    )
 
 
 def _bounds(value: Any, label: str) -> SurfaceBounds:
