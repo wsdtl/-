@@ -25,6 +25,11 @@ def load_battle_foundation(
             "伤害规则": rules["伤害"],
             "行动规则": rules["行动"],
             "状态反应": rules["状态反应"],
+            "环境规则": rules["环境"],
+            "战场环境": {
+                identity: materialize(value)
+                for identity, value in data.entities("战场环境").items()
+            },
         }
     )
     if mechanisms is None:
@@ -82,8 +87,11 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     action_rules = _mapping(value.get("行动规则"), "行动规则")
     damage_rules = _mapping(value.get("伤害规则"), "伤害规则")
     status_reactions = value.get("状态反应")
+    environments = _mapping(value.get("战场环境") or {}, "战场环境")
+    environment_rules = _mapping(value.get("环境规则"), "环境规则")
     _validate_action_rules(action_rules, attributes, resources)
     _validate_damage_rules(damage_rules)
+    _validate_environment_rules(environment_rules, events)
     for name, raw in events.items():
         definition = _mapping(raw, f"事件.{name}")
         unknown = set(definition) - {"携带事实", "可修改"}
@@ -107,11 +115,135 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     )
     validator.validate_definitions("定义/战斗/原子能力.json")
     validator.validate_mechanisms("内容/战斗机制/*.json")
+    _validate_battle_environments(environments, validator)
     _validate_status_reactions(status_reactions, validator)
     declared = {str(definition.get("执行器") or "") for definition in abilities.values()}
     missing = set(EXECUTOR_CATEGORIES) - declared
     if missing:
         raise ValueError(f"执行器没有原子能力声明：{'、'.join(sorted(missing))}")
+
+
+def _validate_battle_environments(
+    environments: Mapping[str, Any],
+    validator: RuleSchemaValidator,
+) -> None:
+    if not environments:
+        raise ValueError("战场环境不能为空")
+    names: set[str] = set()
+    for identity, raw in environments.items():
+        path = f"战场环境[{identity}]"
+        environment = _mapping(raw, path)
+        unknown = set(environment) - {"编号", "名称", "阶段"}
+        if unknown:
+            raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
+        if str(environment.get("编号") or "") != identity:
+            raise ValueError(f"{path}.编号与数据索引不一致")
+        name = str(environment.get("名称") or "").strip()
+        if not name or name in names:
+            raise ValueError(f"战场环境名称为空或重复：{name or '<空>'}")
+        names.add(name)
+        stages = environment.get("阶段")
+        if not isinstance(stages, list) or not stages:
+            raise ValueError(f"{path}.阶段必须是非空数组")
+        previous = -1.0
+        stage_names: set[str] = set()
+        for index, raw_stage in enumerate(stages):
+            stage_path = f"{path}.阶段[{index}]"
+            stage = _mapping(raw_stage, stage_path)
+            unknown = set(stage) - {
+                "名称",
+                "起始承伤比例",
+                "入阶能力",
+                "常驻能力",
+            }
+            if unknown:
+                raise ValueError(
+                    f"{stage_path}存在未知字段：{'、'.join(sorted(unknown))}"
+                )
+            stage_name = str(stage.get("名称") or "").strip()
+            if not stage_name or stage_name in stage_names:
+                raise ValueError(f"{stage_path}.名称为空或重复")
+            stage_names.add(stage_name)
+            threshold = stage.get("起始承伤比例")
+            if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+                raise ValueError(f"{stage_path}.起始承伤比例必须是数字")
+            threshold = float(threshold)
+            if threshold < 0 or (index == 0 and threshold != 0) or threshold <= previous:
+                raise ValueError(f"{stage_path}.起始承伤比例必须从 0 严格递增")
+            previous = threshold
+            entries = stage.get("入阶能力")
+            listeners = stage.get("常驻能力")
+            if not isinstance(entries, list) or not isinstance(listeners, list):
+                raise ValueError(f"{stage_path}的能力必须使用数组")
+            for ability_index, node in enumerate(entries):
+                validator.validate_node(
+                    node,
+                    f"{stage_path}.入阶能力[{ability_index}]",
+                    allowed_categories={"组合", "引用", "效果"},
+                )
+                _validate_neutral_environment_node(
+                    node, f"{stage_path}.入阶能力[{ability_index}]"
+                )
+            for ability_index, node in enumerate(listeners):
+                validator.validate_node(
+                    node,
+                    f"{stage_path}.常驻能力[{ability_index}]",
+                    allowed_abilities={"监听事件"},
+                )
+                _validate_neutral_environment_node(
+                    node, f"{stage_path}.常驻能力[{ability_index}]"
+                )
+
+
+def _validate_neutral_environment_node(value: Any, path: str) -> None:
+    forbidden_scopes = {"自身", "己方", "敌方", "关联对象", "主人", "控制者"}
+    forbidden_sources = {"自身属性", "效果来源属性"}
+
+    def visit(current: Any, current_path: str) -> None:
+        if isinstance(current, Mapping):
+            if current.get("能力") == "选择目标" and current.get("范围") in forbidden_scopes:
+                raise ValueError(f"{current_path}使用了有阵营归属的环境目标")
+            if current.get("能力") == "读取数值":
+                source = str(current.get("来源") or "")
+                if source in forbidden_sources or source.startswith("自身当前") or source.startswith("自身已损失"):
+                    raise ValueError(f"{current_path}读取了中立环境不存在的自身数值")
+            for key, nested in current.items():
+                visit(nested, f"{current_path}.{key}")
+        elif isinstance(current, list):
+            for index, nested in enumerate(current):
+                visit(nested, f"{current_path}[{index}]")
+
+    visit(value, path)
+
+
+def _validate_environment_rules(
+    value: Mapping[str, Any],
+    events: Mapping[str, Any],
+) -> None:
+    expected = {
+        "秘境默认环境",
+        "地表环境来源",
+        "承载基准",
+        "承伤事件",
+        "承伤数值",
+        "排除来源身份",
+        "阶段方式",
+    }
+    if set(value) != expected:
+        raise ValueError("环境规则字段必须完整且不能包含额外字段")
+    if value.get("地表环境来源") != "地点地形":
+        raise ValueError("当前地表环境必须由地点地形确定")
+    if value.get("承载基准") != ["血气上限"]:
+        raise ValueError("战场环境承载基准只能使用正式参战者血气上限")
+    event = str(value.get("承伤事件") or "")
+    fact = str(value.get("承伤数值") or "")
+    event_definition = _mapping(events.get(event), f"环境规则.承伤事件.{event}")
+    if fact not in event_definition.get("携带事实", ()):
+        raise ValueError("环境规则引用的承伤事件没有携带承伤数值")
+    if value.get("排除来源身份") != ["战场环境"]:
+        raise ValueError("环境伤害必须排除战场环境自身")
+    if value.get("阶段方式") != "替换":
+        raise ValueError("战场环境阶段必须使用替换制")
 
 
 def _validate_action_rules(

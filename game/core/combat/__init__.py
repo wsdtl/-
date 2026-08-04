@@ -15,6 +15,8 @@ from .contracts import (
 from .contracts import (
     CombatBuildRef as CombatBuildRef,
 )
+from .contracts import CombatFieldResult as CombatFieldResult
+from .contracts import CombatFieldSpec as CombatFieldSpec
 from .contracts import (
     CombatReportSpec as CombatReportSpec,
 )
@@ -38,6 +40,8 @@ from .service import CombatService as CombatService
 __all__ = [
     "BattleEvent",
     "CombatBuildRef",
+    "CombatFieldResult",
+    "CombatFieldSpec",
     "CombatReportSpec",
     "CombatRequest",
     "CombatResult",

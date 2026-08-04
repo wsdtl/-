@@ -34,7 +34,7 @@ class FurnaceMethod:
 class RecipeDefinition:
     identity: str
     name: str
-    strength: int
+    strength: int | None
     difficulty: int
     minimum_guide_grade: str
     minimum_auxiliary_grade: str
@@ -42,6 +42,7 @@ class RecipeDefinition:
     furnace_method: str
     output_item_id: str
     output_count: int
+    side_substitution_limit: int
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from typing import Any
 
 from game.core.item import ItemMedicineDefinition
 
-BUILD_SECTIONS = frozenset({"功法", "附魔", "宝石"})
+BUILD_SECTIONS = frozenset({"功法", "附魔", "宝石", "器律"})
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,19 @@ class CombatStatus:
     mechanism_count: int
     ability_count: int
     event_count: int
+    environment_count: int
+
+
+@dataclass(frozen=True)
+class CombatFieldSpec:
+    """由战场服务准备、由战斗核心执行的环境引用。"""
+
+    environment_id: str
+    scene: str
+    origin: str
+    coordinate: tuple[int, int] | None = None
+    altitude: int | None = None
+    terrain: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,6 +112,28 @@ class CombatRequest:
     share_left_inventory: bool = False
     medicine_definitions: tuple[ItemMedicineDefinition, ...] = ()
     report: CombatReportSpec | None = None
+    field: CombatFieldSpec | None = None
+
+
+@dataclass(frozen=True)
+class CombatFieldResult:
+    environment_id: str
+    name: str
+    scene: str
+    origin: str
+    coordinate: tuple[int, int] | None
+    altitude: int | None
+    terrain: str
+    stage_index: int
+    stage_name: str
+    accumulated_damage: float
+    health_basis: float
+
+    @property
+    def damage_ratio(self) -> float:
+        if self.health_basis <= 0:
+            return 0.0
+        return self.accumulated_damage / self.health_basis
 
 
 @dataclass(frozen=True)
@@ -207,6 +242,7 @@ class CombatResult:
     right_team: tuple[CombatantResult, ...] = ()
     report: Mapping[str, Any] | None = None
     presentation: tuple[Mapping[str, Any], Mapping[str, Any]] | None = None
+    field: CombatFieldResult | None = None
 
     @property
     def left_results(self) -> tuple[CombatantResult, ...]:
@@ -248,6 +284,8 @@ __all__ = [
     "BUILD_SECTIONS",
     "BattleEvent",
     "CombatBuildRef",
+    "CombatFieldResult",
+    "CombatFieldSpec",
     "CombatReportSpec",
     "CombatRequest",
     "CombatResult",

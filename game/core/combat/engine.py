@@ -8,7 +8,7 @@ import random
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from .contracts import CombatantResult, CombatResult, StatusResult
+from .contracts import CombatantResult, CombatFieldResult, CombatResult, StatusResult
 from .damage import DamageEngine, DamageRequest
 from .mechanics import MechanismRuntime
 from .models import (
@@ -16,7 +16,9 @@ from .models import (
     BattleContext,
     CombatCatalog,
     Fighter,
+    PreparedCombatField,
     RuntimeCombatantSnapshot,
+    RuntimeCombatField,
     Skill,
     StatusState,
 )
@@ -116,6 +118,7 @@ class BattleEngine(MechanismRuntime):
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
+        field: PreparedCombatField | None = None,
     ) -> CombatResult:
         if not left or not right:
             raise ValueError("战斗双方都必须至少有一名参战者")
@@ -127,16 +130,20 @@ class BattleEngine(MechanismRuntime):
         if share_left_inventory:
             for fighter in left_fighters[1:]:
                 fighter.inventory = left_fighters[0].inventory
+        runtime_field = self._build_field(field, (*left_fighters, *right_fighters))
         context = BattleContext(
             rng=random.Random(int(seed)),
             left=left_fighters[0],
             right=right_fighters[0],
             medicine_definitions=medicine_definitions,
+            field=runtime_field,
             left_team=left_fighters,
             right_team=right_fighters,
         )
         context.engine = self
         context.action_progress = {fighter.id: 0.0 for fighter in context.fighters}
+        if context.field is not None:
+            self._form_field(context)
         context.event(
             "战斗开始", context.left, context.right,
             f"{'、'.join(value.name for value in left_fighters)}与{'、'.join(value.name for value in right_fighters)}进入战斗",
@@ -168,6 +175,157 @@ class BattleEngine(MechanismRuntime):
             events=tuple(context.events),
             trigger_activations=sum(context.battle_trigger_counts.values()),
             left_team=left_results, right_team=right_results,
+            field=self._field_result(context),
+        )
+
+    @staticmethod
+    def _build_field(
+        definition: PreparedCombatField | None,
+        fighters: tuple[Fighter, ...],
+    ) -> RuntimeCombatField | None:
+        if definition is None:
+            return None
+        health_basis = sum(
+            fighter.health_max
+            for fighter in fighters
+            if fighter.counts_for_victory and not fighter.summoned and fighter.kind != "构造物"
+        )
+        source = Fighter(
+            id=f"战场环境:{definition.environment_id}",
+            name=definition.name,
+            attributes={
+                "血气上限": 1,
+                "精神上限": 0,
+                "护盾上限": 0,
+                "攻击": 0,
+                "防御": 0,
+                "速度": 1,
+            },
+            health=1,
+            spirit=0,
+            kind="战场环境",
+            side=-1,
+            can_act=False,
+            counts_for_victory=False,
+        )
+        return RuntimeCombatField(
+            definition=definition,
+            source=source,
+            health_basis=max(1.0, health_basis),
+        )
+
+    def _form_field(self, context: BattleContext) -> None:
+        field = context.field
+        if field is None:
+            return
+        context.mark_listener_index_dirty()
+        self._run_effects(
+            context,
+            field.source,
+            context.left,
+            field.stage.entry_abilities,
+            1.0,
+        )
+        definition = field.definition
+        context.event(
+            "战场形成",
+            field.source,
+            context.left,
+            f"{definition.name}形成，当前地势为{field.stage.name}",
+            values={
+                "环境编号": definition.environment_id,
+                "环境": definition.name,
+                "阶段": field.stage.name,
+                "承载基准": field.health_basis,
+                "场景": definition.scene,
+            },
+        )
+
+    def _absorb_field_damage(
+        self,
+        context: BattleContext,
+        source: Fighter,
+        target: Fighter,
+        amount: float,
+    ) -> None:
+        field = context.field
+        if field is None or source.kind == "战场环境" or amount <= 0:
+            return
+        field.accumulated_damage += float(amount)
+        context.event(
+            "地势承伤后",
+            field.source,
+            target,
+            f"{field.definition.name}承受战斗余波 {amount:.3f}",
+            amount,
+            values={
+                "环境编号": field.definition.environment_id,
+                "阶段": field.stage.name,
+                "本次承伤": amount,
+                "累计承伤": field.accumulated_damage,
+                "承载基准": field.health_basis,
+                "承伤比例": field.damage_ratio,
+            },
+        )
+        while field.stage_index + 1 < len(field.definition.stages):
+            next_stage = field.definition.stages[field.stage_index + 1]
+            if field.damage_ratio < next_stage.threshold:
+                break
+            previous = field.stage
+            context.event(
+                "地势变化前",
+                field.source,
+                target,
+                f"{field.definition.name}将由{previous.name}转为{next_stage.name}",
+                values={
+                    "环境编号": field.definition.environment_id,
+                    "原阶段": previous.name,
+                    "新阶段": next_stage.name,
+                    "累计承伤": field.accumulated_damage,
+                    "承伤比例": field.damage_ratio,
+                },
+            )
+            field.stage_index += 1
+            context.mark_listener_index_dirty()
+            self._run_effects(
+                context,
+                field.source,
+                target,
+                field.stage.entry_abilities,
+                1.0,
+            )
+            context.event(
+                "地势变化后",
+                field.source,
+                target,
+                f"{field.definition.name}进入{field.stage.name}",
+                values={
+                    "环境编号": field.definition.environment_id,
+                    "原阶段": previous.name,
+                    "新阶段": field.stage.name,
+                    "累计承伤": field.accumulated_damage,
+                    "承伤比例": field.damage_ratio,
+                },
+            )
+
+    @staticmethod
+    def _field_result(context: BattleContext) -> CombatFieldResult | None:
+        field = context.field
+        if field is None:
+            return None
+        definition = field.definition
+        return CombatFieldResult(
+            environment_id=definition.environment_id,
+            name=definition.name,
+            scene=definition.scene,
+            origin=definition.origin,
+            coordinate=definition.coordinate,
+            altitude=definition.altitude,
+            terrain=definition.terrain,
+            stage_index=field.stage_index,
+            stage_name=field.stage.name,
+            accumulated_damage=round(field.accumulated_damage, 3),
+            health_basis=round(field.health_basis, 3),
         )
 
     def _take_action(self, context: BattleContext, actor: Fighter) -> None:
@@ -608,6 +766,7 @@ class BattleEngine(MechanismRuntime):
             self._dispatch_event(context, kind="护盾吸收后", source=source, target=target, amount=resolution.shield_damage, values=values, tags=tags)
         self._dispatch_event(context, kind="造成伤害后", source=source, target=target, amount=resolution.actual_damage, values=values, tags=tags)
         self._dispatch_event(context, kind="受到伤害后", source=source, target=target, amount=resolution.actual_damage, values=values, tags=tags)
+        self._absorb_field_damage(context, source, target, resolution.actual_damage)
         if resolution.shield_broken:
             self._dispatch_event(context, kind="护盾破碎后", source=source, target=target, amount=resolution.shield_damage, values=values, tags=tags)
         if target_was_alive and not target.alive:

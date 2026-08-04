@@ -13,6 +13,7 @@ from .catalog import BattleReportCatalog
 from .contracts import (
     BUILD_SECTIONS,
     CombatantSpec,
+    CombatFieldSpec,
     CombatRequest,
     CombatResult,
     CombatStatus,
@@ -20,7 +21,7 @@ from .contracts import (
 )
 from .engine import BattleEngine
 from .foundation import load_battle_foundation
-from .models import RuntimeCombatantSnapshot
+from .models import PreparedCombatField, PreparedFieldStage, RuntimeCombatantSnapshot
 from .presentation import build_battle_report_presentation
 from .report import RuntimeBattleReportParticipant, build_battle_report
 
@@ -46,12 +47,13 @@ class CombatService:
     def status(self) -> CombatStatus:
         engine = self._engine
         if engine is None:
-            return CombatStatus(False, 0, 0, 0)
+            return CombatStatus(False, 0, 0, 0, 0)
         return CombatStatus(
             initialized=True,
             mechanism_count=len(engine.catalog.mechanisms),
             ability_count=len(engine.catalog.abilities),
             event_count=len(engine.catalog.events),
+            environment_count=len(engine.catalog.environments),
         )
 
     async def execute(self, request: CombatRequest) -> CombatResult:
@@ -63,6 +65,7 @@ class CombatService:
         left = tuple(self._runtime_snapshot(value) for value in request.left_team)
         right = tuple(self._runtime_snapshot(value) for value in request.right_team)
         medicine_definitions = self._medicine_definitions(request)
+        field = self._prepared_field(request.field)
         result = self._simulate_runtime_teams(
             left=left,
             right=right,
@@ -70,6 +73,7 @@ class CombatService:
             seed=request.seed,
             action_limit=request.action_limit,
             share_left_inventory=request.share_left_inventory,
+            field=field,
         )
         if request.report is None:
             return result
@@ -84,6 +88,7 @@ class CombatService:
         seed: int,
         action_limit: int,
         share_left_inventory: bool = False,
+        field: PreparedCombatField | None = None,
     ) -> CombatResult:
         """供战斗服务自身测试和基准使用的内部同步入口。"""
 
@@ -94,6 +99,53 @@ class CombatService:
             seed=seed,
             action_limit=action_limit,
             share_left_inventory=share_left_inventory,
+            field=field,
+        )
+
+    def _prepared_field(
+        self,
+        spec: CombatFieldSpec | None,
+    ) -> PreparedCombatField | None:
+        if spec is None:
+            return None
+        environment_id = str(spec.environment_id or "").strip()
+        try:
+            raw = self._require_engine().catalog.environments[environment_id]
+        except KeyError as exc:
+            raise ValueError(f"战斗核心未登记战场环境：{environment_id or '<空>'}") from exc
+        origin = str(spec.origin or "").strip()
+        if origin not in {"地表", "秘境"}:
+            raise ValueError(f"未知战场来源：{origin or '<空>'}")
+        coordinate = spec.coordinate
+        altitude = spec.altitude
+        terrain = str(spec.terrain or "").strip()
+        if origin == "地表":
+            if coordinate is None or len(coordinate) != 2:
+                raise ValueError("地表战场必须提供 xy")
+            if altitude is None or not terrain:
+                raise ValueError("地表战场必须提供海拔和地点地形")
+            coordinate = (int(coordinate[0]), int(coordinate[1]))
+            altitude = int(altitude)
+        elif coordinate is not None or altitude is not None:
+            raise ValueError("秘境战场不能伪造地表 xy 或海拔")
+        stages = tuple(
+            PreparedFieldStage(
+                name=str(stage["名称"]),
+                threshold=float(stage["起始承伤比例"]),
+                entry_abilities=tuple(copy.deepcopy(stage["入阶能力"])),
+                passive_abilities=tuple(copy.deepcopy(stage["常驻能力"])),
+            )
+            for stage in raw["阶段"]
+        )
+        return PreparedCombatField(
+            environment_id=environment_id,
+            name=str(raw["名称"]),
+            scene=str(spec.scene or "").strip() or str(raw["名称"]),
+            origin=origin,
+            coordinate=coordinate,
+            altitude=altitude,
+            terrain=terrain,
+            stages=stages,
         )
 
     def _runtime_snapshot(self, value: CombatantSpec) -> RuntimeCombatantSnapshot:
@@ -255,7 +307,7 @@ class CombatService:
             catalog=self._require_report_catalog(),
             seed=request.seed,
             generated_at=report_spec.generated_at,
-            scene=report_spec.scene,
+            scene=result.field.scene if result.field is not None else report_spec.scene,
         )
         presentation = (
             build_battle_report_presentation(

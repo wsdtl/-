@@ -167,6 +167,19 @@ def build_battle_report_presentation(
         },
         "timeline": compact_timeline,
     }
+    field = report.get("field")
+    field_lines = []
+    if isinstance(field, Mapping):
+        field_lines = [
+            f"战场: {field['name']} · {field['stage_name']}",
+            f"地势承伤: {field['accumulated_damage']} / {field['health_basis']}",
+        ]
+        coordinate = field.get("coordinate")
+        if isinstance(coordinate, Mapping):
+            field_lines.insert(
+                1,
+                f"xy: ({coordinate['x']}, {coordinate['y']}) · 海拔 {field['altitude']} 米",
+            )
     main = {
         "schema": schema,
         "version": version,
@@ -177,6 +190,7 @@ def build_battle_report_presentation(
             "tone": catalog.result_tone(report["result"]["code"]),
             "lines": [
                 f"地点: {report['scene']}",
+                *field_lines,
                 f"战斗行动: {report['result']['actions']}",
                 f"后端事件: {public_event_count}",
                 f"机制触发: {report['result']['trigger_count']}",

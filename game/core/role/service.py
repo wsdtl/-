@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Any
 
 from game.core.data import JsonDataService
+from game.core.forge import ForgeService, WeaponState
 from game.core.item import ItemService
 
 from .contracts import (
@@ -25,15 +26,20 @@ BUILD_SECTIONS = ("功法", "附魔", "宝石")
 class RoleService:
     """解释人物、道侣和敌人共同角色结构，不保存角色实例。"""
 
-    def __init__(self, data: JsonDataService, items: ItemService) -> None:
+    def __init__(
+        self,
+        data: JsonDataService,
+        items: ItemService,
+        forge: ForgeService,
+    ) -> None:
         self._data = data
         self._items = items
+        self._forge = forge
         self._attribute_defaults: dict[str, float] = {}
         self._growth_rules: dict[str, Mapping[str, Any]] = {}
         self._role_rules: dict[str, Mapping[str, Any]] = {}
         self._player_rule: Mapping[str, Any] | None = None
         self._companion_rule: Mapping[str, Any] | None = None
-        self._weapon_rules: dict[str, Mapping[str, Any]] = {}
         self._companions: Mapping[str, Mapping[str, Any]] = {}
         self._enemies: Mapping[str, Mapping[str, Any]] = {}
 
@@ -42,14 +48,13 @@ class RoleService:
             raise RuntimeError("角色微服务已经初始化")
         if not self._items.status().initialized:
             raise RuntimeError("物品微服务必须先于角色微服务启动")
+        if not self._forge.status().initialized:
+            raise RuntimeError("炼器微服务必须先于角色微服务启动")
         self._load_attribute_defaults()
         rules = self._data.dataset("角色规则")
         self._growth_rules = {
             name: self._validate_growth_rule(name, rules[name])
             for name in ("修士修炼", "灵兽修炼")
-        }
-        self._weapon_rules = {
-            "本命武器": self._validate_weapon_rule(rules.get("本命武器"))
         }
         self._player_rule = self._validate_player_rule(rules.get("人物"))
         self._companion_rule = self._validate_companion_rule(rules.get("道侣"))
@@ -71,7 +76,7 @@ class RoleService:
             growth_rule_count=len(self._growth_rules),
         )
 
-    def player(self) -> RoleProfile:
+    def player(self, *, weapon: WeaponState | None = None) -> RoleProfile:
         rule = self._require_player_rule()
         level = _positive_int(rule.get("等级"), "人物等级")
         attributes = self._attributes(
@@ -90,7 +95,9 @@ class RoleService:
                 for raw in _sequence(rule.get("物品"), "初始物品")
             )
         )
-        weapon = self._weapon_rules[_text(rule.get("本命武器规则"), "本命武器规则")]
+        weapon_profile = self._forge.weapon_profile(
+            weapon if weapon is not None else self._forge.default_weapon()
+        )
         return RoleProfile(
             identity="人物",
             name="人物",
@@ -99,8 +106,9 @@ class RoleService:
             qualification=None,
             attributes=MappingProxyType(attributes),
             resources=MappingProxyType(resources),
-            weapon_attack=self._weapon_attack(weapon, level),
+            weapon_attack=weapon_profile.attack,
             build_slots=self._build_slots(rule.get("构筑位"), full_pool=True),
+            weapon=weapon_profile,
             inventory=inventory,
             auto_medicine=_boolean(rule.get("自动用药"), "人物自动用药"),
         )
@@ -112,6 +120,7 @@ class RoleService:
         level: int | None = None,
         qualification: int | None = None,
         seed: int | None = None,
+        weapon: WeaponState | None = None,
     ) -> RoleProfile:
         rule = self._require_companion_rule()
         key = _text(identity, "道侣编号")
@@ -139,9 +148,9 @@ class RoleService:
             growth_multiplier=multiplier,
         )
         self._apply_fluctuation(attributes, entity.get("实力波动"), rng, f"道侣 {key}")
-        weapon_rule = self._weapon_rules[
-            _text(rule.get("本命武器规则"), "道侣本命武器规则")
-        ]
+        weapon_profile = self._forge.weapon_profile(
+            weapon if weapon is not None else self._forge.default_weapon()
+        )
         pools = {
             section: (_text(entity.get(f"{section}池"), f"道侣 {key} {section}池"),)
             for section in BUILD_SECTIONS
@@ -154,8 +163,9 @@ class RoleService:
             qualification=actual_qualification,
             attributes=MappingProxyType(attributes),
             resources=MappingProxyType(self._default_resources(attributes)),
-            weapon_attack=self._weapon_attack(weapon_rule, actual_level),
+            weapon_attack=weapon_profile.attack,
             build_slots=self._build_slots(rule.get("构筑位"), pools=pools),
+            weapon=weapon_profile,
         )
 
     def enemy(
@@ -253,21 +263,6 @@ class RoleService:
         _positive_int(experience.get("等级平方系数"), f"成长规则 {name} 经验系数")
         return rule
 
-    def _validate_weapon_rule(self, value: Any) -> Mapping[str, Any]:
-        rule = _mapping(value, "本命武器规则")
-        _strict_fields(
-            rule,
-            {"初始等级", "等级上限", "基础攻击", "每级攻击", "经验"},
-            "本命武器规则",
-        )
-        for field in ("初始等级", "等级上限"):
-            _positive_int(rule.get(field), f"本命武器 {field}")
-        for field in ("基础攻击", "每级攻击"):
-            _nonnegative_number(rule.get(field), f"本命武器 {field}")
-        experience = _mapping(rule.get("经验"), "本命武器经验")
-        _strict_fields(experience, {"基础", "等级平方系数"}, "本命武器经验")
-        return rule
-
     def _validate_player_rule(self, value: Any) -> Mapping[str, Any]:
         rule = _mapping(value, "人物规则")
         _strict_fields(
@@ -275,7 +270,6 @@ class RoleService:
             {
                 "角色类型",
                 "成长规则",
-                "本命武器规则",
                 "构筑位",
                 "等级",
                 "经验",
@@ -289,7 +283,6 @@ class RoleService:
             "人物规则",
         )
         self._require_growth_reference(rule.get("成长规则"), "人物")
-        self._require_weapon_reference(rule.get("本命武器规则"), "人物")
         self._validate_build_slots(rule.get("构筑位"), "人物构筑位")
         self._validate_attributes(rule.get("属性覆盖"), "人物属性覆盖")
         if not isinstance(rule.get("状态"), Sequence):
@@ -313,7 +306,6 @@ class RoleService:
             {
                 "角色类型",
                 "成长规则",
-                "本命武器规则",
                 "好感上限",
                 "赠礼每件好感",
                 "构筑位",
@@ -322,7 +314,6 @@ class RoleService:
             "道侣规则",
         )
         self._require_growth_reference(rule.get("成长规则"), "道侣")
-        self._require_weapon_reference(rule.get("本命武器规则"), "道侣")
         self._validate_build_slots(rule.get("构筑位"), "道侣构筑位")
         correction = _mapping(rule.get("资质成长修正"), "资质成长修正")
         _strict_fields(
@@ -550,13 +541,6 @@ class RoleService:
         raise RoleError(f"等级 {level} 没有对应角色阶梯")
 
     @staticmethod
-    def _weapon_attack(rule: Mapping[str, Any], level: int) -> float:
-        initial = _positive_int(rule.get("初始等级"), "本命武器初始等级")
-        return _nonnegative_number(rule.get("基础攻击"), "本命武器基础攻击") + max(
-            0, level - initial
-        ) * _nonnegative_number(rule.get("每级攻击"), "本命武器每级攻击")
-
-    @staticmethod
     def _resources(raw: Any, attributes: Mapping[str, float]) -> dict[str, float]:
         values = _mapping(raw, "人物资源")
         result: dict[str, float] = {}
@@ -605,11 +589,6 @@ class RoleService:
         name = _text(value, f"{label}成长规则")
         if name not in self._growth_rules:
             raise RoleError(f"{label}引用未知成长规则：{name}")
-
-    def _require_weapon_reference(self, value: Any, label: str) -> None:
-        name = _text(value, f"{label}本命武器规则")
-        if name not in self._weapon_rules:
-            raise RoleError(f"{label}引用未知本命武器规则：{name}")
 
     def _require_player_rule(self) -> Mapping[str, Any]:
         self._require_initialized()

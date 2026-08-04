@@ -20,6 +20,7 @@ from game.core.alchemy import (
 )
 from game.core.build import BuildRequest, BuildService, BuildSlotRequest
 from game.core.data import JsonDataService
+from game.core.forge import ForgeService
 from game.core.item import ItemService
 from game.core.pool import PoolService
 from game.core.role import RoleService
@@ -89,23 +90,42 @@ def test_item_service_separates_definitions_from_inventory_instances() -> None:
     _, _, _, items, _ = _services()
 
     recovery = items.item("100001")
-    battle_pill = items.item("100127")
+    battle_pill = items.item("120121")
+    breakthrough_pill = items.item("140002")
 
     assert recovery.category == "丹药"
     assert recovery.use_effect is not None
     assert recovery.use_effect.recovery_percent == 6
     assert battle_pill.use_effect is not None
     assert battle_pill.use_effect.battle_mechanisms == ("600882", "600885")
+    assert breakthrough_pill.use_effect is not None
+    assert breakthrough_pill.use_effect.executor == "境界突破"
+    assert breakthrough_pill.use_effect.target_realm_id == "510002"
+    assert breakthrough_pill.use_effect.permanent_attributes == (("血气上限", 24.0),)
     assert not hasattr(recovery, "quantity")
+
+    rebuild = items.item("160001")
+    assert rebuild.use_effect is not None
+    assert rebuild.use_effect.executor == "构筑重做"
+    assert rebuild.use_effect.build_sections == ("功法", "附魔", "宝石")
+    assert rebuild.use_effect.preserve_build_count is True
+
+    correction = items.item("160002")
+    assert correction.use_effect is not None
+    assert correction.use_effect.executor == "突破补正"
+    assert correction.use_effect.attribute_scope == "战斗属性"
+    assert correction.use_effect.attribute_choice_count == 1
+    assert correction.use_effect.pure_breakthrough_only is True
+    assert correction.use_effect.repeated_correction_allowed is False
 
 
 def test_alchemy_plans_direct_vein_materials_without_inventory_access() -> None:
     data, _, _, items, alchemy = _services()
-    request = _direct_request(data, items, alchemy, "110001")
+    request = _direct_request(data, items, alchemy, "130001")
 
     plan = alchemy.plan(request)
 
-    assert plan.output_item_id == "100007"
+    assert plan.output_item_id == "120001"
     assert plan.output_count == 1
     assert {value.mode for value in plan.allocations} == {DIRECT_MODE}
     assert plan.grade_basis.guide_grades == (plan.recipe.minimum_guide_grade,)
@@ -114,7 +134,7 @@ def test_alchemy_plans_direct_vein_materials_without_inventory_access() -> None:
 
 def test_alchemy_accepts_one_side_vein_substitution_and_rejects_low_grade() -> None:
     data, _, _, items, alchemy = _services()
-    request = _side_request(data, items, alchemy, "110001")
+    request = _side_request(data, items, alchemy, "130001")
 
     plan = alchemy.plan(request)
     assert sum(value.mode == SIDE_MODE for value in plan.allocations) == 2
@@ -131,7 +151,7 @@ def test_alchemy_accepts_one_side_vein_substitution_and_rejects_low_grade() -> N
 
 def test_alchemy_output_grade_advances_only_when_every_material_has_margin() -> None:
     data, _, _, items, alchemy = _services()
-    request = _direct_request(data, items, alchemy, "110001")
+    request = _direct_request(data, items, alchemy, "130001")
     upgraded = AlchemyRequest(
         recipe_id=request.recipe_id,
         guides=tuple(AlchemyMaterial(value.item_id, "03") for value in request.guides),
@@ -151,7 +171,7 @@ def test_every_recipe_has_enough_plant_auxiliaries() -> None:
         for recipe in alchemy.recipes()
     )
 
-    assert len(plans) == 160
+    assert len(plans) == 357
     assert all(plan.allocations for plan in plans)
 
 
@@ -171,8 +191,9 @@ def test_composition_root_exposes_all_four_domain_services(monkeypatch) -> None:
 
     assert services.core.world.status().location_count == 80
     assert services.core.travel.status().road_count == 113
-    assert services.core.item.status().item_count == 748
-    assert services.core.alchemy.status().recipe_count == 160
+    assert services.core.item.status().item_count == 939
+    assert services.core.alchemy.status().recipe_count == 357
+    assert services.core.forge.status().law_count == 64
     assert services.core.role.status().companion_count == 264
     assert services.core.build.status().conflict_count == 5
 
@@ -185,7 +206,9 @@ def test_role_and_build_services_form_enemy_combat_inputs() -> None:
     pools.initialize()
     items = ItemService(data)
     items.initialize()
-    roles = RoleService(data, items)
+    forge = ForgeService(data, items)
+    forge.initialize()
+    roles = RoleService(data, items, forge)
     roles.initialize()
     builds = BuildService(data, pools)
     builds.initialize()

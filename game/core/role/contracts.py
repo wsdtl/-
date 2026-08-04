@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from game.core.forge import WeaponProfile
+
 
 class RoleError(ValueError):
     """角色 JSON 无法形成一致角色档案。"""
@@ -43,6 +45,7 @@ class RoleProfile:
     resources: Mapping[str, float]
     weapon_attack: float
     build_slots: tuple[RoleBuildSlot, ...]
+    weapon: WeaponProfile | None = None
     inventory: tuple[RoleItemStack, ...] = ()
     auto_medicine: bool = False
 

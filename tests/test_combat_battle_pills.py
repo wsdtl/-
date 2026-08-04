@@ -19,7 +19,7 @@ def test_battle_pill_is_resolved_into_runtime_listeners() -> None:
         _combatant(
             "left",
             prepared_statuses=alchemy.prepare_battle_pills(
-                ("100087",), source_id="left"
+                ("120081",), source_id="left"
             ).statuses,
         )
     )
@@ -28,7 +28,7 @@ def test_battle_pill_is_resolved_into_runtime_listeners() -> None:
     status = snapshot.statuses[0]
     assert len(status["监听"]) == 2
     assert status["记录"] == {
-        "战丹编号": "100087",
+        "战丹编号": "120081",
         "战斗机制": ["600030", "600031"],
         "强度": 3,
         "丹位": 2,
@@ -44,7 +44,7 @@ def test_fatal_guard_battle_pill_prevents_first_death() -> None:
                 health=20,
                 speed=1,
                 prepared_statuses=alchemy.prepare_battle_pills(
-                    ("100039",), source_id="left"
+                    ("120033",), source_id="left"
                 ).statuses,
             ),
         ),
@@ -63,14 +63,14 @@ def test_battle_pill_rejects_duplicate_identity() -> None:
     _, alchemy = _services()
 
     with pytest.raises(AlchemyError, match="不能重复寄存"):
-        alchemy.prepare_battle_pills(("100019", "100019"), source_id="left")
+        alchemy.prepare_battle_pills(("120013", "120013"), source_id="left")
 
 
 def test_battle_pill_rejects_slot_overflow() -> None:
     _, alchemy = _services()
 
     with pytest.raises(AlchemyError, match="超过上限 3"):
-        alchemy.prepare_battle_pills(("100018", "100027"), source_id="left")
+        alchemy.prepare_battle_pills(("120012", "120021"), source_id="left")
 
 
 def test_battle_pill_rejects_non_battle_medicine() -> None:

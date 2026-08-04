@@ -64,7 +64,10 @@ class AlchemyService:
         self._load_general_rules(_mapping(rules.get("丹则"), "丹则"))
         self._load_veins(_sequence(rules.get("归脉"), "归脉"))
         self._load_furnaces(_sequence(rules.get("炉法"), "炉法"))
-        self._load_recipes(_mapping(rules.get("战丹"), "战丹规则"))
+        self._load_recipes(
+            _sequence(rules.get("难度"), "炼制难度规则"),
+            _mapping(rules.get("战丹"), "战丹规则"),
+        )
         return self.status()
 
     def status(self) -> AlchemyStatus:
@@ -138,7 +141,11 @@ class AlchemyService:
             for requirement in furnace.requirements
             for _ in range(requirement.count)
         )
-        allocations = self._allocate(required_slots, auxiliaries)
+        allocations = self._allocate(
+            required_slots,
+            auxiliaries,
+            recipe.side_substitution_limit,
+        )
         if allocations is None:
             raise AlchemyError("所选灵植不能满足炉法药脉")
         output_grade = self._output_grade(recipe, guides, auxiliaries)
@@ -364,10 +371,14 @@ class AlchemyService:
                 requirements=requirements,
             )
 
-    def _load_recipes(self, battle_rules: Mapping[str, Any]) -> None:
+    def _load_recipes(
+        self,
+        difficulty_rows: Sequence[Any],
+        battle_rules: Mapping[str, Any],
+    ) -> None:
         _expect_fields(
             battle_rules,
-            required={"强度规则", "炼制难度规则"},
+            required={"强度规则"},
             optional=set(),
             label="战丹规则",
         )
@@ -388,20 +399,17 @@ class AlchemyService:
             _positive_int(row.get("炼制难度"), "炼制难度"): row
             for row in (
                 _strict_difficulty_rule(value)
-                for value in _sequence(battle_rules.get("炼制难度规则"), "炼制难度规则")
+                for value in difficulty_rows
             )
         }
         for identity, raw in self._data.entities("丹方").items():
             _expect_fields(
                 raw,
-                required={"编号", "名称", "强度", "炼制难度", "药引池", "炉法", "成丹"},
-                optional=set(),
+                required={"编号", "名称", "炼制难度", "药引池", "炉法", "成丹"},
+                optional={"强度"},
                 label=f"丹方 {identity}",
             )
-            strength = _positive_int(raw.get("强度"), f"丹方 {identity} 强度")
             difficulty = _positive_int(raw.get("炼制难度"), f"丹方 {identity} 炼制难度")
-            if difficulty not in strength_rules.get(strength, (0, set()))[1]:
-                raise AlchemyError(f"丹方 {identity} 强度与炼制难度不兼容")
             difficulty_rule = difficulty_rules.get(difficulty)
             if difficulty_rule is None:
                 raise AlchemyError(f"丹方 {identity} 炼制难度没有规则")
@@ -411,6 +419,13 @@ class AlchemyService:
             auxiliary_grade = _grade(
                 difficulty_rule.get("最低辅材品级"), self._grades, "最低辅材品级"
             )
+            side_substitution_limit = _nonnegative_int(
+                difficulty_rule.get("旁脉替代上限"), "旁脉替代上限"
+            )
+            if side_substitution_limit > self._side_substitution_limit:
+                raise AlchemyError(
+                    f"炼制难度 {difficulty} 的旁脉替代上限不能超过丹则上限"
+                )
             furnace_name = _text(raw.get("炉法"), f"丹方 {identity} 炉法")
             if furnace_name not in self._furnaces:
                 raise AlchemyError(f"丹方 {identity} 引用未知炉法：{furnace_name}")
@@ -434,8 +449,18 @@ class AlchemyService:
             output_item = self._items.item(output_id)
             if output_item.category != "丹药":
                 raise AlchemyError(f"丹方 {identity} 成丹不是丹药")
-            if output_item.strength != strength:
-                raise AlchemyError(f"丹方 {identity} 强度与成丹不一致")
+            if output_item.strength is None:
+                if "强度" in raw:
+                    raise AlchemyError(f"非战丹丹方 {identity} 不能声明战丹强度")
+                strength = None
+            else:
+                if "强度" not in raw:
+                    raise AlchemyError(f"战丹丹方 {identity} 必须声明强度")
+                strength = _positive_int(raw.get("强度"), f"丹方 {identity} 强度")
+                if difficulty not in strength_rules.get(strength, (0, set()))[1]:
+                    raise AlchemyError(f"丹方 {identity} 强度与炼制难度不兼容")
+                if output_item.strength != strength:
+                    raise AlchemyError(f"丹方 {identity} 强度与成丹不一致")
             self._recipes[identity] = RecipeDefinition(
                 identity=identity,
                 name=_text(raw.get("名称"), f"丹方 {identity} 名称"),
@@ -447,6 +472,7 @@ class AlchemyService:
                 furnace_method=furnace_name,
                 output_item_id=output_id,
                 output_count=self._output_count,
+                side_substitution_limit=side_substitution_limit,
             )
         self._guide_item_count = len(set().union(*self._guide_pools.values()))
         self._strength_slots = {
@@ -458,6 +484,7 @@ class AlchemyService:
         self,
         required_slots: tuple[str, ...],
         materials: tuple[AlchemyMaterial, ...],
+        side_substitution_limit: int,
     ) -> tuple[MaterialAllocation, ...] | None:
         veins = tuple(
             self._veins[self._items.item(material.item_id).source_pool]
@@ -499,7 +526,7 @@ class AlchemyService:
                 )
                 if result is not None:
                     return result
-            if side_used >= self._side_substitution_limit:
+            if side_used >= side_substitution_limit:
                 return None
             candidates = [index for index in unused if veins[index][1] == required]
             for group in itertools.combinations(candidates, self._side_material_count):
@@ -640,7 +667,13 @@ def _strict_difficulty_rule(value: Any) -> Mapping[str, Any]:
     row = _mapping(value, "炼制难度规则")
     _expect_fields(
         row,
-        required={"炼制难度", "辅材总味数", "最低药引品级", "最低辅材品级"},
+        required={
+            "炼制难度",
+            "辅材总味数",
+            "最低药引品级",
+            "最低辅材品级",
+            "旁脉替代上限",
+        },
         optional=set(),
         label="炼制难度规则",
     )

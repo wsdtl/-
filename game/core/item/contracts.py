@@ -35,6 +35,14 @@ class ItemUseEffect:
     experience: int | None = None
     battle_mechanisms: tuple[str, ...] = ()
     battle_state: ItemBattleState | None = None
+    target_realm_id: str | None = None
+    permanent_attributes: tuple[tuple[str, float], ...] = ()
+    build_sections: tuple[str, ...] = ()
+    preserve_build_count: bool | None = None
+    attribute_scope: str | None = None
+    attribute_choice_count: int | None = None
+    pure_breakthrough_only: bool | None = None
+    repeated_correction_allowed: bool | None = None
 
 
 @dataclass(frozen=True)

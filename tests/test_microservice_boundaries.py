@@ -7,9 +7,11 @@ from pathlib import Path
 
 import game.core as core_namespace
 import game.core.alchemy as alchemy_api
+import game.core.battlefield as battlefield_api
 import game.core.build as build_api
 import game.core.combat as combat_api
 import game.core.data as data_api
+import game.core.forge as forge_api
 import game.core.item as item_api
 import game.core.pool as pool_api
 import game.core.role as role_api
@@ -19,12 +21,14 @@ import game.core.world as world_api
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_PACKAGES = (
     "game.core.combat",
+    "game.core.battlefield",
     "game.core.data",
     "game.core.pool",
     "game.core.build",
     "game.core.world",
     "game.core.travel",
     "game.core.item",
+    "game.core.forge",
     "game.core.alchemy",
     "game.core.role",
 )
@@ -38,6 +42,8 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
     assert set(combat_api.__all__) == {
         "BattleEvent",
         "CombatBuildRef",
+        "CombatFieldResult",
+        "CombatFieldSpec",
         "CombatReportSpec",
         "CombatRequest",
         "CombatResult",
@@ -48,6 +54,12 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "CombatantReportSpec",
         "CombatantSpec",
         "StatusResult",
+    }
+    assert set(battlefield_api.__all__) == {
+        "BattlefieldEnvironment",
+        "BattlefieldError",
+        "BattlefieldService",
+        "BattlefieldStatus",
     }
     assert set(data_api.__all__) == {
         "JsonDataError",
@@ -124,6 +136,23 @@ def test_public_packages_only_export_stable_contracts_and_services() -> None:
         "PreparedBattlePills",
         "RecipeDefinition",
         "VeinRequirement",
+    }
+    assert set(forge_api.__all__) == {
+        "DIRECT_MODE",
+        "SIDE_MODE",
+        "ForgeAllocation",
+        "ForgeError",
+        "ForgeLawDefinition",
+        "ForgeMaterial",
+        "ForgeMethod",
+        "ForgePlan",
+        "ForgeRequest",
+        "ForgeService",
+        "ForgeStatus",
+        "ForgeVeinRequirement",
+        "WeaponProfile",
+        "WeaponState",
+        "WeaponTier",
     }
     assert set(role_api.__all__) == {
         "RoleBuildSlot",

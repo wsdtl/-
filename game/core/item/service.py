@@ -18,7 +18,16 @@ from .contracts import (
 )
 
 BASE_ITEM_FIELDS = frozenset({"编号", "名称", "说明", "权重", "参考价"})
-EFFECT_EXECUTORS = frozenset({"恢复资源", "增加经验", "寄存战丹"})
+EFFECT_EXECUTORS = frozenset(
+    {
+        "恢复资源",
+        "增加经验",
+        "寄存战丹",
+        "境界突破",
+        "构筑重做",
+        "突破补正",
+    }
+)
 
 
 class ItemService:
@@ -30,12 +39,21 @@ class ItemService:
         self._category_fields: dict[str, tuple[frozenset[str], frozenset[str]]] = {}
         self._effect_rules: dict[str, Mapping[str, Any]] = {}
         self._items: dict[str, ItemDefinition] = {}
+        self._attribute_names: frozenset[str] = frozenset()
+        self._realm_ids: frozenset[str] = frozenset()
 
     def initialize(self) -> ItemStatus:
         if self._categories:
             raise RuntimeError("物品微服务已经初始化")
         if not self._data.status().loaded:
             raise RuntimeError("JSON 数据微服务必须先于物品微服务启动")
+        self._attribute_names = frozenset(
+            str(name)
+            for name in _mapping(
+                self._data.dataset("战斗定义").get("属性"), "战斗属性定义"
+            )
+        )
+        self._realm_ids = frozenset(self._data.entities("境界"))
         raw_categories = self._data.dataset("物品规则").get("分类")
         for raw in _sequence(raw_categories, "物品分类"):
             row = _mapping(raw, "物品分类")
@@ -226,6 +244,85 @@ class ItemService:
                 ),
                 experience=_positive_int(raw.get("经验"), f"物品 {identity} 经验"),
             )
+        if executor == "境界突破":
+            target_realm_id = _text(
+                raw.get("目标境界"), f"物品 {identity} 目标境界"
+            )
+            if target_realm_id not in self._realm_ids:
+                raise ItemDataError(
+                    f"物品 {identity} 引用未知目标境界：{target_realm_id}"
+                )
+            permanent_attributes = _mapping(
+                raw.get("永久属性", {}), f"物品 {identity} 永久属性"
+            )
+            unknown_attributes = set(permanent_attributes) - self._attribute_names
+            if unknown_attributes:
+                raise ItemDataError(
+                    f"物品 {identity} 使用未知永久属性："
+                    f"{'、'.join(sorted(unknown_attributes))}"
+                )
+            return ItemUseEffect(
+                effect_type=effect_type,
+                executor=executor,
+                target_realm_id=target_realm_id,
+                permanent_attributes=tuple(
+                    sorted(
+                        (
+                            str(name),
+                            _positive_number(
+                                amount, f"物品 {identity} 永久属性 {name}"
+                            ),
+                        )
+                        for name, amount in permanent_attributes.items()
+                    )
+                ),
+            )
+        if executor == "构筑重做":
+            sections = _strings(
+                raw.get("目标构筑"), f"物品 {identity} 目标构筑"
+            )
+            if set(sections) != {"功法", "附魔", "宝石"}:
+                raise ItemDataError(
+                    f"物品 {identity} 目标构筑必须完整覆盖功法、附魔、宝石"
+                )
+            preserve_count = raw.get("保持装配数量")
+            if not isinstance(preserve_count, bool):
+                raise ItemDataError(
+                    f"物品 {identity} 保持装配数量必须是布尔值"
+                )
+            return ItemUseEffect(
+                effect_type=effect_type,
+                executor=executor,
+                build_sections=sections,
+                preserve_build_count=preserve_count,
+            )
+        if executor == "突破补正":
+            attribute_scope = _text(
+                raw.get("属性范围"), f"物品 {identity} 属性范围"
+            )
+            if attribute_scope != "战斗属性":
+                raise ItemDataError(
+                    f"物品 {identity} 属性范围必须是战斗属性"
+                )
+            choice_count = _positive_int(
+                raw.get("补正数量"), f"物品 {identity} 补正数量"
+            )
+            pure_only = raw.get("只限纯突破节点")
+            repeat_allowed = raw.get("允许重复补正")
+            if not isinstance(pure_only, bool) or not isinstance(
+                repeat_allowed, bool
+            ):
+                raise ItemDataError(
+                    f"物品 {identity} 突破补正限制必须是布尔值"
+                )
+            return ItemUseEffect(
+                effect_type=effect_type,
+                executor=executor,
+                attribute_scope=attribute_scope,
+                attribute_choice_count=choice_count,
+                pure_breakthrough_only=pure_only,
+                repeated_correction_allowed=repeat_allowed,
+            )
         state = _mapping(raw.get("战前状态"), f"物品 {identity} 战前状态")
         _expect_fields(
             state,
@@ -305,6 +402,13 @@ def _nonnegative_int(value: Any, label: str) -> int:
 def _positive_int(value: Any, label: str) -> int:
     result = _nonnegative_int(value, label)
     if result < 1:
+        raise ItemDataError(f"{label} 必须大于 0")
+    return result
+
+
+def _positive_number(value: Any, label: str) -> float:
+    result = _number(value, label)
+    if result <= 0:
         raise ItemDataError(f"{label} 必须大于 0")
     return result
 

@@ -8,7 +8,8 @@ from __future__ import annotations
 import copy
 import random
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any
 
 from game.core.item import ItemMedicineDefinition
@@ -30,9 +31,11 @@ class CombatCatalog:
     damage_rules: Mapping[str, Any]
     action_rules: Mapping[str, Any]
     status_reactions: tuple[Mapping[str, Any], ...]
+    environments: Mapping[str, Mapping[str, Any]]
+    environment_rules: Mapping[str, Any]
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any] | None) -> "CombatCatalog":
+    def from_mapping(cls, value: Mapping[str, Any] | None) -> CombatCatalog:
         source = value or {}
         raw_events = source.get("事件") or {}
         if not isinstance(raw_events, Mapping):
@@ -51,6 +54,8 @@ class CombatCatalog:
             damage_rules=dict(source.get("伤害规则") or {}),
             action_rules=dict(source.get("行动规则") or {}),
             status_reactions=tuple(copy.deepcopy(source.get("状态反应") or ())),
+            environments=dict(source.get("战场环境") or {}),
+            environment_rules=dict(source.get("环境规则") or {}),
         )
 
     def require_mechanism(self, key: str) -> Mapping[str, Any]:
@@ -68,7 +73,7 @@ class CombatCatalog:
     def mechanism_name(self, key: str) -> str:
         return self.mechanism_names.get(str(key), str(key))
 
-    def parse_node(self, value: Mapping[str, Any]) -> "RuleNode":
+    def parse_node(self, value: Mapping[str, Any]) -> RuleNode:
         ability = str(value.get("能力") or "")
         try:
             definition = self.abilities[ability]
@@ -81,7 +86,7 @@ class CombatCatalog:
             values=value,
         )
 
-    def require_node(self, key: str) -> "RuleNode":
+    def require_node(self, key: str) -> RuleNode:
         return self.parse_node(self.require_mechanism(key))
 
 
@@ -101,7 +106,7 @@ class StatusState:
     source: str = ""
     source_name: str = ""
     source_mechanism: str = ""
-    modifiers: dict[str, float] = field(default_factory=dict)
+    modifiers: dict[str, float] = dataclass_field(default_factory=dict)
     stacks: int = 1
     max_stacks: int = 1
     tags: tuple[str, ...] = ()
@@ -109,11 +114,11 @@ class StatusState:
     action_limits: tuple[str, ...] = ()
     effect_immunities: tuple[str, ...] = ()
     listeners: tuple[Mapping[str, Any], ...] = ()
-    values: dict[str, Any] = field(default_factory=dict)
+    values: dict[str, Any] = dataclass_field(default_factory=dict)
     expire_with_source: bool = False
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "StatusState":
+    def from_dict(cls, value: Mapping[str, Any]) -> StatusState:
         allowed = {
             "名称", "类别", "剩余行动", "来源", "来源名称", "来源机制", "属性", "层数",
             "层数上限", "标签", "持续单位", "行动限制", "效果免疫", "监听", "记录",
@@ -181,9 +186,9 @@ class Skill:
     use_limit: int = 0
     cooldown_group: str = ""
     source_skill: str = ""
-    temporary_changes: dict[str, Any] = field(default_factory=dict)
+    temporary_changes: dict[str, Any] = dataclass_field(default_factory=dict)
 
-    def clone(self, *, key: str, name: str | None = None) -> "Skill":
+    def clone(self, *, key: str, name: str | None = None) -> Skill:
         value = copy.deepcopy(self)
         value.key = key
         value.name = name or self.name
@@ -200,14 +205,14 @@ class Fighter:
     health: float
     spirit: float
     shield: float = 0.0
-    statuses: list[StatusState] = field(default_factory=list)
-    skills: list[Skill] = field(default_factory=list)
-    passives: list[dict[str, Any]] = field(default_factory=list)
-    cooldowns: dict[str, int] = field(default_factory=dict)
-    inventory: dict[str, int] = field(default_factory=dict)
+    statuses: list[StatusState] = dataclass_field(default_factory=list)
+    skills: list[Skill] = dataclass_field(default_factory=list)
+    passives: list[dict[str, Any]] = dataclass_field(default_factory=list)
+    cooldowns: dict[str, int] = dataclass_field(default_factory=dict)
+    inventory: dict[str, int] = dataclass_field(default_factory=dict)
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
-    consumed_items: dict[str, int] = field(default_factory=dict)
+    consumed_items: dict[str, int] = dataclass_field(default_factory=dict)
     skill_cursor: int = 0
     current_skill: str = ""
     level: int = 1
@@ -216,12 +221,12 @@ class Fighter:
     owner_id: str = ""
     controller_id: str = ""
     form: str = "本相"
-    forms: dict[str, Mapping[str, Any]] = field(default_factory=dict)
-    form_modifiers: dict[str, float] = field(default_factory=dict)
+    forms: dict[str, Mapping[str, Any]] = dataclass_field(default_factory=dict)
+    form_modifiers: dict[str, float] = dataclass_field(default_factory=dict)
     base_form_skills: list[Skill] | None = None
-    tags: set[str] = field(default_factory=set)
-    tactic: list[Mapping[str, Any]] = field(default_factory=list)
-    battle_profile: dict[str, Any] = field(default_factory=dict)
+    tags: set[str] = dataclass_field(default_factory=set)
+    tactic: list[Mapping[str, Any]] = dataclass_field(default_factory=list)
+    battle_profile: dict[str, Any] = dataclass_field(default_factory=dict)
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -269,9 +274,9 @@ class CombatObject:
     owner_id: str
     remaining_actions: int = 0
     health: float = 0.0
-    listeners: list[Mapping[str, Any]] = field(default_factory=list)
-    values: dict[str, Any] = field(default_factory=dict)
-    tags: set[str] = field(default_factory=set)
+    listeners: list[Mapping[str, Any]] = dataclass_field(default_factory=list)
+    values: dict[str, Any] = dataclass_field(default_factory=dict)
+    tags: set[str] = dataclass_field(default_factory=set)
     active: bool = True
 
 
@@ -280,8 +285,8 @@ class EventFrame:
     kind: str
     source: Fighter
     target: Fighter
-    facts: dict[str, Any] = field(default_factory=dict)
-    tags: set[str] = field(default_factory=set)
+    facts: dict[str, Any] = dataclass_field(default_factory=dict)
+    tags: set[str] = dataclass_field(default_factory=set)
     cancelled: bool = False
     transformed_kind: str = ""
     original_kind: str = ""
@@ -317,18 +322,57 @@ class RuntimeCombatantSnapshot:
     spirit: float | None = None
     shield: float = 0.0
     statuses: tuple[Mapping[str, Any], ...] = ()
-    cooldowns: Mapping[str, int] = field(default_factory=dict)
-    inventory: Mapping[str, int] = field(default_factory=dict)
+    cooldowns: Mapping[str, int] = dataclass_field(default_factory=dict)
+    inventory: Mapping[str, int] = dataclass_field(default_factory=dict)
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
     skill_cursor: int = 0
     owner_id: str = ""
     controller_id: str = ""
     form: str = "本相"
-    forms: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    forms: Mapping[str, Mapping[str, Any]] = dataclass_field(default_factory=dict)
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
-    battle_profile: Mapping[str, Any] = field(default_factory=dict)
+    battle_profile: Mapping[str, Any] = dataclass_field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PreparedFieldStage:
+    name: str
+    threshold: float
+    entry_abilities: tuple[Mapping[str, Any], ...]
+    passive_abilities: tuple[Mapping[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class PreparedCombatField:
+    environment_id: str
+    name: str
+    scene: str
+    origin: str
+    coordinate: tuple[int, int] | None
+    altitude: int | None
+    terrain: str
+    stages: tuple[PreparedFieldStage, ...]
+
+
+@dataclass
+class RuntimeCombatField:
+    definition: PreparedCombatField
+    source: Fighter
+    health_basis: float
+    accumulated_damage: float = 0.0
+    stage_index: int = 0
+
+    @property
+    def stage(self) -> PreparedFieldStage:
+        return self.definition.stages[self.stage_index]
+
+    @property
+    def damage_ratio(self) -> float:
+        if self.health_basis <= 0:
+            return 0.0
+        return self.accumulated_damage / self.health_basis
 
 
 @dataclass
@@ -337,40 +381,41 @@ class BattleContext:
     left: Fighter
     right: Fighter
     medicine_definitions: dict[str, ItemMedicineDefinition]
-    left_team: list[Fighter] = field(default_factory=list)
-    right_team: list[Fighter] = field(default_factory=list)
-    events: list[BattleEvent] = field(default_factory=list)
+    field: RuntimeCombatField | None = None
+    left_team: list[Fighter] = dataclass_field(default_factory=list)
+    right_team: list[Fighter] = dataclass_field(default_factory=list)
+    events: list[BattleEvent] = dataclass_field(default_factory=list)
     action_number: int = 0
-    engine: "BattleEngine | None" = None
-    trigger_counts: dict[tuple[str, str], int] = field(default_factory=dict)
-    battle_trigger_counts: dict[tuple[str, str], int] = field(default_factory=dict)
+    engine: BattleEngine | None = None
+    trigger_counts: dict[tuple[str, str], int] = dataclass_field(default_factory=dict)
+    battle_trigger_counts: dict[tuple[str, str], int] = dataclass_field(default_factory=dict)
     event_depth: int = 0
     mechanism_depth: int = 0
     triggered_skill_depth: int = 0
-    action_progress: dict[str, float] = field(default_factory=dict)
-    mechanism_counters: dict[tuple[str, str], float] = field(default_factory=dict)
+    action_progress: dict[str, float] = dataclass_field(default_factory=dict)
+    mechanism_counters: dict[tuple[str, str], float] = dataclass_field(default_factory=dict)
     current_mechanism: str = ""
-    trigger_stack: set[tuple[str, str]] = field(default_factory=set)
-    event_stack: list[EventFrame] = field(default_factory=list)
-    records: dict[tuple[str, str], list[Any]] = field(default_factory=dict)
-    relations: list[dict[str, Any]] = field(default_factory=list)
-    combat_objects: dict[str, CombatObject] = field(default_factory=dict)
-    battle_rules: list[dict[str, Any]] = field(default_factory=list)
-    saved_results: dict[str, Any] = field(default_factory=dict)
-    last_result: dict[str, Any] = field(default_factory=dict)
-    effect_history: list[dict[str, Any]] = field(default_factory=list)
+    trigger_stack: set[tuple[str, str]] = dataclass_field(default_factory=set)
+    event_stack: list[EventFrame] = dataclass_field(default_factory=list)
+    records: dict[tuple[str, str], list[Any]] = dataclass_field(default_factory=dict)
+    relations: list[dict[str, Any]] = dataclass_field(default_factory=list)
+    combat_objects: dict[str, CombatObject] = dataclass_field(default_factory=dict)
+    battle_rules: list[dict[str, Any]] = dataclass_field(default_factory=list)
+    saved_results: dict[str, Any] = dataclass_field(default_factory=dict)
+    last_result: dict[str, Any] = dataclass_field(default_factory=dict)
+    effect_history: list[dict[str, Any]] = dataclass_field(default_factory=list)
     action_intent: ActionIntent | None = None
-    judgement_overrides: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    judgement_overrides: dict[str, list[dict[str, Any]]] = dataclass_field(default_factory=dict)
     summon_serial: int = 0
     # Runtime indexes are derived state. They are rebuilt when a transaction
     # restores team membership or a summon enters the battle.
-    fighters_by_id: dict[str, Fighter] = field(default_factory=dict, init=False)
-    fighter_order: dict[str, int] = field(default_factory=dict, init=False)
-    _fighters_cache: tuple[Fighter, ...] = field(default_factory=tuple, init=False, repr=False)
-    listener_index: dict[str, tuple[ListenerEntry, ...]] = field(
+    fighters_by_id: dict[str, Fighter] = dataclass_field(default_factory=dict, init=False)
+    fighter_order: dict[str, int] = dataclass_field(default_factory=dict, init=False)
+    _fighters_cache: tuple[Fighter, ...] = dataclass_field(default_factory=tuple, init=False, repr=False)
+    listener_index: dict[str, tuple[ListenerEntry, ...]] = dataclass_field(
         default_factory=dict, init=False, repr=False
     )
-    listener_index_dirty: bool = field(default=True, init=False, repr=False)
+    listener_index_dirty: bool = dataclass_field(default=True, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.left_team:

@@ -75,11 +75,17 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
     }
     difficulty_rules = {
         int(rule["炼制难度"]): rule
-        for rule in alchemy_rules["战丹"]["炼制难度规则"]
+        for rule in alchemy_rules["难度"]
     }
     assert alchemy_rules["丹则"]["战丹"]["同丹重复"] == "禁止"
     assert int(alchemy_rules["丹则"]["战丹"]["丹位上限"]) == 3
-    prescriptions = data.entities("丹方")
+    all_prescriptions = data.entities("丹方")
+    prescriptions = {
+        identity: prescription
+        for identity, prescription in all_prescriptions.items()
+        if data.entity("物品", str(prescription["成丹"]))["使用效果"]["类型"]
+        == "寄存战丹"
+    }
     battle_attributes = set(data.dataset("战斗定义")["属性"])
     mechanism_ids = set(data.entities("机制"))
     output_ids: set[str] = set()
@@ -88,7 +94,7 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
 
     assert len(prescriptions) == 160
     assert set(furnace_methods) == {
-        str(prescription["炉法"]) for prescription in prescriptions.values()
+        str(prescription["炉法"]) for prescription in all_prescriptions.values()
     }
     for prescription in prescriptions.values():
         assert prescription["药引池"] == "药引-兽宝"
@@ -127,7 +133,7 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
                 data.entity("机制", identity)["节点"]["能力"] == "监听事件"
                 for identity in referenced_mechanisms
             )
-        if int(output_id) >= 100087:
+        if int(output_id) >= 120081:
             compound_pill_ids.add(output_id)
             assert 2 <= len(referenced_mechanisms) <= 3
         assert status["持续单位"] == "整场战斗"
@@ -158,6 +164,124 @@ def test_battle_prescriptions_reference_furnace_methods_and_real_pills() -> None
     assert len(battle_pill_weights) == len(set(battle_pill_weights))
     assert max(ingredient_counts) > min(ingredient_counts)
     assert used_veins == VEINS
+
+
+def test_every_recovery_pill_has_a_strength_free_prescription() -> None:
+    data = _data()
+    rules = data.dataset("炼药规则")
+    difficulty_rules = {
+        int(rule["炼制难度"]): rule for rule in rules["难度"]
+    }
+    furnace_methods = {
+        str(method["名称"]): method for method in rules["炉法"]
+    }
+    recovery_prescriptions = {
+        identity: prescription
+        for identity, prescription in data.entities("丹方").items()
+        if data.entity("物品", str(prescription["成丹"]))["使用效果"]["类型"]
+        in {"恢复血气", "恢复精神"}
+    }
+
+    assert set(recovery_prescriptions) == {
+        "110001",
+        "110002",
+        "110003",
+        "110004",
+        "110005",
+        "110006",
+    }
+    assert {
+        str(prescription["成丹"])
+        for prescription in recovery_prescriptions.values()
+    } == {"100001", "100002", "100003", "100004", "100005", "100006"}
+    assert {int(value["炼制难度"]) for value in recovery_prescriptions.values()} == {
+        1,
+        2,
+        3,
+    }
+
+    for prescription in recovery_prescriptions.values():
+        assert "强度" not in prescription
+        difficulty = int(prescription["炼制难度"])
+        furnace = furnace_methods[str(prescription["炉法"])]
+        ingredient_count = sum(int(row["味数"]) for row in furnace["辅材"])
+        rule = difficulty_rules[difficulty]
+        assert int(rule["辅材总味数"]["最少"]) <= ingredient_count
+        assert ingredient_count <= int(rule["辅材总味数"]["最多"])
+
+
+def test_breakthrough_realms_pills_and_prescriptions_are_closed() -> None:
+    data = _data()
+    realms = data.entities("境界")
+    realm_rows = tuple(realms[identity] for identity in sorted(realms))
+    pills = {
+        identity: item
+        for identity, item in data.entities("物品").items()
+        if item.get("使用效果", {}).get("类型") == "境界突破"
+    }
+    recipes = {
+        identity: recipe
+        for identity, recipe in data.entities("丹方").items()
+        if str(recipe["成丹"]) in pills
+    }
+
+    assert len(realms) == 20
+    assert [int(row["等级下限"]) for row in realm_rows] == list(range(1, 101, 5))
+    assert [int(row["等级上限"]) for row in realm_rows] == list(range(5, 101, 5))
+    assert all(identity.startswith("51") for identity in realms)
+    assert len(pills) == 189
+    assert len(recipes) == 189
+    assert all(identity.startswith("14") for identity in pills)
+    assert all(identity.startswith("15") for identity in recipes)
+    assert {str(recipe["成丹"]) for recipe in recipes.values()} == set(pills)
+
+    effects = [item["使用效果"] for item in pills.values()]
+    target_counts = {
+        target: sum(effect["目标境界"] == target for effect in effects)
+        for target in sorted(realms)[1:]
+    }
+    assert tuple(target_counts.values()) == (
+        7,
+        7,
+        7,
+        7,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        13,
+        13,
+        15,
+    )
+    permanent_attributes = [effect.get("永久属性") for effect in effects]
+    assert sum(value is None for value in permanent_attributes) == 19
+    assert sum(value is not None and len(value) == 1 for value in permanent_attributes) == 95
+    assert sum(value is not None and len(value) == 2 for value in permanent_attributes) == 75
+    battle_attributes = set(data.dataset("战斗定义")["属性"])
+    assert all(
+        set(value) <= battle_attributes
+        for value in permanent_attributes
+        if value is not None
+    )
+
+    difficulty_rules = {
+        int(row["炼制难度"]): row
+        for row in data.dataset("炼药规则")["难度"]
+    }
+    assert set(difficulty_rules) == set(range(1, 11))
+    assert difficulty_rules[9]["旁脉替代上限"] == 0
+    assert difficulty_rules[10]["旁脉替代上限"] == 0
+    assert {int(recipe["炼制难度"]) for recipe in recipes.values()} == set(
+        range(1, 11)
+    )
 
 
 def test_beast_treasure_names_are_short_unique_display_names() -> None:

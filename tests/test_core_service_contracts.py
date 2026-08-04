@@ -64,7 +64,7 @@ def test_service_receives_named_dataset_instead_of_knowing_file_paths() -> None:
     report = data.dataset("战斗展示")
 
     assert set(definitions) == {"属性", "资源", "事件", "原子能力"}
-    assert set(rules) == {"伤害", "行动", "状态反应"}
+    assert set(rules) == {"伤害", "行动", "状态反应", "环境"}
     assert set(report) == {"战报"}
 
 

@@ -348,6 +348,17 @@ class MechanismRuntime:
                         item_id=item_id,
                         ability_order=index,
                     )
+        if context.field is not None:
+            field = context.field
+            for index, node in enumerate(field.stage.passive_abilities):
+                add_listener(
+                    field.source,
+                    f"环境:{field.definition.environment_id}:{field.stage_index}:{index}",
+                    node,
+                    settlement_order=0,
+                    item_id=f"环境:{field.definition.environment_id}",
+                    ability_order=index,
+                )
         for obj in context.combat_objects.values():
             if not obj.active:
                 continue

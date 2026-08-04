@@ -9,9 +9,11 @@ from launch import C, OnEvent, config, logger
 
 from .config import game_config
 from .core.alchemy import AlchemyService
+from .core.battlefield import BattlefieldService
 from .core.build import BuildService
 from .core.combat import CombatService
 from .core.data import JsonDataService
+from .core.forge import ForgeService
 from .core.item import ItemService
 from .core.pool import PoolService
 from .core.role import RoleService
@@ -28,8 +30,10 @@ class CoreServices:
     pool: PoolService
     build: BuildService
     world: WorldService
+    battlefield: BattlefieldService
     travel: TravelService
     item: ItemService
+    forge: ForgeService
     role: RoleService
     alchemy: AlchemyService
 
@@ -68,6 +72,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("mechanisms", combat_status.mechanism_count),
             C.kv("abilities", combat_status.ability_count),
             C.kv("events", combat_status.event_count),
+            C.kv("environments", combat_status.environment_count),
         )
     )
     pool = PoolService(data)
@@ -97,6 +102,15 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("roads", world_status.road_count),
         )
     )
+    battlefield = BattlefieldService(data, world)
+    battlefield_status = battlefield.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("战场环境微服务已启动"),
+            C.kv("environments", battlefield_status.environment_count),
+            C.kv("terrains", battlefield_status.surface_terrain_count),
+        )
+    )
     travel = TravelService(data, world)
     travel_status = travel.initialize()
     logger.opt(colors=True).success(
@@ -115,7 +129,16 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("items", item_status.item_count),
         )
     )
-    role = RoleService(data, item)
+    forge = ForgeService(data, item)
+    forge_status = forge.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("炼器微服务已启动"),
+            C.kv("laws", forge_status.law_count),
+            C.kv("methods", forge_status.method_count),
+        )
+    )
+    role = RoleService(data, item, forge)
     role_status = role.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -139,8 +162,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         pool=pool,
         build=build,
         world=world,
+        battlefield=battlefield,
         travel=travel,
         item=item,
+        forge=forge,
         role=role,
         alchemy=alchemy,
     )

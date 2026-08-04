@@ -11,6 +11,7 @@ from typing import Any
 from .catalog import BattleReportCatalog
 from .contracts import (
     BattleEvent,
+    CombatFieldResult,
     CombatResult,
     StatusResult,
 )
@@ -129,7 +130,7 @@ def build_battle_report(
         participants_by_id[value.id].name for value in right_results
     )
 
-    return {
+    report = {
         "schema": catalog.report_schema,
         "generated_at": generated_at or datetime.now().astimezone().isoformat(timespec="seconds"),
         "scene": scene,
@@ -156,6 +157,48 @@ def build_battle_report(
         "filters": filters,
         "participants": participant_reports,
         "events": event_reports,
+    }
+    if outcome.field is not None:
+        report["field"] = _field_report(outcome.field, outcome.events)
+    return report
+
+
+def _field_report(
+    field: CombatFieldResult,
+    events: Sequence[BattleEvent],
+) -> dict[str, Any]:
+    coordinate = (
+        {"x": field.coordinate[0], "y": field.coordinate[1]}
+        if field.coordinate is not None
+        else None
+    )
+    changes = [
+        {
+            "turn": event.turn,
+            "from": str(event.values.get("原阶段") or ""),
+            "to": str(event.values.get("新阶段") or ""),
+            "accumulated_damage": _round(
+                float(event.values.get("累计承伤") or 0)
+            ),
+            "damage_ratio": _round(float(event.values.get("承伤比例") or 0)),
+        }
+        for event in events
+        if event.kind == "地势变化后"
+    ]
+    return {
+        "environment_id": field.environment_id,
+        "name": field.name,
+        "origin": field.origin,
+        "scene": field.scene,
+        "coordinate": coordinate,
+        "altitude": field.altitude,
+        "terrain": field.terrain,
+        "stage_index": field.stage_index,
+        "stage_name": field.stage_name,
+        "accumulated_damage": _round(field.accumulated_damage),
+        "health_basis": _round(field.health_basis),
+        "damage_ratio": _round(field.damage_ratio),
+        "stage_changes": changes,
     }
 
 
