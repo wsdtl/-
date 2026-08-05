@@ -168,17 +168,19 @@ def _number(value: float) -> int | float:
 def _foundation_bonus(node: int, attribute: str) -> int | float:
     units = node + 1
     if attribute == "血气上限":
-        return 12 * units
-    if attribute == "精神上限":
         return 6 * units
+    if attribute == "精神上限":
+        return 3 * units
     if attribute == "攻击":
-        return _number(0.5 * units)
-    return units
+        return _number(0.4 * units)
+    if attribute == "防御":
+        return round(0.6 * units)
+    return round(0.5 * units)
 
 
 def _compound_bonus(node: int, attributes: tuple[str, str]) -> dict[str, int]:
-    minor = 1 + node // 4
-    major = 3 + node // 2
+    minor = 1 + node // 6
+    major = 2 + node // 4
     first, second = attributes
     if attributes in {
         ("暴击率", "暴击伤害"),

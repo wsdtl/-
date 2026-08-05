@@ -927,7 +927,7 @@ class MechanismRuntime:
                     kind="添加状态前",
                     source=source,
                     target=receiver,
-                    values={"状态": copied.name, "状态定义": copied.as_dict()},
+                    values={"状态": copied.name, "状态定义": copied.to_dict()},
                     tags=(*copied.tags, "复制"),
                 )
                 if frame.cancelled:
@@ -1031,12 +1031,23 @@ class MechanismRuntime:
         return True
 
     def _mechanism_transfer_damage(self, context, source, target, effect, multiplier, **kwargs):
-        frame = self._current_event(context, "造成伤害前")
+        frame = self._current_event(context)
+        if frame.kind not in {"造成伤害前", "受到致命伤害"}:
+            raise ValueError("转移伤害只能修改伤害前或致命伤害事件")
         destinations = self._select_targets(context, source, target, effect.get("目标"))
         if not destinations:
             return False
         amount = min(frame.amount, max(0.0, self._resolve_value(context, effect.get("数值"), source, target, kwargs.get("event_amount", 0), kwargs.get("event_values") or {}) * multiplier))
-        frame.facts["当前数值"] = max(0.0, frame.amount - amount)
+        remaining_damage = max(0.0, frame.amount - amount)
+        if frame.kind == "受到致命伤害":
+            frame.cancelled = True
+            retained_health = max(1.0, frame.target.health - remaining_damage)
+            frame.facts["保留血气"] = max(
+                retained_health,
+                float(frame.facts.get("保留血气", 0)),
+            )
+        else:
+            frame.facts["当前数值"] = remaining_damage
         self._apply_damage(context, frame.source, destinations[0], amount, label=str(effect.get("名称") or "转移伤害"), damage_form="转移", defense_rule="真实", can_critical=False, can_block=False, tags=("转移",))
         return True
 
@@ -1651,7 +1662,7 @@ class MechanismRuntime:
             candidates = context.allies_of(source, alive=None)
         elif scope == "敌方":
             candidates = context.enemies_of(source, alive=None)
-        elif scope == "全体":
+        elif scope in {"全体", "任意"}:
             candidates = list(context.fighters)
         elif scope == "关联对象":
             name = str(selector.get("关联") or "")

@@ -420,7 +420,9 @@ class BattleEngine(MechanismRuntime):
         if not due:
             return
         stage_index = context.field.stage_index if context.field is not None else 0
-        prepared: list[tuple[RuntimeFormation, float, Fighter | RuntimeFormation]] = []
+        prepared: list[
+            tuple[RuntimeFormation, float, tuple[Fighter | RuntimeFormation, ...]]
+        ] = []
         for formation in sorted(due, key=lambda value: (value.definition.side, value.definition.position, value.definition.identity)):
             stage = formation.definition.stages[min(stage_index, len(formation.definition.stages) - 1)]
             interval = max(1, math.ceil(12 * stage.cycle_multiplier / max(1.0, formation.definition.transmission)))
@@ -428,16 +430,27 @@ class BattleEngine(MechanismRuntime):
             formation.rotations += 1
             impact = formation.definition.impact * stage.impact_multiplier
             enemy_formations = [value for value in active if value.side != formation.side and value.active]
-            target: Fighter | RuntimeFormation
             if enemy_formations:
-                target = min(enemy_formations, key=lambda value: (value.definition.position, value.definition.identity))
+                targets: tuple[Fighter | RuntimeFormation, ...] = (
+                    min(
+                        enemy_formations,
+                        key=lambda value: (
+                            value.definition.position,
+                            value.definition.identity,
+                        ),
+                    ),
+                )
             else:
                 enemies = context.right_team if formation.side == 0 else context.left_team
                 alive = [value for value in enemies if value.alive and value.counts_for_victory]
                 if not alive:
                     continue
-                target = alive[0]
-            prepared.append((formation, impact, target))
+                minimum = int(
+                    self.catalog.formation_rules["节点结算"]["最少目标数"]
+                )
+                target_count = min(len(alive), max(minimum, formation.definition.nodes))
+                targets = tuple(alive[:target_count])
+            prepared.append((formation, impact, targets))
             context.event(
                 "阵法轮转后",
                 context.left if formation.side == 0 else context.right,
@@ -454,25 +467,38 @@ class BattleEngine(MechanismRuntime):
         formation_damage: dict[int, float] = {}
         fighter_damage: dict[str, float] = {}
         impact_events: list[tuple[Fighter, Fighter, float, Mapping[str, Any]]] = []
-        for formation, impact, target in prepared:
-            if isinstance(target, RuntimeFormation):
-                formation_damage[id(target)] = formation_damage.get(id(target), 0.0) + impact
-            else:
-                fighter_damage[target.id] = fighter_damage.get(target.id, 0.0) + impact
-            source = context.left if formation.side == 0 else context.right
-            target_fighter = context.left if target.side == 0 else context.right if isinstance(target, RuntimeFormation) else target
-            impact_events.append((
-                source,
-                target_fighter,
-                impact,
-                {
-                    "阵法编号": formation.definition.identity,
-                    "方位": formation.definition.position,
-                    "冲击目标": target.definition.identity if isinstance(target, RuntimeFormation) else target.id,
-                    "冲击数值": impact,
-                    "是否命中阵法": isinstance(target, RuntimeFormation),
-                },
-            ))
+        for formation, impact, targets in prepared:
+            split_impact = impact / len(targets)
+            for target in targets:
+                if isinstance(target, RuntimeFormation):
+                    formation_damage[id(target)] = (
+                        formation_damage.get(id(target), 0.0) + split_impact
+                    )
+                else:
+                    fighter_damage[target.id] = (
+                        fighter_damage.get(target.id, 0.0) + split_impact
+                    )
+                source = context.left if formation.side == 0 else context.right
+                target_fighter = (
+                    context.left
+                    if isinstance(target, RuntimeFormation) and target.side == 0
+                    else context.right
+                    if isinstance(target, RuntimeFormation)
+                    else target
+                )
+                impact_events.append((
+                    source,
+                    target_fighter,
+                    split_impact,
+                    {
+                        "阵法编号": formation.definition.identity,
+                        "方位": formation.definition.position,
+                        "冲击目标": target.definition.identity if isinstance(target, RuntimeFormation) else target.id,
+                        "覆盖目标数": len(targets),
+                        "冲击数值": split_impact,
+                        "是否命中阵法": isinstance(target, RuntimeFormation),
+                    },
+                ))
         collapsed: list[RuntimeFormation] = []
         for formation in active:
             damage = formation_damage.get(id(formation), 0.0)

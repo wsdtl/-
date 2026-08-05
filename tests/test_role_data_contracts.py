@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from game.core.data import JsonDataService
-from game.core.forge import ForgeService
+from game.core.forge import ForgeService, WeaponState
 from game.core.item import ItemService
 from game.core.role import RoleService
 
@@ -111,6 +111,35 @@ def test_growth_services_execute_the_declared_experience_curves() -> None:
     assert forge.experience_needed(1) == 240
     assert forge.experience_needed(99) == 8_446_659
     assert sum(forge.experience_needed(level) for level in range(1, 100)) == 117_132_695
+
+
+def test_role_profiles_apply_levelled_weapons_and_permanent_attributes() -> None:
+    roles = _role_service()
+
+    player = roles.player(
+        level=100,
+        permanent_attributes={"血气上限": 1200, "攻击": 80},
+        weapon=WeaponState(level=100),
+    )
+    assert player.level == 100
+    assert player.attributes["血气上限"] == 2488
+    assert player.resources["血气"] == 2488
+    assert player.attributes["攻击"] == 94.9
+    assert player.weapon_attack == 109
+
+    companion_id = next(iter(_data_service().entities("道侣")))
+    companion = roles.companion(companion_id, level=100, seed=1)
+    assert companion.weapon_attack == 109
+
+    cultivator_id = next(
+        identity
+        for identity, value in _data_service().entities("敌人").items()
+        if value.get("角色规则") == "敌方修士"
+        and value["等级"][0] <= 100 <= value["等级"][1]
+    )
+    cultivator = roles.enemy(cultivator_id, level=100, seed=1)
+    base_attack = _data_service().entity("敌人", cultivator_id)["本命武器"]["攻击"]
+    assert cultivator.weapon_attack == base_attack + 99
 
 
 def test_enemy_rewards_follow_level_and_role_scale() -> None:

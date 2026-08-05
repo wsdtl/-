@@ -35,6 +35,7 @@ class CombatCatalog:
     environments: Mapping[str, Mapping[str, Any]]
     formations: Mapping[str, Mapping[str, Any]]
     environment_rules: Mapping[str, Any]
+    formation_rules: Mapping[str, Any]
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> CombatCatalog:
@@ -60,6 +61,7 @@ class CombatCatalog:
             environments=dict(source.get("战场环境") or {}),
             formations=dict(source.get("阵法") or {}),
             environment_rules=dict(source.get("环境规则") or {}),
+            formation_rules=dict(source.get("阵法规则") or {}),
         )
 
     def require_mechanism(self, key: str) -> Mapping[str, Any]:

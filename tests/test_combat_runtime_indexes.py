@@ -14,7 +14,7 @@ from game.core.combat import (
     CombatRequest,
     CombatService,
 )
-from game.core.combat.models import BattleContext, Fighter
+from game.core.combat.models import BattleContext, EventFrame, Fighter, StatusState
 from game.core.data import JsonDataService
 
 
@@ -93,6 +93,137 @@ def test_formations_are_battlefield_objects_with_saint_material_scaling() -> Non
     assert result.formations[0].rotations > 0
 
 
+def test_formation_nodes_split_total_impact_across_multiple_combatants() -> None:
+    root = Path(__file__).resolve().parents[1]
+    data = JsonDataService(root / "data")
+    data.initialize()
+    combat = CombatService(data)
+    combat.initialize()
+    request = CombatRequest(
+        left_team=(_combatant("left", attack=1, health_max=10_000),),
+        right_team=(
+            _combatant("right-1", attack=1, health_max=10_000),
+            _combatant("right-2", attack=1, health_max=10_000),
+        ),
+        seed=3,
+        action_limit=20,
+        left_formation=CombatFormationSpec("530001"),
+    )
+
+    result = combat._execute_sync(request)
+
+    impacts = [
+        event
+        for event in result.events
+        if event.kind == "阵法冲击后" and event.values.get("是否命中阵法") is False
+    ]
+    assert impacts
+    first_rotation = impacts[:2]
+    assert {event.target_id for event in first_rotation} == {"right-1", "right-2"}
+    assert sum(event.amount for event in first_rotation) == 900
+    assert {event.values["覆盖目标数"] for event in first_rotation} == {2}
+
+
+def test_any_target_scope_and_status_copy_execute_in_runtime() -> None:
+    root = Path(__file__).resolve().parents[1]
+    data = JsonDataService(root / "data")
+    data.initialize()
+    combat = CombatService(data)
+    combat.initialize()
+    engine = combat._require_engine()
+    source = _fighter("source")
+    ally = _fighter("ally")
+    target = _fighter("target")
+    source.side = ally.side = 0
+    target.side = 1
+    context = BattleContext(
+        rng=random.Random(7),
+        left=source,
+        right=target,
+        medicine_definitions={},
+    )
+    context.add_fighter(ally)
+
+    selected = engine._select_targets(
+        context,
+        source,
+        target,
+        {"能力": "选择目标", "范围": "任意", "排除自身": True, "选择全部": True},
+    )
+    assert {value.id for value in selected} == {"ally", "target"}
+
+    source.statuses.append(StatusState(name="无垢", category="正面"))
+    copied = engine._mechanism_copy_status(
+        context,
+        source,
+        target,
+        {
+            "状态": {
+                "能力": "选择状态",
+                "目标": {"能力": "选择目标", "范围": "自身"},
+                "名称": "无垢",
+            },
+            "接收目标": {
+                "能力": "选择目标",
+                "范围": "己方",
+                "排除自身": True,
+            },
+        },
+        1,
+    )
+    assert copied is True
+    assert [status.name for status in ally.statuses] == ["无垢"]
+
+
+def test_fatal_damage_can_be_transferred_to_an_ally() -> None:
+    root = Path(__file__).resolve().parents[1]
+    data = JsonDataService(root / "data")
+    data.initialize()
+    combat = CombatService(data)
+    combat.initialize()
+    engine = combat._require_engine()
+    target = _fighter("target")
+    ally = _fighter("ally")
+    source = _fighter("source")
+    target.side = ally.side = 0
+    source.side = 1
+    target.health = 50
+    context = BattleContext(
+        rng=random.Random(9),
+        left=target,
+        right=source,
+        medicine_definitions={},
+    )
+    context.add_fighter(ally)
+    fatal = EventFrame(
+        kind="受到致命伤害",
+        source=source,
+        target=target,
+        facts={"当前数值": 100},
+    )
+    context.event_stack.append(fatal)
+
+    changed = engine._mechanism_transfer_damage(
+        context,
+        target,
+        source,
+        {
+            "目标": {
+                "能力": "选择目标",
+                "范围": "己方",
+                "排除自身": True,
+            },
+            "数值": 30,
+        },
+        1,
+    )
+
+    assert changed is True
+    assert fatal.cancelled is True
+    assert fatal.facts["保留血气"] == 1
+    assert ally.health == 70
+
+
 def _fighter(identity: str) -> Fighter:
     return Fighter(
         id=identity,
@@ -107,15 +238,17 @@ def _combatant(
     identity: str,
     *,
     build: tuple[CombatBuildRef, ...] = (),
+    attack: float = 20,
+    health_max: float = 100,
 ) -> CombatantSpec:
     return CombatantSpec(
         id=identity,
         name=identity,
         build=build,
         attributes={
-            "血气上限": 100,
+            "血气上限": health_max,
             "精神上限": 20,
-            "攻击": 20,
+            "攻击": attack,
             "防御": 5,
             "速度": 100,
             "命中率": 100,

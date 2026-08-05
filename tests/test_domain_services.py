@@ -136,7 +136,7 @@ def test_item_service_separates_definitions_from_inventory_instances() -> None:
     assert breakthrough_pill.use_effect is not None
     assert breakthrough_pill.use_effect.executor == "境界突破"
     assert breakthrough_pill.use_effect.target_realm_id == "510002"
-    assert breakthrough_pill.use_effect.permanent_attributes == (("血气上限", 24.0),)
+    assert breakthrough_pill.use_effect.permanent_attributes == (("血气上限", 12.0),)
     assert not hasattr(recovery, "quantity")
 
     rebuild = items.item("160001")

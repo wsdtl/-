@@ -37,6 +37,7 @@ class RoleService:
         self._items = items
         self._forge = forge
         self._attribute_defaults: dict[str, float] = {}
+        self._attribute_limits: dict[str, tuple[float, float]] = {}
         self._growth_rules: dict[str, Mapping[str, Any]] = {}
         self._role_rules: dict[str, Mapping[str, Any]] = {}
         self._player_rule: Mapping[str, Any] | None = None
@@ -113,14 +114,25 @@ class RoleService:
             )
         return math.floor(base * multiplier)
 
-    def player(self, *, weapon: WeaponState | None = None) -> RoleProfile:
+    def player(
+        self,
+        *,
+        level: int | None = None,
+        permanent_attributes: Mapping[str, float] | None = None,
+        weapon: WeaponState | None = None,
+    ) -> RoleProfile:
         rule = self._require_player_rule()
-        level = _positive_int(rule.get("等级"), "人物等级")
+        actual_level = (
+            _positive_int(rule.get("等级"), "人物等级")
+            if level is None
+            else _positive_int(level, "人物等级")
+        )
         attributes = self._attributes(
             self._growth_rules[_text(rule.get("成长规则"), "人物成长规则")],
-            level,
+            actual_level,
             _mapping(rule.get("属性覆盖"), "人物属性覆盖"),
         )
+        self._apply_permanent_attributes(attributes, permanent_attributes)
         resources = self._resources(rule.get("资源"), attributes)
         inventory = tuple(
             RoleItemStack(
@@ -139,7 +151,7 @@ class RoleService:
             identity="人物",
             name="人物",
             kind=_text(rule.get("角色类型"), "人物角色类型"),
-            level=level,
+            level=actual_level,
             qualification=None,
             attributes=MappingProxyType(attributes),
             resources=MappingProxyType(resources),
@@ -186,7 +198,9 @@ class RoleService:
         )
         self._apply_fluctuation(attributes, entity.get("实力波动"), rng, f"道侣 {key}")
         weapon_profile = self._forge.weapon_profile(
-            weapon if weapon is not None else self._forge.default_weapon()
+            weapon
+            if weapon is not None
+            else self._forge.default_weapon(level=actual_level)
         )
         pools = {
             section: (_text(entity.get(f"{section}池"), f"道侣 {key} {section}池"),)
@@ -249,9 +263,12 @@ class RoleService:
         }
         weapon = entity.get("本命武器")
         weapon_attack = (
-            _nonnegative_number(
-                _mapping(weapon, f"敌人 {key} 本命武器").get("攻击"),
-                f"敌人 {key} 本命武器攻击",
+            self._forge.weapon_attack_at_level(
+                actual_level,
+                base_attack=_nonnegative_number(
+                    _mapping(weapon, f"敌人 {key} 本命武器").get("攻击"),
+                    f"敌人 {key} 本命武器攻击",
+                ),
             )
             if weapon is not None
             else 0.0
@@ -276,6 +293,11 @@ class RoleService:
             self._attribute_defaults[str(name)] = _number(
                 definition.get("默认值"), f"属性 {name} 默认值"
             )
+            minimum = _number(definition.get("最低值"), f"属性 {name} 最低值")
+            maximum = _number(definition.get("最高值"), f"属性 {name} 最高值")
+            if minimum > maximum:
+                raise RoleError(f"属性 {name} 最低值不能高于最高值")
+            self._attribute_limits[str(name)] = (minimum, maximum)
 
     def _validate_growth_rule(self, name: str, value: Any) -> Mapping[str, Any]:
         rule = _mapping(value, f"成长规则 {name}")
@@ -551,6 +573,22 @@ class RoleService:
         lower, upper = _range_pair(value.get("倍率"), f"{label} 波动倍率", minimum=1)
         for name in names:
             attributes[name] = round(attributes[name] * rng.randint(lower, upper) / 100, 10)
+
+    def _apply_permanent_attributes(
+        self,
+        attributes: dict[str, float],
+        additions: Mapping[str, float] | None,
+    ) -> None:
+        if additions is None:
+            return
+        self._validate_attributes(additions, "人物永久属性")
+        for name, raw_amount in additions.items():
+            amount = _nonnegative_number(raw_amount, f"人物永久属性 {name}")
+            minimum, maximum = self._attribute_limits[name]
+            attributes[name] = round(
+                min(maximum, max(minimum, attributes[name] + amount)),
+                10,
+            )
 
     @staticmethod
     def _qualification_multiplier(

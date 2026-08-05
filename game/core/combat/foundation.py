@@ -35,6 +35,7 @@ def load_battle_foundation(
                 identity: materialize(value)
                 for identity, value in data.entities("阵法").items()
             },
+            "阵法规则": materialize(data.dataset("阵法规则")["炼制"]),
         }
     )
     if mechanisms is None:
@@ -75,12 +76,44 @@ def load_battle_mechanisms(
             raise ValueError(
                 f"机制名称重复：{name}，位于 {name_sources[name]} 与 {path}"
             )
+        _validate_event_bound_abilities(node, f"{path}.节点")
         nodes[identity] = dict(node)
         names[identity] = name
         name_sources[name] = path
     if not nodes:
         raise ValueError("JSON 数据微服务没有登记战斗机制")
     return nodes, names
+
+
+def _validate_event_bound_abilities(
+    value: Any,
+    path: str,
+    *,
+    damage_event: bool = False,
+) -> None:
+    if isinstance(value, Mapping):
+        ability = str(value.get("能力") or "")
+        current_damage_event = damage_event
+        if ability == "监听事件":
+            current_damage_event = str(value.get("事件") or "") in {
+                "造成伤害前",
+                "受到致命伤害",
+            }
+        if ability == "转移伤害" and not current_damage_event:
+            raise ValueError(f"{path}.转移伤害只能在伤害事件监听中执行")
+        for key, child in value.items():
+            _validate_event_bound_abilities(
+                child,
+                f"{path}.{key}",
+                damage_event=current_damage_event,
+            )
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_event_bound_abilities(
+                child,
+                f"{path}[{index}]",
+                damage_event=damage_event,
+            )
 
 
 def validate_battle_foundation(value: Mapping[str, Any]) -> None:
@@ -95,6 +128,7 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     status_reactions = value.get("状态反应")
     environments = _mapping(value.get("战场环境") or {}, "战场环境")
     formations = _mapping(value.get("阵法") or {}, "阵法")
+    formation_rules = _mapping(value.get("阵法规则") or {}, "阵法规则")
     environment_rules = _mapping(value.get("环境规则"), "环境规则")
     _validate_action_rules(action_rules, attributes, resources)
     _validate_timing(timing)
@@ -125,6 +159,7 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     validator.validate_mechanisms("战斗机制")
     _validate_battle_environments(environments, validator)
     _validate_formations(formations)
+    _validate_formation_runtime_rules(formation_rules)
     _validate_status_reactions(status_reactions, validator)
     declared = {str(definition.get("执行器") or "") for definition in abilities.values()}
     missing = set(EXECUTOR_CATEGORIES) - declared
@@ -240,6 +275,18 @@ def _validate_formations(formations: Mapping[str, Any]) -> None:
                     raise ValueError(f"{path}.品级[{index}]地势阶段顺序或字段错误")
                 if any(float(stage[key]) <= 0 for key in ("环境阶段阈值倍率", "行动周期倍率", "阵势倍率")):
                     raise ValueError(f"{path}.品级[{index}]存在非正阵势倍率")
+
+
+def _validate_formation_runtime_rules(value: Mapping[str, Any]) -> None:
+    node_rules = _mapping(value.get("节点结算"), "阵法规则.节点结算")
+    expected = {
+        "无敌方阵法时": "按节点数量覆盖正式参战者",
+        "冲击分配": "覆盖目标均分总冲击",
+        "目标排序": "参战位序",
+        "最少目标数": 1,
+    }
+    if node_rules != expected:
+        raise ValueError("阵法节点结算必须使用按节点覆盖、均分总冲击的统一规则")
 
 
 def _validate_neutral_environment_node(value: Any, path: str) -> None:

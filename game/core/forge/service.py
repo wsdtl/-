@@ -126,9 +126,31 @@ class ForgeService:
                 return tier
         raise ForgeError(f"本命武器等级超出范围：{actual}")
 
-    def default_weapon(self) -> WeaponState:
+    def default_weapon(self, *, level: int | None = None) -> WeaponState:
         self._require_initialized()
-        return WeaponState(level=self._initial_level, laws=(None,) * self._slot_count)
+        actual_level = self._initial_level if level is None else _positive_int(
+            level, "本命武器等级"
+        )
+        self.tier_for_level(actual_level)
+        return WeaponState(level=actual_level, laws=(None,) * self._slot_count)
+
+    def weapon_attack_at_level(
+        self,
+        level: int,
+        *,
+        base_attack: float | None = None,
+    ) -> float:
+        """按本命武器 JSON 成长计算指定等级的攻击。"""
+
+        self._require_initialized()
+        actual_level = _positive_int(level, "本命武器等级")
+        self.tier_for_level(actual_level)
+        actual_base = (
+            self._base_attack
+            if base_attack is None
+            else _nonnegative_number(base_attack, "本命武器基础攻击")
+        )
+        return actual_base + (actual_level - self._initial_level) * self._attack_per_level
 
     def weapon_profile(self, state: WeaponState) -> WeaponProfile:
         weapon = self._validate_weapon(state)
@@ -137,8 +159,7 @@ class ForgeService:
             level=weapon.level,
             experience=weapon.experience,
             tier=tier.name,
-            attack=self._base_attack
-            + (weapon.level - self._initial_level) * self._attack_per_level,
+            attack=self.weapon_attack_at_level(weapon.level),
             open_slots=tier.open_slots,
             laws=weapon.laws,
         )

@@ -132,6 +132,9 @@ def test_weapon_progresses_independently_and_opens_slots_by_tier() -> None:
     assert advanced.experience == 0
     assert forge.weapon_profile(WeaponState(level=11)).open_slots == 1
     assert forge.weapon_profile(WeaponState(level=76)).open_slots == 4
+    assert forge.weapon_attack_at_level(1) == 10
+    assert forge.weapon_attack_at_level(100) == 109
+    assert forge.weapon_attack_at_level(100, base_attack=7) == 106
     assert forge.experience_needed(99) == 8_446_659
 
 
