@@ -13,8 +13,8 @@ from game.core.data import JsonDataService, materialize
 
 SPECS = (
     ("功法", 600),
-    ("附魔", 600),
-    ("宝石", 703),
+    ("真意", 600),
+    ("气机", 703),
 )
 
 

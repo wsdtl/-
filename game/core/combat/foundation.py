@@ -161,7 +161,9 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     _validate_formations(formations)
     _validate_formation_runtime_rules(formation_rules)
     _validate_status_reactions(status_reactions, validator)
-    declared = {str(definition.get("执行器") or "") for definition in abilities.values()}
+    declared = {
+        str(definition.get("执行器") or "") for definition in abilities.values()
+    }
     missing = set(EXECUTOR_CATEGORIES) - declared
     if missing:
         raise ValueError(f"执行器没有原子能力声明：{'、'.join(sorted(missing))}")
@@ -212,7 +214,11 @@ def _validate_battle_environments(
             if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
                 raise TypeError(f"{stage_path}.起始承伤比例必须是数字")
             threshold = float(threshold)
-            if threshold < 0 or (index == 0 and threshold != 0) or threshold <= previous:
+            if (
+                threshold < 0
+                or (index == 0 and threshold != 0)
+                or threshold <= previous
+            ):
                 raise ValueError(f"{stage_path}.起始承伤比例必须从 0 严格递增")
             previous = threshold
             entries = stage.get("入阶能力")
@@ -255,38 +261,153 @@ def _validate_formations(formations: Mapping[str, Any]) -> None:
             raise ValueError(f"{path}.名称为空或重复")
         names.add(name)
         monitor = value.get("宏观监测")
-        if not isinstance(monitor, list) or not monitor or any(not str(item).strip() for item in monitor):
+        if (
+            not isinstance(monitor, list)
+            or not monitor
+            or any(not str(item).strip() for item in monitor)
+        ):
             raise ValueError(f"{path}.宏观监测必须是非空字符串数组")
         grades = value.get("品级")
-        if not isinstance(grades, list) or [str(item.get("品级") or "") for item in grades] != ["黄", "玄", "地", "天", "圣"]:
+        if not isinstance(grades, list) or [
+            str(item.get("品级") or "") for item in grades
+        ] != ["黄", "玄", "地", "天", "圣"]:
             raise ValueError(f"{path}.品级必须按黄、玄、地、天、圣完整排列")
         for index, grade_raw in enumerate(grades):
             grade = _mapping(grade_raw, f"{path}.品级[{index}]")
             saint = str(grade.get("品级") or "") == "圣"
-            required = {"品级", "地势阶段"} | ({"最低消耗", "阵基", "阵眼", "节点", "圣品权重"} if saint else {"消耗", "阵基", "阵眼", "节点"})
+            required = {"品级", "地势阶段"} | (
+                {"最低消耗", "阵基", "阵眼", "节点", "圣品权重"}
+                if saint
+                else {"消耗", "阵基", "阵眼", "节点"}
+            )
             if set(grade) != required:
                 raise ValueError(f"{path}.品级[{index}]字段不完整")
             stages = grade["地势阶段"]
             if not isinstance(stages, list) or len(stages) != 4:
                 raise ValueError(f"{path}.品级[{index}].地势阶段必须有四段")
             for stage_index, stage_raw in enumerate(stages, start=1):
-                stage = _mapping(stage_raw, f"{path}.品级[{index}].地势阶段[{stage_index - 1}]")
-                if set(stage) != {"阶段", "环境阶段阈值倍率", "行动周期倍率", "阵势倍率"} or stage.get("阶段") != stage_index:
+                stage = _mapping(
+                    stage_raw, f"{path}.品级[{index}].地势阶段[{stage_index - 1}]"
+                )
+                if (
+                    set(stage)
+                    != {"阶段", "环境阶段阈值倍率", "行动周期倍率", "阵势倍率"}
+                    or stage.get("阶段") != stage_index
+                ):
                     raise ValueError(f"{path}.品级[{index}]地势阶段顺序或字段错误")
-                if any(float(stage[key]) <= 0 for key in ("环境阶段阈值倍率", "行动周期倍率", "阵势倍率")):
+                if any(
+                    float(stage[key]) <= 0
+                    for key in ("环境阶段阈值倍率", "行动周期倍率", "阵势倍率")
+                ):
                     raise ValueError(f"{path}.品级[{index}]存在非正阵势倍率")
 
 
 def _validate_formation_runtime_rules(value: Mapping[str, Any]) -> None:
-    node_rules = _mapping(value.get("节点结算"), "阵法规则.节点结算")
-    expected = {
-        "无敌方阵法时": "按节点数量覆盖正式参战者",
-        "冲击分配": "覆盖目标均分总冲击",
-        "目标排序": "参战位序",
-        "最少目标数": 1,
+    expected_fields = {
+        "材料方向",
+        "固定品级",
+        "无上限品级",
+        "节点结算",
+        "圣品增长",
     }
-    if node_rules != expected:
-        raise ValueError("阵法节点结算必须使用按节点覆盖、均分总冲击的统一规则")
+    if set(value) != expected_fields:
+        raise ValueError("阵法规则字段必须完整且不能包含额外字段")
+    material_directions = _mapping(value["材料方向"], "阵法规则.材料方向")
+    if material_directions != {"阵基": "灵矿", "阵眼": "兽宝", "节点": "灵植"}:
+        raise ValueError("阵法三相必须分别使用灵矿、兽宝和灵植")
+    if _strings(value["固定品级"], "阵法规则.固定品级") != (
+        "黄",
+        "玄",
+        "地",
+        "天",
+    ):
+        raise ValueError("阵法固定品级必须按黄、玄、地、天排列")
+    if value["无上限品级"] != "圣":
+        raise ValueError("阵法无上限品级必须是圣")
+
+    node_rules = _mapping(value.get("节点结算"), "阵法规则.节点结算")
+    if set(node_rules) != {
+        "敌方阵法优先",
+        "无敌方阵法",
+        "冲击分配",
+        "目标不重复",
+        "最少目标数",
+    }:
+        raise ValueError("阵法节点结算字段必须完整")
+    target_rules = _mapping(node_rules["无敌方阵法"], "阵法规则.节点结算.无敌方阵法")
+    if target_rules != {
+        "目标类型": "正式参战者",
+        "目标数量字段": "节点",
+        "目标排序": ["参战位序"],
+    }:
+        raise ValueError("阵法节点必须按参战位序覆盖正式参战者")
+    if (
+        node_rules["敌方阵法优先"] is not True
+        or node_rules["冲击分配"] != "均分"
+        or node_rules["目标不重复"] is not True
+    ):
+        raise ValueError("阵法节点结算方式不受战斗核心支持")
+    if (
+        isinstance(node_rules["最少目标数"], bool)
+        or not isinstance(node_rules["最少目标数"], int)
+        or node_rules["最少目标数"] < 1
+    ):
+        raise ValueError("阵法节点结算.最少目标数必须是正整数")
+
+    growth = _mapping(value["圣品增长"], "阵法规则.圣品增长")
+    if set(growth) != {
+        "算法",
+        "权重和",
+        "最低投入倍率",
+        "方向",
+        "投入存储",
+        "派生值存储",
+    }:
+        raise ValueError("圣品阵法增长字段必须完整")
+    if growth["算法"] != "加权几何乘势":
+        raise ValueError("战斗核心只支持圣品阵法加权几何乘势")
+    _positive_number(growth["权重和"], "阵法规则.圣品增长.权重和")
+    _positive_number(growth["最低投入倍率"], "阵法规则.圣品增长.最低投入倍率")
+    if growth["投入存储"] != {"类型": "十进制字符串"}:
+        raise ValueError("圣品阵法投入必须使用十进制字符串存储")
+    if not isinstance(growth["派生值存储"], bool):
+        raise TypeError("阵法规则.圣品增长.派生值存储必须是布尔值")
+    directions = growth["方向"]
+    if not isinstance(directions, list) or len(directions) != 3:
+        raise ValueError("圣品阵法增长必须完整声明阵基、阵眼和节点")
+    expected_materials = {"阵基": "灵矿", "阵眼": "兽宝", "节点": "灵植"}
+    expected_results = {"承载", "冲击", "数量", "传导"}
+    actual_results: set[str] = set()
+    seen_parts: set[str] = set()
+    for index, raw in enumerate(directions):
+        path = f"阵法规则.圣品增长.方向[{index}]"
+        direction = _mapping(raw, path)
+        if set(direction) != {"部位", "材料", "结果"}:
+            raise ValueError(f"{path}字段必须是部位、材料和结果")
+        part = str(direction["部位"])
+        if part in seen_parts or expected_materials.get(part) != direction["材料"]:
+            raise ValueError(f"{path}的部位或材料不匹配")
+        seen_parts.add(part)
+        results = direction["结果"]
+        if not isinstance(results, list) or not results:
+            raise ValueError(f"{path}.结果必须是非空数组")
+        for result_index, raw_result in enumerate(results):
+            result_path = f"{path}.结果[{result_index}]"
+            result = _mapping(raw_result, result_path)
+            unknown = set(result) - {"基础值", "运行值", "取整", "最小值"}
+            if unknown or not {"基础值", "运行值"} <= set(result):
+                raise ValueError(f"{result_path}字段不完整")
+            runtime_value = str(result["运行值"])
+            if runtime_value in actual_results:
+                raise ValueError(f"{result_path}.运行值重复")
+            actual_results.add(runtime_value)
+            rounding = result.get("取整")
+            if rounding is not None and rounding != "向下取整":
+                raise ValueError(f"{result_path}.取整方式不受支持")
+            if "最小值" in result:
+                _positive_number(result["最小值"], f"{result_path}.最小值")
+    if seen_parts != set(expected_materials) or actual_results != expected_results:
+        raise ValueError("圣品阵法增长没有完整产出承载、冲击、数量和传导")
 
 
 def _validate_neutral_environment_node(value: Any, path: str) -> None:
@@ -295,7 +416,10 @@ def _validate_neutral_environment_node(value: Any, path: str) -> None:
 
     def visit(current: Any, current_path: str) -> None:
         if isinstance(current, Mapping):
-            if current.get("能力") == "选择目标" and current.get("范围") in forbidden_scopes:
+            if (
+                current.get("能力") == "选择目标"
+                and current.get("范围") in forbidden_scopes
+            ):
                 raise ValueError(f"{current_path}使用了有阵营归属的环境目标")
             if current.get("能力") == "读取数值":
                 source = str(current.get("来源") or "")
@@ -348,9 +472,19 @@ def _validate_action_rules(
     resources: Mapping[str, Any],
 ) -> None:
     expected = {
-        "标准速度", "最低有效速度", "最高行动效率", "技能冷却", "每次主行动最多追加攻击",
-        "事件链深度上限", "能力链深度上限", "触发技能嵌套上限", "每方召唤物上限",
-        "战斗构造物上限", "行动开始恢复", "主动技能轮转", "被动技能结算",
+        "标准速度",
+        "最低有效速度",
+        "最高行动效率",
+        "技能冷却",
+        "每次主行动最多追加攻击",
+        "事件链深度上限",
+        "能力链深度上限",
+        "触发技能嵌套上限",
+        "每方召唤物上限",
+        "战斗构造物上限",
+        "行动开始恢复",
+        "主动技能轮转",
+        "被动技能结算",
     }
     unknown = set(value) - expected
     missing = expected - set(value)
@@ -364,35 +498,57 @@ def _validate_action_rules(
     for name in ("标准速度", "最低有效速度", "最高行动效率"):
         _positive_number(value[name], f"行动规则.{name}")
     for name in (
-        "每次主行动最多追加攻击", "事件链深度上限", "能力链深度上限",
-        "触发技能嵌套上限", "每方召唤物上限", "战斗构造物上限",
+        "每次主行动最多追加攻击",
+        "事件链深度上限",
+        "能力链深度上限",
+        "触发技能嵌套上限",
+        "每方召唤物上限",
+        "战斗构造物上限",
     ):
-        if isinstance(value[name], bool) or not isinstance(value[name], int) or value[name] <= 0:
+        if (
+            isinstance(value[name], bool)
+            or not isinstance(value[name], int)
+            or value[name] <= 0
+        ):
             raise ValueError(f"行动规则.{name}必须是正整数")
     cooldown = _mapping(value["技能冷却"], "行动规则.技能冷却")
-    expected_cooldown = {"单位": "自身行动", "推进时点": "行动开始、技能选择前", "每次推进": 1, "缩减取整": "向上取整"}
-    if cooldown != expected_cooldown:
+    if set(cooldown) != {"计量单位", "推进", "余数处理"}:
+        raise ValueError("行动规则.技能冷却字段必须完整")
+    advance = _mapping(cooldown["推进"], "行动规则.技能冷却.推进")
+    if (
+        cooldown["计量单位"] != "自身行动"
+        or advance != {"事件": "行动开始", "阶段": "技能选择前", "每次减少": 1}
+        or cooldown["余数处理"] != "向上取整"
+    ):
         raise ValueError("行动规则.技能冷却必须明确使用自身行动推进")
     rotation = _mapping(value["主动技能轮转"], "行动规则.主动技能轮转")
-    if set(rotation) != {"排序", "选择方式", "成功后", "无可用技能"}:
+    if set(rotation) != {"排序", "游标"}:
         raise ValueError("行动规则.主动技能轮转必须明确同序技能的稳定轮转方式")
     rotation_order = _strings(rotation["排序"], "行动规则.主动技能轮转.排序")
-    if set(rotation_order) != {"释放顺序", "装配位序", "物品编号", "能力序号"} or len(rotation_order) != 4:
-        raise ValueError("行动规则.主动技能轮转.排序必须完整且不可重复")
     if (
-        rotation.get("选择方式") != "从技能游标循环查找"
-        or rotation.get("成功后") != "移动到已释放技能后一位"
-        or rotation.get("无可用技能") != "普通攻击"
+        set(rotation_order) != {"释放顺序", "装配位序", "物品编号", "能力序号"}
+        or len(rotation_order) != 4
     ):
+        raise ValueError("行动规则.主动技能轮转.排序必须完整且不可重复")
+    cursor = _mapping(rotation["游标"], "行动规则.主动技能轮转.游标")
+    if cursor != {"查找方式": "循环正序", "成功后偏移": 1, "无可用行动": "普通攻击"}:
         raise ValueError("行动规则.主动技能轮转包含核心无法执行的方式")
     passive_order = _mapping(value["被动技能结算"], "行动规则.被动技能结算")
     if set(passive_order) != {"排序"}:
         raise ValueError("行动规则.被动技能结算必须明确同序监听的稳定裁决顺序")
     passive_fields = _strings(passive_order["排序"], "行动规则.被动技能结算.排序")
-    if set(passive_fields) != {
-        "监听优先级降序", "结算顺序升序", "参战位序",
-        "装配位序", "物品编号", "能力序号",
-    } or len(passive_fields) != 6:
+    if (
+        set(passive_fields)
+        != {
+            "监听优先级降序",
+            "结算顺序升序",
+            "参战位序",
+            "装配位序",
+            "物品编号",
+            "能力序号",
+        }
+        or len(passive_fields) != 6
+    ):
         raise ValueError("行动规则.被动技能结算.排序必须完整且不可重复")
     recovery = _mapping(value["行动开始恢复"], "行动规则.行动开始恢复")
     for resource, attribute in recovery.items():
@@ -419,32 +575,67 @@ def _validate_timing(value: Mapping[str, Any]) -> None:
         order = entry.get("序位")
         if not source or source in seen_sources:
             raise ValueError("时序来源层级的来源不能为空且不可重复")
-        if isinstance(order, bool) or not isinstance(order, int) or order < 0 or order in seen_orders:
+        if (
+            isinstance(order, bool)
+            or not isinstance(order, int)
+            or order < 0
+            or order in seen_orders
+        ):
             raise ValueError("时序来源层级的序位必须是非负且不可重复的整数")
         seen_sources.add(source)
         seen_orders.add(order)
     active = _mapping(value["主动技能"], "时序.主动技能")
-    if set(active) != {"触发时点", "排序"}:
+    if set(active) != {"执行时点", "排序"}:
         raise ValueError("时序.主动技能字段必须完整")
-    if not str(active["触发时点"]).strip():
-        raise ValueError("时序.主动技能.触发时点不能为空")
+    if active["执行时点"] != {"事件": "行动决策后", "阶段": "事件完成后"}:
+        raise ValueError("主动技能必须在行动决策完成后执行")
     active_order = _strings(active["排序"], "时序.主动技能.排序")
-    if set(active_order) != {"释放顺序", "来源层级升序", "装配位序", "物品编号", "能力序号"} or len(active_order) != 5:
+    if (
+        set(active_order)
+        != {"释放顺序", "来源层级升序", "装配位序", "物品编号", "能力序号"}
+        or len(active_order) != 5
+    ):
         raise ValueError("时序.主动技能.排序必须完整且不可重复")
     listener = _mapping(value["事件监听"], "时序.事件监听")
-    listener_expected = {"触发时点", "排序", "监听快照", "新增监听生效", "同一监听递归", "事件转化"}
+    listener_expected = {"执行时点", "排序", "监听快照", "新增监听", "递归", "事件转化"}
     if set(listener) != listener_expected:
         raise ValueError("时序.事件监听字段必须完整")
+    if listener["执行时点"] != {"阶段": "事件创建后", "截止": "事件事实提交前"}:
+        raise ValueError("事件监听必须在事实提交前执行")
+    if listener["监听快照"] != {"固定": True, "时点": "事件创建"}:
+        raise ValueError("事件监听必须使用事件创建时的固定快照")
+    if listener["新增监听"] != {"生效延迟事件数": 1}:
+        raise ValueError("新增监听必须从下一个事件开始生效")
+    if listener["递归"] != {"同一监听": "跳过"}:
+        raise ValueError("同一监听在当前触发链中必须跳过递归")
+    if listener["事件转化"] != {"原事件提交后": True, "新事件链": True}:
+        raise ValueError("事件转化必须在原事件提交后开启新事件链")
     listener_order = _strings(listener["排序"], "时序.事件监听.排序")
-    if set(listener_order) != {
-        "来源层级升序", "监听优先级降序", "结算顺序升序", "参战位序", "装配位序", "物品编号", "能力序号",
-    } or len(listener_order) != 7:
+    if (
+        set(listener_order)
+        != {
+            "来源层级升序",
+            "监听优先级降序",
+            "结算顺序升序",
+            "参战位序",
+            "装配位序",
+            "物品编号",
+            "能力序号",
+        }
+        or len(listener_order) != 7
+    ):
         raise ValueError("时序.事件监听.排序必须完整且不可重复")
     formation = _mapping(value["阵法轮转"], "时序.阵法轮转")
-    if set(formation) != {"触发时点", "双方结算", "冲击判定", "排序"}:
+    if set(formation) != {"执行时点", "双方结算", "冲击判定", "排序"}:
         raise ValueError("时序.阵法轮转字段必须完整")
-    if not str(formation["触发时点"]).strip() or not str(formation["双方结算"]).strip() or not str(formation["冲击判定"]).strip():
-        raise ValueError("时序.阵法轮转的规则说明不能为空")
+    if formation["执行时点"] != {"事件": "行动结束", "阶段": "事件完成后"}:
+        raise ValueError("阵法必须在行动结束事件完成后轮转")
+    if formation["双方结算"] != {"读取快照": "同一战场", "提交方式": "同时"}:
+        raise ValueError("双方阵法必须读取同一战场快照后同时提交")
+    if formation["冲击判定"] != {
+        "跳过": ["暴击", "命中", "闪避", "格挡", "防御", "环境承伤"]
+    }:
+        raise ValueError("阵法冲击判定规则不受战斗核心支持")
     formation_order = _strings(formation["排序"], "时序.阵法轮转.排序")
     if formation_order != ("方位序位", "阵法编号"):
         raise ValueError("时序.阵法轮转.排序必须使用方位序位、阵法编号")
@@ -452,8 +643,14 @@ def _validate_timing(value: Mapping[str, Any]) -> None:
 
 def _validate_damage_rules(value: Mapping[str, Any]) -> None:
     expected = {
-        "基础命中率", "最低命中率", "最高命中率", "最高暴击倍率", "最高格挡率",
-        "最高伤害倍率", "防御常数", "最低伤害",
+        "基础命中率",
+        "最低命中率",
+        "最高命中率",
+        "最高暴击倍率",
+        "最高格挡率",
+        "最高伤害倍率",
+        "防御常数",
+        "最低伤害",
     }
     unknown = set(value) - expected
     missing = expected - set(value)
@@ -478,7 +675,9 @@ def _validate_status_reactions(value: Any, validator: RuleSchemaValidator) -> No
         reaction = _mapping(raw, f"状态反应[{index}]")
         unknown = set(reaction) - {"名称", "需要状态", "消耗层数", "生成状态", "效果"}
         if unknown:
-            raise ValueError(f"状态反应[{index}]存在未知字段：{'、'.join(sorted(unknown))}")
+            raise ValueError(
+                f"状态反应[{index}]存在未知字段：{'、'.join(sorted(unknown))}"
+            )
         name = str(reaction.get("名称") or "").strip()
         if not name or name in names:
             raise ValueError(f"状态反应[{index}].名称必须非空且不可重复")
@@ -525,6 +724,8 @@ def _mapping(value: Any, path: str) -> Mapping[str, Any]:
 
 
 def _strings(value: Any, path: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
         raise ValueError(f"{path}必须是非空字符串数组")
     return tuple(value)

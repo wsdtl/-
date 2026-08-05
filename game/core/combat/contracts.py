@@ -6,9 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from game.core.item import ItemMedicineDefinition
-
-BUILD_SECTIONS = frozenset({"功法", "附魔", "宝石", "器律"})
+BUILD_SECTIONS = frozenset({"功法", "真意", "气机", "器律"})
 
 
 @dataclass(frozen=True)
@@ -41,6 +39,15 @@ class CombatFormationSpec:
     grade: str = "黄"
     position: int = 0
     materials: Mapping[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CombatMedicineSpec:
+    """调用方提交的战斗恢复丹快照，不依赖物品业务对象。"""
+
+    identity: str
+    resource: str
+    recovery_percent: int
 
 
 @dataclass(frozen=True)
@@ -121,7 +128,7 @@ class CombatRequest:
     seed: int
     action_limit: int
     share_left_inventory: bool = False
-    medicine_definitions: tuple[ItemMedicineDefinition, ...] = ()
+    medicine_definitions: tuple[CombatMedicineSpec, ...] = ()
     report: CombatReportSpec | None = None
     field: CombatFieldSpec | None = None
     left_formation: CombatFormationSpec | None = None
@@ -317,6 +324,7 @@ __all__ = [
     "CombatFieldSpec",
     "CombatFormationResult",
     "CombatFormationSpec",
+    "CombatMedicineSpec",
     "CombatReportSpec",
     "CombatRequest",
     "CombatResult",

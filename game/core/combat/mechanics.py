@@ -267,12 +267,7 @@ class MechanismRuntime:
         return True
 
     def _compiled_listeners(self, context):
-        """Compile listeners once per structural battle state.
-
-        Event dispatch used to rebuild and sort every passive, status,
-        object, and battle-rule listener for every event. The JSON contract
-        is unchanged; only the runtime lookup is indexed by event name.
-        """
+        """Compile listeners by event for the current structural battle state."""
 
         if not context.listener_index_dirty:
             return context.listener_index

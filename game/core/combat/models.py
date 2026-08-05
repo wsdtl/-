@@ -12,12 +12,10 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any
 
-from game.core.item import ItemMedicineDefinition
-
 if TYPE_CHECKING:
     from .engine import BattleEngine
 
-from .contracts import BattleEvent
+from .contracts import BattleEvent, CombatMedicineSpec
 
 
 @dataclass(frozen=True)
@@ -425,7 +423,7 @@ class BattleContext:
     rng: random.Random
     left: Fighter
     right: Fighter
-    medicine_definitions: dict[str, ItemMedicineDefinition]
+    medicine_definitions: dict[str, CombatMedicineSpec]
     field: RuntimeCombatField | None = None
     formations: list[RuntimeFormation] = dataclass_field(default_factory=list)
     left_team: list[Fighter] = dataclass_field(default_factory=list)

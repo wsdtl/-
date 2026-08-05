@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import math
 from dataclasses import replace
 from typing import Any
 
@@ -84,7 +85,11 @@ class CombatService:
             action_limit=request.action_limit,
             share_left_inventory=request.share_left_inventory,
             field=field,
-            formations=tuple(value for value in (left_formation, right_formation) if value is not None),
+            formations=tuple(
+                value
+                for value in (left_formation, right_formation)
+                if value is not None
+            ),
         )
         if request.report is None:
             return result
@@ -133,16 +138,51 @@ class CombatService:
         if grade_name == "圣":
             minimum = {str(k): float(v) for k, v in grade["最低消耗"].items()}
             actual = {str(k): float(v) for k, v in dict(spec.materials).items()}
+            growth = self._require_engine().catalog.formation_rules["圣品增长"]
+            directions = tuple(growth["方向"])
+            materials = {str(value["材料"]) for value in directions}
+            unknown_materials = set(actual) - materials
+            if unknown_materials:
+                raise ValueError(
+                    f"圣品阵法包含未知材料：{identity} / "
+                    + "、".join(sorted(unknown_materials))
+                )
             if any(actual.get(key, 0) < value for key, value in minimum.items()):
                 raise ValueError(f"圣品阵法材料不足：{identity}")
             weights = {str(k): float(v) for k, v in grade["圣品权重"].items()}
+            if not math.isclose(
+                sum(weights.values()),
+                float(growth["权重和"]),
+                rel_tol=0,
+                abs_tol=1e-9,
+            ):
+                raise ValueError(f"圣品阵法权重和错误：{identity}")
+            minimum_multiplier = float(growth["最低投入倍率"])
             total = 1.0
-            for key, component in (("兽宝", "阵眼"), ("灵矿", "阵基"), ("灵植", "节点")):
-                total *= max(1.0, actual.get(key, 0) / minimum[key]) ** weights[component]
-            capacity = float(grade["阵基"]["基础承载"]) * total
-            impact = float(grade["阵眼"]["基础冲击"]) * total
-            nodes = max(1, int(float(grade["节点"]["起始数量"]) * total))
-            transmission = float(grade["节点"]["基础传导"]) * total
+            for direction in directions:
+                material = str(direction["材料"])
+                part = str(direction["部位"])
+                total *= (
+                    max(
+                        minimum_multiplier,
+                        actual.get(material, 0) / minimum[material],
+                    )
+                    ** weights[part]
+                )
+            derived: dict[str, float] = {}
+            for direction in directions:
+                part = str(direction["部位"])
+                for output in direction["结果"]:
+                    value = float(grade[part][str(output["基础值"])]) * total
+                    if output.get("取整") == "向下取整":
+                        value = float(math.floor(value))
+                    if "最小值" in output:
+                        value = max(float(output["最小值"]), value)
+                    derived[str(output["运行值"])] = value
+            capacity = derived["承载"]
+            impact = derived["冲击"]
+            nodes = int(derived["数量"])
+            transmission = derived["传导"]
         else:
             capacity = float(grade["阵基"]["承载"])
             impact = float(grade["阵眼"]["冲击"])
@@ -156,7 +196,18 @@ class CombatService:
             )
             for value in grade["地势阶段"]
         )
-        return PreparedFormation(identity, str(raw["名称"]), grade_name, side, int(spec.position), capacity, impact, nodes, transmission, stages)
+        return PreparedFormation(
+            identity,
+            str(raw["名称"]),
+            grade_name,
+            side,
+            int(spec.position),
+            capacity,
+            impact,
+            nodes,
+            transmission,
+            stages,
+        )
 
     def _prepared_field(
         self,
@@ -168,7 +219,9 @@ class CombatService:
         try:
             raw = self._require_engine().catalog.environments[environment_id]
         except KeyError as exc:
-            raise ValueError(f"战斗核心未登记战场环境：{environment_id or '<空>'}") from exc
+            raise ValueError(
+                f"战斗核心未登记战场环境：{environment_id or '<空>'}"
+            ) from exc
         origin = str(spec.origin or "").strip()
         if origin not in {"地表", "秘境"}:
             raise ValueError(f"未知战场来源：{origin or '<空>'}")
