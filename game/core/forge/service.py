@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -47,8 +48,10 @@ class ForgeService:
         self._maximum_level = 0
         self._base_attack = 0.0
         self._attack_per_level = 0.0
-        self._experience_base = 0
-        self._experience_square = 0
+        self._experience_power_base = 0
+        self._experience_level_base = 0
+        self._experience_power = 0.0
+        self._experience_late: Mapping[str, Any] = {}
         self._slot_count = 0
         self._direct_material_count = 0
         self._side_material_count = 0
@@ -144,7 +147,28 @@ class ForgeService:
         actual = _positive_int(level, "本命武器等级")
         if actual >= self._maximum_level:
             return 0
-        return self._experience_base + self._experience_square * actual * actual
+        base = math.floor(
+            self._experience_power_base * (actual**self._experience_power)
+            + self._experience_level_base * actual
+        )
+        start = _positive_int(self._experience_late.get("起始等级"), "经验后段起始等级")
+        if actual <= start:
+            return base
+        span = _positive_int(self._experience_late.get("跨度"), "经验后段跨度")
+        progress = max(0.0, (actual - start) / span)
+        multiplier = (
+            1
+            + _nonnegative_number(self._experience_late.get("中段系数"), "经验中段系数")
+            * progress
+            ** _positive_number(self._experience_late.get("中段幂次"), "经验中段幂次")
+            + _nonnegative_number(self._experience_late.get("高段系数"), "经验高段系数")
+            * progress
+            ** _positive_number(self._experience_late.get("高段幂次"), "经验高段幂次")
+            + _nonnegative_number(self._experience_late.get("终段系数"), "经验终段系数")
+            * progress
+            ** _positive_number(self._experience_late.get("终段幂次"), "经验终段幂次")
+        )
+        return math.floor(base * multiplier)
 
     def add_experience(self, state: WeaponState, amount: int) -> WeaponState:
         weapon = self._validate_weapon(state)
@@ -232,13 +256,21 @@ class ForgeService:
         experience = _mapping(rule.get("经验"), "本命武器经验")
         _expect_fields(
             experience,
-            required={"基础", "等级平方系数"},
+            required={"幂次基数", "等级基数", "等级幂次", "后段"},
             optional=set(),
             label="本命武器经验",
         )
-        self._experience_base = _positive_int(experience.get("基础"), "本命武器经验基础")
-        self._experience_square = _positive_int(
-            experience.get("等级平方系数"), "本命武器经验等级平方系数"
+        self._experience_power_base = _positive_int(
+            experience.get("幂次基数"), "本命武器经验幂次基数"
+        )
+        self._experience_level_base = _positive_int(
+            experience.get("等级基数"), "本命武器经验等级基数"
+        )
+        self._experience_power = _positive_number(
+            experience.get("等级幂次"), "本命武器经验等级幂次"
+        )
+        self._experience_late = _validate_experience_late(
+            experience.get("后段"), "本命武器经验后段"
         )
 
     def _load_general_rules(self, rules: Mapping[str, Any]) -> None:
@@ -685,6 +717,38 @@ def _nonnegative_number(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
         raise ForgeError(f"{label}必须是非负数值")
     return float(value)
+
+
+def _positive_number(value: Any, label: str) -> float:
+    result = _nonnegative_number(value, label)
+    if result <= 0:
+        raise ForgeError(f"{label}必须大于 0")
+    return result
+
+
+def _validate_experience_late(value: Any, label: str) -> Mapping[str, Any]:
+    rule = _mapping(value, label)
+    _expect_fields(
+        rule,
+        required={
+            "起始等级",
+            "跨度",
+            "中段系数",
+            "中段幂次",
+            "高段系数",
+            "高段幂次",
+            "终段系数",
+            "终段幂次",
+        },
+        optional=set(),
+        label=label,
+    )
+    _positive_int(rule.get("起始等级"), f"{label}起始等级")
+    _positive_int(rule.get("跨度"), f"{label}跨度")
+    for section in ("中段", "高段", "终段"):
+        _nonnegative_number(rule.get(f"{section}系数"), f"{label}{section}系数")
+        _positive_number(rule.get(f"{section}幂次"), f"{label}{section}幂次")
+    return rule
 
 
 def _grade(value: Any, grades: Mapping[str, int], label: str) -> str:

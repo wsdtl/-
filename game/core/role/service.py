@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 import secrets
 from collections.abc import Mapping, Sequence
@@ -75,6 +76,42 @@ class RoleService:
             enemy_count=len(self._enemies),
             growth_rule_count=len(self._growth_rules),
         )
+
+    def experience_needed(self, kind: str, level: int) -> int:
+        """返回修士或灵兽从当前等级升到下一等级所需的经验。"""
+        self._require_initialized()
+        growth_name = {"修士": "修士修炼", "灵兽": "灵兽修炼"}.get(
+            _text(kind, "修炼类型")
+        )
+        if growth_name is None:
+            raise RoleError("修炼类型必须是修士或灵兽")
+        rule = self._growth_rules[growth_name]
+        actual = _positive_int(level, f"{kind}等级")
+        if actual >= _positive_int(rule.get("等级上限"), f"{kind}等级上限"):
+            return 0
+        experience = _mapping(rule.get("经验"), f"{kind}经验")
+        base = math.floor(
+            _positive_int(experience.get("幂次基数"), f"{kind}经验幂次基数")
+            * actual
+            ** _positive_number(experience.get("等级幂次"), f"{kind}经验等级幂次")
+            + _positive_int(experience.get("等级基数"), f"{kind}经验等级基数")
+            * actual
+        )
+        late = _mapping(experience.get("后段"), f"{kind}经验后段")
+        start = _positive_int(late.get("起始等级"), f"{kind}经验后段起始等级")
+        if actual <= start:
+            return base
+        progress = (actual - start) / _positive_int(
+            late.get("跨度"), f"{kind}经验后段跨度"
+        )
+        multiplier = 1.0
+        for section in ("中段", "高段", "终段"):
+            multiplier += _nonnegative_number(
+                late.get(f"{section}系数"), f"{kind}经验{section}系数"
+            ) * progress ** _positive_number(
+                late.get(f"{section}幂次"), f"{kind}经验{section}幂次"
+            )
+        return math.floor(base * multiplier)
 
     def player(self, *, weapon: WeaponState | None = None) -> RoleProfile:
         rule = self._require_player_rule()
@@ -258,9 +295,15 @@ class RoleService:
         self._validate_attributes(growth.get("每级"), f"成长规则 {name} 每级成长")
         self._validate_attributes(rule.get("初始属性", {}), f"成长规则 {name} 初始属性")
         experience = _mapping(rule.get("经验"), f"成长规则 {name} 经验")
-        _strict_fields(experience, {"基础", "等级平方系数"}, f"成长规则 {name} 经验")
-        _positive_int(experience.get("基础"), f"成长规则 {name} 经验基础")
-        _positive_int(experience.get("等级平方系数"), f"成长规则 {name} 经验系数")
+        _strict_fields(
+            experience,
+            {"幂次基数", "等级基数", "等级幂次", "后段"},
+            f"成长规则 {name} 经验",
+        )
+        _positive_int(experience.get("幂次基数"), f"成长规则 {name} 经验幂次基数")
+        _positive_int(experience.get("等级基数"), f"成长规则 {name} 经验等级基数")
+        _positive_number(experience.get("等级幂次"), f"成长规则 {name} 经验等级幂次")
+        _validate_experience_late(experience.get("后段"), f"成长规则 {name} 经验后段")
         return rule
 
     def _validate_player_rule(self, value: Any) -> Mapping[str, Any]:
@@ -438,7 +481,16 @@ class RoleService:
             _strict_fields(drop, {"灵石", "物品池"}, f"敌人 {identity} 掉落")
             _range_pair(drop.get("灵石"), f"敌人 {identity} 掉落灵石", minimum=0)
             encounter = _mapping(entity.get("交锋所得"), f"敌人 {identity} 交锋所得")
-            _strict_fields(encounter, {"本命武器经验"}, f"敌人 {identity} 交锋所得")
+            _strict_fields(
+                encounter,
+                {"人物经验", "本命武器经验"},
+                f"敌人 {identity} 交锋所得",
+            )
+            _range_pair(
+                encounter.get("人物经验"),
+                f"敌人 {identity} 人物经验",
+                minimum=0,
+            )
             _range_pair(
                 encounter.get("本命武器经验"),
                 f"敌人 {identity} 本命武器经验",
@@ -649,6 +701,30 @@ def _positive_number(value: Any, label: str) -> float:
     if result <= 0:
         raise RoleError(f"{label}必须大于零")
     return result
+
+
+def _validate_experience_late(value: Any, label: str) -> Mapping[str, Any]:
+    rule = _mapping(value, label)
+    _strict_fields(
+        rule,
+        {
+            "起始等级",
+            "跨度",
+            "中段系数",
+            "中段幂次",
+            "高段系数",
+            "高段幂次",
+            "终段系数",
+            "终段幂次",
+        },
+        label,
+    )
+    _positive_int(rule.get("起始等级"), f"{label}起始等级")
+    _positive_int(rule.get("跨度"), f"{label}跨度")
+    for section in ("中段", "高段", "终段"):
+        _nonnegative_number(rule.get(f"{section}系数"), f"{label}{section}系数")
+        _positive_number(rule.get(f"{section}幂次"), f"{label}{section}幂次")
+    return rule
 
 
 def _nonnegative_int(value: Any, label: str) -> int:

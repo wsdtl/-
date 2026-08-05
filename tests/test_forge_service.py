@@ -132,6 +132,7 @@ def test_weapon_progresses_independently_and_opens_slots_by_tier() -> None:
     assert advanced.experience == 0
     assert forge.weapon_profile(WeaponState(level=11)).open_slots == 1
     assert forge.weapon_profile(WeaponState(level=76)).open_slots == 4
+    assert forge.experience_needed(99) == 8_446_659
 
 
 def test_combat_loads_equipped_law_as_a_passive_build_entity() -> None:

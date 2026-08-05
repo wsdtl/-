@@ -259,7 +259,7 @@ def build_pills_and_recipes() -> tuple[list[dict[str, object]], list[dict[str, o
                     "说明": description,
                     "权重": 310000 + target_index * 100 + variant_index,
                     "使用效果": effect,
-                    "参考价": 1000 + target_index * 900 + variant_index * 120,
+                    "参考价": 10000 + target_index * 9000 + variant_index * 1200,
                 }
             )
             recipes.append(
