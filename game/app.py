@@ -7,9 +7,14 @@ from pathlib import Path
 
 from launch import C, OnEvent, config, logger
 
+from .config import game_config
+from .core.character import CharacterService
 from .core.combat import CombatService
 from .core.data import JsonDataService
+from .core.database import DatabaseService
 from .core.pool import PoolService
+from .core.world import WorldService
+from .features.chuangjian_renwu import CreateCharacterFeature
 
 
 @dataclass(frozen=True)
@@ -19,11 +24,16 @@ class CoreServices:
     data: JsonDataService
     combat: CombatService
     pool: PoolService
+    world: WorldService
+    database: DatabaseService
+    character: CharacterService
 
 
 @dataclass(frozen=True)
 class FeatureServices:
     """具体玩法微服务；后续按 JSON 契约逐项加入。"""
+
+    chuangjian_renwu: CreateCharacterFeature
 
 
 @dataclass(frozen=True)
@@ -66,12 +76,55 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("modes", len(pool_status.modes)),
         )
     )
+    world = WorldService(data)
+    world_status = world.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("世界地点服务已启动"),
+            C.kv("locations", world_status.location_count),
+            C.kv("regions", world_status.region_count),
+            C.kv("terrain_cells", world_status.terrain_cell_count),
+        )
+    )
+    database = DatabaseService(
+        game_config.database.path,
+        busy_timeout_ms=game_config.database.busy_timeout_ms,
+    )
+    database_status = database.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("核心数据库微服务已启动"),
+            C.kv("states", database_status.state_count),
+            C.kv("transactions", database_status.transaction_count),
+        )
+    )
+    character = CharacterService(data, database)
+    character_status = character.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("角色核心微服务已启动"),
+            C.kv("role", character_status.role_name),
+            C.kv("genders", character_status.gender_count),
+            C.kv("initial_items", character_status.initial_item_count),
+        )
+    )
     core = CoreServices(
         data=data,
         combat=combat,
         pool=pool,
+        world=world,
+        database=database,
+        character=character,
     )
-    features = FeatureServices()
+    create_character = CreateCharacterFeature(data, world, character)
+    birthplace = create_character.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("创建人物玩法微服务已启动"),
+            C.kv("birthplace", birthplace),
+        )
+    )
+    features = FeatureServices(chuangjian_renwu=create_character)
     return GameServices(core=core, features=features)
 
 
@@ -101,6 +154,8 @@ def shutdown_game_services() -> None:
     """在具体玩法停止后释放本进程的游戏微服务集合。"""
 
     global _services
+    if _services is not None:
+        _services.core.database.close()
     _services = None
 
 

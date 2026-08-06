@@ -35,6 +35,7 @@ class LoadedGameData:
     catalog: JsonDataCatalog
     entities: Mapping[str, Mapping[str, Any]]
     entity_records: Mapping[str, Mapping[str, JsonEntity]]
+    number_category_members: Mapping[str, tuple[str, ...]]
     pool_definitions: Mapping[str, PoolDefinition]
 
     @property
@@ -81,6 +82,13 @@ class LoadedGameData:
         if values is None:
             raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
         return tuple(sorted(values))
+
+    def members_by_number_category(self, number_category: str) -> tuple[str, ...]:
+        category = str(number_category or "").strip()
+        values = self.number_category_members.get(category)
+        if values is None:
+            raise JsonDataError(f"未知编号类别：{category or '<空>'}")
+        return values
 
     def _resolve_pool_file(
         self,
@@ -130,10 +138,19 @@ class GameDataLoader:
         loaded = LoadedGameData(
             catalog=catalog,
             entities=MappingProxyType(
-                {section: MappingProxyType(values) for section, values in entities.items()}
+                {
+                    section: MappingProxyType(values)
+                    for section, values in entities.items()
+                }
             ),
             entity_records=MappingProxyType(
-                {section: MappingProxyType(values) for section, values in records.items()}
+                {
+                    section: MappingProxyType(values)
+                    for section, values in records.items()
+                }
+            ),
+            number_category_members=MappingProxyType(
+                _index_number_category_members(records)
             ),
             pool_definitions=MappingProxyType(pools),
         )
@@ -199,6 +216,20 @@ def _index_content(
     return entities, records, pools
 
 
+def _index_number_category_members(
+    records: Mapping[str, Mapping[str, JsonEntity]],
+) -> dict[str, tuple[str, ...]]:
+    members: dict[str, set[str]] = {}
+    for values in records.values():
+        for identity, record in values.items():
+            if record.number_category:
+                members.setdefault(record.number_category, set()).add(identity)
+    return {
+        category: tuple(sorted(identities))
+        for category, identities in sorted(members.items())
+    }
+
+
 def _document_entries(
     document: JsonDocument,
 ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
@@ -244,7 +275,9 @@ def _numbered_entries(
                 f"内容对象缺少编号：{document.relative_path} -> {section}[{index}]"
             )
         if identity in seen:
-            raise JsonDataError(f"内容文件存在重复编号：{document.relative_path} -> {identity}")
+            raise JsonDataError(
+                f"内容文件存在重复编号：{document.relative_path} -> {identity}"
+            )
         seen.add(identity)
         result.append((identity, raw))
     if not result:
@@ -388,7 +421,9 @@ def _iter_pool_references(value: Any) -> tuple[tuple[str, str], ...]:
                     ):
                         result.extend((key, item) for item in raw_value)
                     else:
-                        raise JsonDataError(f"资源池引用必须是文件名或文件名数组：{key}")
+                        raise JsonDataError(
+                            f"资源池引用必须是文件名或文件名数组：{key}"
+                        )
                 visit(raw_value)
         elif _is_array(current):
             for item in current:

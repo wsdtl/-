@@ -22,7 +22,9 @@ def render_plain_text(document: Document) -> str:
     lines: list[str] = []
     previous_block = None
     for block in document.blocks:
-        if lines and not (isinstance(previous_block, InlineBlock) and isinstance(block, InlineBlock)):
+        if lines and not (
+            isinstance(previous_block, InlineBlock) and isinstance(block, InlineBlock)
+        ):
             lines.append("")
         if isinstance(block, HeaderBlock):
             lines.append(_render_rich(block.content))

@@ -49,6 +49,7 @@ class CombatService:
         report_dataset = materialize(self._data.dataset("战斗展示"))
         report_catalog = BattleReportCatalog.from_mapping(report_dataset["战报"])
         self._engine = BattleEngine(foundation)
+        report_catalog.validate_event_kinds(tuple(self._engine.catalog.events))
         self._report_catalog = report_catalog
         return self.status()
 
@@ -281,6 +282,7 @@ class CombatService:
             attributes=copy.deepcopy(dict(value.attributes)),
             level=value.level,
             kind=value.kind,
+            sex=value.sex,
             weapon_attack=value.weapon_attack,
             techniques=tuple(techniques),
             health=value.health,
@@ -399,7 +401,13 @@ class CombatService:
                     if original is not None
                     else value.shield,
                     final_shield=value.shield,
-                    initial_statuses=original.statuses if original is not None else (),
+                    initial_statuses=(
+                        runtime.statuses
+                        if runtime is not None
+                        else original.statuses
+                        if original is not None
+                        else ()
+                    ),
                     statuses=value.statuses,
                     techniques=runtime.techniques if runtime is not None else (),
                     moves=display.moves if display else (),
@@ -418,6 +426,7 @@ class CombatService:
             seed=request.seed,
             generated_at=report_spec.generated_at,
             scene=result.field.scene if result.field is not None else report_spec.scene,
+            mechanism_names=self._require_engine().catalog.mechanism_names,
         )
         presentation = (
             build_battle_report_presentation(

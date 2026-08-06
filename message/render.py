@@ -23,12 +23,18 @@ def render_local_message(value: object, *, markdown: bool = True) -> object:
 
     message = coerce_message(value)
     if isinstance(message, DocumentMessage):
-        content = render_markdown(message.document) if markdown else render_plain_text(message.document)
+        content = (
+            render_markdown(message.document)
+            if markdown
+            else render_plain_text(message.document)
+        )
         return RenderedMessage(
             kind="markdown" if markdown else "text",
             content=content,
             actions=message.document.actions,
         )
     if isinstance(message, ImageMessage):
-        return RenderedMessage(kind="image", content=render_rich_text(message.caption), image=message.image)
+        return RenderedMessage(
+            kind="image", content=render_rich_text(message.caption), image=message.image
+        )
     return value

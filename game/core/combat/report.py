@@ -12,6 +12,7 @@ from .catalog import BattleReportCatalog
 from .contracts import (
     BattleEvent,
     CombatFieldResult,
+    CombatFormationResult,
     CombatResult,
     StatusResult,
 )
@@ -49,6 +50,7 @@ def build_battle_report(
     seed: int | None = None,
     generated_at: str | None = None,
     scene: str = "青岚山演武台",
+    mechanism_names: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """生成 `晓楠修仙.战报.v1`；前端不再解释战斗事件。"""
 
@@ -75,8 +77,18 @@ def build_battle_report(
         for index, value in enumerate(participants)
     }
     participants_by_id = {value.id: value for value in participants}
+    formations_by_id = {value.identity: value for value in outcome.formations}
+    known_mechanisms = dict(mechanism_names or {})
     event_reports = [
-        _event_report(event, index + 1, participants_by_id, participant_colors, catalog)
+        _event_report(
+            event,
+            index + 1,
+            participants_by_id,
+            participant_colors,
+            formations_by_id,
+            known_mechanisms,
+            catalog,
+        )
         for index, event in enumerate(outcome.events)
     ]
     category_counts = Counter(event["category"] for event in event_reports)
@@ -114,6 +126,7 @@ def build_battle_report(
             color=participant_colors[value.id],
             outcome_label="平" if outcome.draw else "胜" if value.id in winner_ids else "负",
             events=outcome.events,
+            mechanism_names=known_mechanisms,
             catalog=catalog,
         )
         for index, value in enumerate(participants)
@@ -160,6 +173,10 @@ def build_battle_report(
     }
     if outcome.field is not None:
         report["field"] = _field_report(outcome.field, outcome.events)
+    if outcome.formations:
+        report["formations"] = [
+            _formation_report(value, outcome.events) for value in outcome.formations
+        ]
     return report
 
 
@@ -209,21 +226,23 @@ def _participant_report(
     color: str,
     outcome_label: str,
     events: Sequence[BattleEvent],
+    mechanism_names: Mapping[str, str],
     catalog: BattleReportCatalog,
 ) -> dict[str, Any]:
     damage = sum(
         event.amount
         for event in events
-        if event.kind == "damage" and event.source_id == participant.id
+        if event.kind in catalog.settlement_kinds("角色伤害")
+        and event.source_id == participant.id
     )
     recovery = sum(
         event.amount
         for event in events
-        if catalog.normalized_category(event.kind) == "recover"
+        if event.kind in catalog.settlement_kinds("资源恢复")
         and event.source_id == participant.id
     )
     mechanisms = {
-        event.mechanism
+        mechanism_names.get(event.mechanism, event.mechanism)
         for event in events
         if event.source_id == participant.id and event.mechanism
     }
@@ -275,7 +294,12 @@ def _participant_report(
             if float(participant.attributes.get(key, 0.0)) != 0
         ],
         "techniques": [
-            _technique_report(value, catalog, participant.ability_definitions)
+            _technique_report(
+                value,
+                catalog,
+                participant.ability_definitions,
+                mechanism_names,
+            )
             for value in participant.techniques
         ],
         "moves": [str(value) for value in participant.moves if str(value).strip()],
@@ -293,19 +317,43 @@ def _event_report(
     sequence: int,
     participants: Mapping[str, RuntimeBattleReportParticipant],
     colors: Mapping[str, str],
+    formations: Mapping[str, CombatFormationResult],
+    mechanism_names: Mapping[str, str],
     catalog: BattleReportCatalog,
 ) -> dict[str, Any]:
     category = catalog.normalized_category(event.kind)
     category_definition = catalog.normalized_category_definition(category)
     is_system = event.kind in catalog.system_kinds
+    formation_id = str(event.values.get("阵法编号") or "")
+    formation = formations.get(formation_id)
     source = _actor_report(
-        "system" if is_system else event.source_id,
-        str(catalog.system["name"]) if is_system else event.source,
+        "system"
+        if is_system
+        else f"阵法:{formation_id}"
+        if formation is not None and event.kind.startswith("阵法")
+        else event.source_id,
+        str(catalog.system["name"])
+        if is_system
+        else formation.name
+        if formation is not None and event.kind.startswith("阵法")
+        else event.source,
         participants,
         colors,
         catalog,
     )
-    target = _actor_report(event.target_id, event.target, participants, colors, catalog)
+    target_formation_id = (
+        str(event.values.get("冲击目标") or "")
+        if event.values.get("是否命中阵法")
+        else ""
+    )
+    target_formation = formations.get(target_formation_id)
+    target = _actor_report(
+        f"阵法:{target_formation_id}" if target_formation is not None else event.target_id,
+        target_formation.name if target_formation is not None else event.target,
+        participants,
+        colors,
+        catalog,
+    )
     details = [
         {
             "label": str(key),
@@ -346,10 +394,38 @@ def _event_report(
         "text": event.text,
         "amount": _round(event.amount),
         "amount_text": amount_text,
-        "mechanism": event.mechanism,
+        "mechanism_id": event.mechanism,
+        "mechanism": mechanism_names.get(event.mechanism, event.mechanism),
         "tags": list(event.tags),
         "steps": steps,
         "details": details,
+    }
+
+
+def _formation_report(
+    formation: CombatFormationResult,
+    events: Sequence[BattleEvent],
+) -> dict[str, Any]:
+    impacts = [
+        event
+        for event in events
+        if event.kind == "阵法冲击后"
+        and str(event.values.get("阵法编号") or "") == formation.identity
+    ]
+    return {
+        "id": formation.identity,
+        "name": formation.name,
+        "grade": formation.grade,
+        "side": "left" if formation.side == 0 else "right",
+        "position": formation.position,
+        "capacity": _round(formation.capacity),
+        "remaining_capacity": _round(formation.remaining_capacity),
+        "impact": _round(formation.impact),
+        "nodes": formation.nodes,
+        "rotations": formation.rotations,
+        "collapsed": formation.collapsed,
+        "total_impact": _round(sum(event.amount for event in impacts)),
+        "impact_count": len(impacts),
     }
 
 
@@ -401,6 +477,7 @@ def _technique_report(
     value: Mapping[str, Any],
     catalog: BattleReportCatalog,
     ability_definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    mechanism_names: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     active: Mapping[str, Any] = {}
     mechanisms: list[str] = []
@@ -420,10 +497,17 @@ def _technique_report(
                 }
             )
         if executor in {"装配主动技能", "装配被动技能"}:
-            mechanisms.extend(_mechanism_names(node.get("效果") or (), ability_definitions))
+            mechanisms.extend(
+                _mechanism_names(
+                    node.get("效果") or (),
+                    ability_definitions,
+                    mechanism_names,
+                )
+            )
 
     return {
-        "name": str(value.get("功法") or value.get("名称") or "未命名功法"),
+        "section": str(value.get("来源类别") or ""),
+        "name": str(value.get("名称") or "未命名构筑"),
         "grade": str(value.get("品级") or ""),
         "born_order": int(value.get("出生序号") or 0),
         "move": str(active.get("名称") or ""),
@@ -435,6 +519,7 @@ def _technique_report(
 def _mechanism_names(
     values: Sequence[Any],
     ability_definitions: Mapping[str, Mapping[str, Any]] | None,
+    mechanism_names: Mapping[str, str] | None,
 ) -> list[str]:
     result: list[str] = []
     for raw_value in values:
@@ -443,7 +528,8 @@ def _mechanism_names(
         value = dict(raw_value)
         executor = _ability_executor(value, ability_definitions)
         if executor == "引用机制":
-            result.append(str(value.get("机制") or ""))
+            identity = str(value.get("机制") or "")
+            result.append(str((mechanism_names or {}).get(identity) or identity))
         else:
             result.append(str(value.get("名称") or value.get("能力") or ""))
     return [value for value in result if value]

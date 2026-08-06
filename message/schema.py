@@ -6,8 +6,8 @@ OpenAPI 字段。驱动器必须把它们渲染成自己的输出协议。
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
+from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
 
@@ -22,7 +22,7 @@ class Text:
 class Link:
     """带展示文本的普通网页链接。"""
 
-    label: "RichText"
+    label: RichText
     url: str
 
 
@@ -30,7 +30,7 @@ class Link:
 class CommandLink:
     """点击后向当前会话填入或发送命令的内联动作。"""
 
-    label: "RichText"
+    label: RichText
     command: str
     submit: bool = True
     reply: bool = False
@@ -55,7 +55,9 @@ class HeaderBlock:
     def __post_init__(self) -> None:
         if not self.content or any(not isinstance(span, Text) for span in self.content):
             raise ValueError("消息主标题只允许普通文本")
-        if any(character in span.value for span in self.content for character in "\r\n"):
+        if any(
+            character in span.value for span in self.content for character in "\r\n"
+        ):
             raise ValueError("消息主标题必须保持单行")
         color = str(self.color or "").strip().upper()
         if color and re.fullmatch(r"#[0-9A-F]{6}", color) is None:
@@ -110,7 +112,9 @@ class NoteBlock:
     lines: tuple[RichText, ...]
 
 
-DocumentBlock: TypeAlias = HeaderBlock | InlineBlock | SectionBlock | ImageBlock | NoteBlock
+DocumentBlock: TypeAlias = (
+    HeaderBlock | InlineBlock | SectionBlock | ImageBlock | NoteBlock
+)
 
 
 ActionBehavior = Literal["callback", "send", "fill", "link"]
@@ -180,4 +184,4 @@ class RenderedMessage:
     kind: Literal["markdown", "text", "image"]
     content: str = ""
     image: Any = None
-    actions: tuple[Action, ...] = field(default_factory=tuple)
+    actions: tuple[Action, ...] = ()

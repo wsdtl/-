@@ -19,11 +19,12 @@ from ..schema import (
     Text,
 )
 
-
 CommandRenderer = Callable[[CommandLink], str]
 
 
-def render_markdown(document: Document, *, command_renderer: CommandRenderer | None = None) -> str:
+def render_markdown(
+    document: Document, *, command_renderer: CommandRenderer | None = None
+) -> str:
     """按统一标题、正文和附加区边界渲染 Markdown。"""
 
     lines: list[str] = []
@@ -36,7 +37,9 @@ def render_markdown(document: Document, *, command_renderer: CommandRenderer | N
             previous_block = block
             continue
 
-        should_separate = isinstance(previous_block, (InlineBlock, SectionBlock, ImageBlock, NoteBlock)) and not (
+        should_separate = isinstance(
+            previous_block, (InlineBlock, SectionBlock, ImageBlock, NoteBlock)
+        ) and not (
             isinstance(previous_block, InlineBlock) and isinstance(block, InlineBlock)
         )
         if should_separate and lines and lines[-1] != "> ":
@@ -47,7 +50,9 @@ def render_markdown(document: Document, *, command_renderer: CommandRenderer | N
             content = _render_rich(block.content, command_renderer)
             lines.append(f"> {title}: {content}".rstrip())
         elif isinstance(block, SectionBlock):
-            lines.append(f"> {_title(block.title, block.icon, command_renderer)}".rstrip())
+            lines.append(
+                f"> {_title(block.title, block.icon, command_renderer)}".rstrip()
+            )
             for line in block.lines:
                 value = _render_rich(line, command_renderer)
                 lines.append("> >" if not value else f"> > {value}")
@@ -67,7 +72,9 @@ def render_markdown(document: Document, *, command_renderer: CommandRenderer | N
     return "\n".join(lines).strip()
 
 
-def render_rich_markdown(value: RichText, *, command_renderer: CommandRenderer | None = None) -> str:
+def render_rich_markdown(
+    value: RichText, *, command_renderer: CommandRenderer | None = None
+) -> str:
     """渲染一段 RichText，供协议驱动构造内联能力。"""
 
     return _render_rich(value, command_renderer)
@@ -85,9 +92,15 @@ def _render_rich(value: RichText, command_renderer: CommandRenderer | None) -> s
         if isinstance(span, Text):
             parts.append(_escape(span.value))
         elif isinstance(span, Link):
-            parts.append(f"[{_render_rich(span.label, command_renderer)}]({_escape_url(span.url)})")
+            parts.append(
+                f"[{_render_rich(span.label, command_renderer)}]({_escape_url(span.url)})"
+            )
         elif isinstance(span, CommandLink):
-            parts.append(command_renderer(span) if command_renderer else _render_rich(span.label, None))
+            parts.append(
+                command_renderer(span)
+                if command_renderer
+                else _render_rich(span.label, None)
+            )
         elif isinstance(span, FieldSeparator):
             parts.append("&nbsp;|&nbsp;")
     return "".join(parts)

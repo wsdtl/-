@@ -1,0 +1,405 @@
+"""核心数据库的 SQLite 内部实现；不属于跨服务公共接口。"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import RLock
+from uuid import uuid4
+
+from .contracts import (
+    DatabaseError,
+    IdempotencyConflictError,
+    StateAddress,
+    StateChange,
+    StateConflictError,
+    StateMutation,
+    StateSnapshot,
+    TransactionCommand,
+    TransactionReceipt,
+)
+
+
+class SQLiteStateStore:
+    """两张表的原子状态仓储。"""
+
+    def __init__(self, path: Path | str, *, busy_timeout_ms: int = 5000) -> None:
+        self.path = Path(path)
+        self.busy_timeout_ms = max(1, int(busy_timeout_ms))
+        self._lock = RLock()
+        self._initialized = False
+
+    def initialize(self) -> None:
+        if self._initialized:
+            raise RuntimeError("核心数据库已经初始化")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock, self._connect() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS state_snapshot (
+                    user_id TEXT NOT NULL,
+                    state_type TEXT NOT NULL,
+                    state_key TEXT NOT NULL,
+                    state_json TEXT NOT NULL,
+                    version INTEGER NOT NULL CHECK (version > 0),
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, state_type, state_key)
+                );
+                CREATE TABLE IF NOT EXISTS committed_transaction (
+                    transaction_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    request_id TEXT NOT NULL,
+                    business_type TEXT NOT NULL,
+                    changes_json TEXT NOT NULL,
+                    committed_at TEXT NOT NULL,
+                    UNIQUE (user_id, request_id)
+                );
+                CREATE INDEX IF NOT EXISTS ix_state_snapshot_user
+                ON state_snapshot(user_id, state_type);
+                CREATE INDEX IF NOT EXISTS ix_committed_transaction_user
+                ON committed_transaction(user_id, committed_at);
+                """
+            )
+        self._initialized = True
+
+    def counts(self) -> tuple[int, int]:
+        self._require_initialized()
+        with self._lock, self._connect() as connection:
+            state_count = int(
+                connection.execute("SELECT COUNT(*) FROM state_snapshot").fetchone()[0]
+            )
+            transaction_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM committed_transaction"
+                ).fetchone()[0]
+            )
+        return state_count, transaction_count
+
+    def get(self, address: StateAddress) -> StateSnapshot | None:
+        self._require_initialized()
+        _validate_address(address)
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT state_json, version, updated_at
+                FROM state_snapshot
+                WHERE user_id = ? AND state_type = ? AND state_key = ?
+                """,
+                (address.user_id, address.state_type, address.state_key),
+            ).fetchone()
+        return _snapshot(address, row) if row is not None else None
+
+    def list_for_user(
+        self, user_id: str, state_type: str | None = None
+    ) -> tuple[StateSnapshot, ...]:
+        self._require_initialized()
+        _validate_text(user_id, "user_id")
+        if state_type is not None:
+            _validate_text(state_type, "state_type")
+        query = (
+            "SELECT state_type, state_key, state_json, version, updated_at "
+            "FROM state_snapshot WHERE user_id = ?"
+        )
+        parameters: list[object] = [user_id]
+        if state_type is not None:
+            query += " AND state_type = ?"
+            parameters.append(state_type)
+        query += " ORDER BY state_type, state_key"
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return tuple(
+            _snapshot(
+                StateAddress(user_id, str(row[0]), str(row[1])),
+                row[2:],
+            )
+            for row in rows
+        )
+
+    def commit(self, command: TransactionCommand) -> TransactionReceipt:
+        self._require_initialized()
+        _validate_command(command)
+        fingerprint = _command_json(command)
+        transaction_id = uuid4().hex
+        committed_at = _now()
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing = connection.execute(
+                    """
+                    SELECT transaction_id, business_type, changes_json, committed_at
+                    FROM committed_transaction
+                    WHERE user_id = ? AND request_id = ?
+                    """,
+                    (command.user_id, command.request_id),
+                ).fetchone()
+                if existing is not None:
+                    stored = json.loads(str(existing[2]))
+                    if stored.get("command") != fingerprint:
+                        raise IdempotencyConflictError(
+                            "request_id 已提交过不同事务"
+                        )
+                    connection.execute("COMMIT")
+                    return _receipt_from_row(command, existing, replayed=True)
+
+                changes: list[StateChange] = []
+                for mutation in command.mutations:
+                    changes.append(
+                        _apply_mutation(connection, command.user_id, mutation, committed_at)
+                    )
+                changes_json = {
+                    "command": fingerprint,
+                    "payload": _json_value(command.payload),
+                    "changes": [_change_json(change) for change in changes],
+                }
+                connection.execute(
+                    """
+                    INSERT INTO committed_transaction (
+                        transaction_id, user_id, request_id, business_type,
+                        changes_json, committed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        transaction_id,
+                        command.user_id,
+                        command.request_id,
+                        command.business_type,
+                        _encode(changes_json),
+                        committed_at,
+                    ),
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return TransactionReceipt(
+            transaction_id=transaction_id,
+            user_id=command.user_id,
+            request_id=command.request_id,
+            business_type=command.business_type,
+            committed_at=committed_at,
+            replayed=False,
+            changes=tuple(changes),
+        )
+
+    def _require_initialized(self) -> None:
+        if not self._initialized:
+            raise RuntimeError("核心数据库尚未初始化")
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(
+            self.path,
+            timeout=self.busy_timeout_ms / 1000,
+        )
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
+            yield connection
+        finally:
+            connection.close()
+
+
+def _apply_mutation(
+    connection: sqlite3.Connection,
+    user_id: str,
+    mutation: StateMutation,
+    committed_at: str,
+) -> StateChange:
+    row = connection.execute(
+        """
+        SELECT state_json, version
+        FROM state_snapshot
+        WHERE user_id = ? AND state_type = ? AND state_key = ?
+        """,
+        (user_id, mutation.state_type, mutation.state_key),
+    ).fetchone()
+    current_version = int(row[1]) if row is not None else 0
+    if current_version != mutation.expected_version:
+        raise StateConflictError(
+            f"状态版本冲突：{mutation.state_type}/{mutation.state_key} "
+            f"期望 {mutation.expected_version}，实际 {current_version}"
+        )
+    if mutation.value is None:
+        if row is None:
+            raise StateConflictError("不能删除不存在的状态")
+        connection.execute(
+            "DELETE FROM state_snapshot WHERE user_id = ? AND state_type = ? AND state_key = ?",
+            (user_id, mutation.state_type, mutation.state_key),
+        )
+        return StateChange(
+            mutation.state_type,
+            mutation.state_key,
+            "delete",
+            current_version,
+            None,
+        )
+
+    encoded = _encode(mutation.value)
+    next_version = current_version + 1
+    if row is None:
+        connection.execute(
+            """
+            INSERT INTO state_snapshot (
+                user_id, state_type, state_key, state_json, version, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, mutation.state_type, mutation.state_key, encoded, next_version, committed_at),
+        )
+        operation = "insert"
+    else:
+        connection.execute(
+            """
+            UPDATE state_snapshot
+            SET state_json = ?, version = ?, updated_at = ?
+            WHERE user_id = ? AND state_type = ? AND state_key = ?
+            """,
+            (
+                encoded,
+                next_version,
+                committed_at,
+                user_id,
+                mutation.state_type,
+                mutation.state_key,
+            ),
+        )
+        operation = "update"
+    return StateChange(
+        mutation.state_type,
+        mutation.state_key,
+        operation,
+        current_version or None,
+        next_version,
+    )
+
+
+def _snapshot(address: StateAddress, row: sqlite3.Row | tuple[object, ...]) -> StateSnapshot:
+    state_json, version, updated_at = row
+    value = json.loads(str(state_json))
+    if not isinstance(value, dict):
+        raise DatabaseError("状态 JSON 根值必须是对象")
+    return StateSnapshot(address, value, int(version), str(updated_at))
+
+
+def _receipt_from_row(
+    command: TransactionCommand,
+    row: sqlite3.Row,
+    *,
+    replayed: bool,
+) -> TransactionReceipt:
+    stored = json.loads(str(row[2]))
+    changes = tuple(
+        StateChange(
+            str(change["state_type"]),
+            str(change["state_key"]),
+            str(change["operation"]),
+            _optional_int(change.get("before_version")),
+            _optional_int(change.get("after_version")),
+        )
+        for change in stored.get("changes", [])
+    )
+    return TransactionReceipt(
+        transaction_id=str(row[0]),
+        user_id=command.user_id,
+        request_id=command.request_id,
+        business_type=str(row[1]),
+        committed_at=str(row[3]),
+        replayed=replayed,
+        changes=changes,
+    )
+
+
+def _validate_command(command: TransactionCommand) -> None:
+    for value, label in (
+        (command.user_id, "user_id"),
+        (command.request_id, "request_id"),
+        (command.business_type, "business_type"),
+    ):
+        _validate_text(value, label)
+    if not command.mutations:
+        raise ValueError("事务至少需要一项状态变更")
+    addresses = set()
+    for mutation in command.mutations:
+        _validate_text(mutation.state_type, "state_type")
+        _validate_text(mutation.state_key, "state_key")
+        if isinstance(mutation.expected_version, bool) or mutation.expected_version < 0:
+            raise ValueError("expected_version 不能小于 0")
+        address = (mutation.state_type, mutation.state_key)
+        if address in addresses:
+            raise ValueError("同一事务不能重复修改同一状态")
+        addresses.add(address)
+        if mutation.value is not None:
+            if not isinstance(mutation.value, Mapping):
+                raise TypeError("状态 JSON 根值必须是对象")
+            _encode(mutation.value)
+    if not isinstance(command.payload, Mapping):
+        raise TypeError("事务 payload 根值必须是对象")
+    _encode(command.payload)
+
+
+def _validate_address(address: StateAddress) -> None:
+    _validate_text(address.user_id, "user_id")
+    _validate_text(address.state_type, "state_type")
+    _validate_text(address.state_key, "state_key")
+
+
+def _validate_text(value: object, label: str) -> None:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError(f"{label} 必须是无首尾空白的非空字符串")
+
+
+def _command_json(command: TransactionCommand) -> dict[str, object]:
+    return {
+        "business_type": command.business_type,
+        "mutations": [
+            {
+                "state_type": mutation.state_type,
+                "state_key": mutation.state_key,
+                "value": _json_value(mutation.value),
+                "expected_version": mutation.expected_version,
+            }
+            for mutation in command.mutations
+        ],
+        "payload": _json_value(command.payload),
+    }
+
+
+def _change_json(change: StateChange) -> dict[str, object]:
+    return {
+        "state_type": change.state_type,
+        "state_key": change.state_key,
+        "operation": change.operation,
+        "before_version": change.before_version,
+        "after_version": change.after_version,
+    }
+
+
+def _json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(raw) for key, raw in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _encode(value: object) -> str:
+    try:
+        return json.dumps(_json_value(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("状态数据必须是可序列化 JSON") from exc
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _optional_int(value: object) -> int | None:
+    return int(value) if value is not None else None
+
+
+__all__ = ["SQLiteStateStore"]

@@ -211,7 +211,9 @@ def build_realms() -> list[dict[str, object]]:
     return output
 
 
-def build_pills_and_recipes() -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+def build_pills_and_recipes() -> tuple[
+    list[dict[str, object]], list[dict[str, object]]
+]:
     pills: list[dict[str, object]] = []
     recipes: list[dict[str, object]] = []
     serial = 0
@@ -246,7 +248,9 @@ def build_pills_and_recipes() -> tuple[list[dict[str, object]], list[dict[str, o
             }
             if bonuses:
                 effect["永久属性"] = bonuses
-                bonus_text = "、".join(f"{key}+{value}" for key, value in bonuses.items())
+                bonus_text = "、".join(
+                    f"{key}+{value}" for key, value in bonuses.items()
+                )
                 description = (
                     f"用于突破至{target_name}境，突破完成后永久获得{bonus_text}。"
                 )
@@ -269,7 +273,6 @@ def build_pills_and_recipes() -> tuple[list[dict[str, object]], list[dict[str, o
                     "编号": f"150{serial:03d}",
                     "名称": f"{name}方",
                     "炼制难度": difficulty,
-                    "药引池": "药引-兽宝",
                     "炉法": furnace_pair[variant_index % len(furnace_pair)],
                     "成丹": f"140{serial:03d}",
                 }
@@ -326,7 +329,7 @@ def validate(
             raise ValueError(f"丹方引用未知突破丹：{recipe['编号']}")
         if int(recipe["炼制难度"]) not in FURNACES:
             raise ValueError(f"丹方难度错误：{recipe['编号']}")
-        if str(recipe["炉法"]) not in FURNACES[int(recipe["炼制难度"] )]:
+        if str(recipe["炉法"]) not in FURNACES[int(recipe["炼制难度"])]:
             raise ValueError(f"丹方炉法与难度不符：{recipe['编号']}")
 
 

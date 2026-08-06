@@ -165,6 +165,7 @@ def build_battle_report_presentation(
             "actions": report["result"]["actions"],
             "events": public_event_count,
         },
+        "formations": deepcopy(list(report.get("formations") or ())),
         "timeline": compact_timeline,
     }
     field = report.get("field")
@@ -180,6 +181,9 @@ def build_battle_report_presentation(
                 1,
                 f"xy: ({coordinate['x']}, {coordinate['y']}) · 海拔 {field['altitude']} 米",
             )
+    formation_lines = [
+        _formation_summary_line(value) for value in report.get("formations") or ()
+    ]
     main = {
         "schema": schema,
         "version": version,
@@ -191,6 +195,7 @@ def build_battle_report_presentation(
             "lines": [
                 f"地点: {report['scene']}",
                 *field_lines,
+                *formation_lines,
                 f"战斗行动: {report['result']['actions']}",
                 f"后端事件: {public_event_count}",
                 f"机制触发: {report['result']['trigger_count']}",
@@ -205,6 +210,7 @@ def build_battle_report_presentation(
             "segments": [segment],
         },
         "game_name": catalog.game_name,
+        "formations": deepcopy(list(report.get("formations") or ())),
     }
     bundle = {
         "segments": {
@@ -246,6 +252,19 @@ def build_battle_report_presentation(
         },
     }
     return main, bundle
+
+
+def _formation_summary_line(value: Mapping[str, Any]) -> str:
+    side = "左阵" if value["side"] == "left" else "右阵"
+    state = (
+        "阵基已崩解"
+        if value["collapsed"]
+        else f"余承 {value['remaining_capacity']}"
+    )
+    return (
+        f"{side}: {value['name']} · {value['grade']}品 · "
+        f"轮转 {value['rotations']} 次 · {state}"
+    )
 
 
 def _combatant(participant: Mapping[str, Any], visual: Mapping[str, Any], index: int) -> dict[str, Any]:
@@ -341,7 +360,11 @@ def _detail_groups(
 ) -> list[dict[str, Any]]:
     techniques = []
     for value in participant.get("techniques") or ():
-        metadata = [item for item in (value.get("grade"), value.get("move")) if item]
+        metadata = [
+            item
+            for item in (value.get("section"), value.get("grade"), value.get("move"))
+            if item
+        ]
         techniques.append(_item(value["name"], " · ".join(metadata)))
     attributes = [
         _item(value["label"], value["display"], value.get("value"))
@@ -450,38 +473,48 @@ def _apply_events(
         target_id = event.get("target", {}).get("id")
         target = state.get(target_id)
         kind = event.get("kind")
-        category = catalog.normalized_category(str(kind or ""))
-        if target and category == "damage":
+        if target and kind in (
+            catalog.settlement_kinds("角色伤害")
+            | catalog.settlement_kinds("战场伤害")
+        ):
             if isinstance(values.get("伤害后血气"), int | float):
                 target["resources"]["health"]["current"] = float(values["伤害后血气"])
             if isinstance(values.get("伤害后护盾"), int | float):
                 target["resources"]["shield"]["current"] = float(values["伤害后护盾"])
-        elif kind == "skill" and source_id in state:
-            resource = state[source_id]["resources"]["spirit"]
-            resource["current"] = max(0.0, resource["current"] - float(event.get("amount") or 0))
-        elif target and category == "recover":
-            resource_name = str(values.get("资源") or ("血气" if kind == "heal" else ""))
+        elif target and kind in (
+            catalog.settlement_kinds("资源恢复")
+            | catalog.settlement_kinds("资源消耗")
+        ):
+            resource_name = str(values.get("资源") or "")
             resource_key = catalog.resource_key(resource_name)
             if resource_key:
                 resource = target["resources"][resource_key]
-                if isinstance(values.get("恢复后"), int | float):
-                    resource["current"] = float(values["恢复后"])
+                if isinstance(values.get("变化后数值"), int | float):
+                    resource["current"] = float(values["变化后数值"])
                 else:
+                    delta = float(event.get("amount") or 0)
+                    if kind in catalog.settlement_kinds("资源消耗"):
+                        delta = -delta
                     resource["current"] = min(
-                        resource["maximum"],
-                        resource["current"] + float(event.get("amount") or 0),
+                        resource["maximum"], max(0.0, resource["current"] + delta)
                     )
-        elif target and kind == "status":
+        elif target and kind in catalog.settlement_kinds("状态添加"):
             name = str(values.get("状态") or event.get("mechanism") or event.get("text"))
             target["statuses"][name] = {
                 "name": name,
-                "category": "负面" if target_id != source_id else "正面",
-                "turns": max(0, int(values.get("持续数值") or 0)),
-                "stacks": max(1, int(values.get("层数") or 1)),
-                "source": event.get("source", {}).get("name", ""),
+                "category": str(
+                    values.get("状态类别")
+                    or ("负面" if target_id != source_id else "正面")
+                ),
+                "turns": max(0, int(values.get("剩余行动") or 0)),
+                "stacks": max(1, int(values.get("状态层数") or 1)),
+                "source": str(
+                    values.get("来源名称")
+                    or event.get("source", {}).get("name", "")
+                ),
             }
-        elif target and kind == "status_end":
-            name = str(event.get("text") or "").removesuffix("消散")
+        elif target and kind in catalog.settlement_kinds("状态移除"):
+            name = str(values.get("状态") or event.get("text") or "").removesuffix("消散")
             target["statuses"].pop(name, None)
         if kind == "行动结束" and source_id in state:
             for status in state[source_id]["statuses"].values():
@@ -499,7 +532,9 @@ def _transition_title(
     actor = start.get("source", {}) if start else {}
     actor_id = str(actor.get("id") or "system")
     actor_name = str(actor.get("name") or "战场")
-    skill = next((value for value in events if value.get("kind") == "skill"), None)
+    skill = next(
+        (value for value in events if value.get("kind") == "技能施放后"), None
+    )
     if skill:
         details = {value["label"]: value.get("display") for value in skill.get("details") or ()}
         return (
@@ -510,7 +545,8 @@ def _transition_title(
         (
             value
             for value in events
-            if catalog.normalized_category(str(value.get("kind") or "")) == "damage"
+            if str(value.get("kind") or "")
+            in catalog.settlement_kinds("角色伤害")
             and value.get("source", {}).get("id") == actor_id
         ),
         None,
@@ -519,9 +555,18 @@ def _transition_title(
         if "普通攻击" in (attack.get("tags") or ()):
             ability = "基础攻击"
         else:
-            ability = attack.get("mechanism") or str(
-                attack.get("text") or "普通行动"
-            ).split("造成", 1)[0].removesuffix("暴击，").removesuffix("格挡，")
+            details = {
+                value["label"]: value.get("value")
+                for value in attack.get("details") or ()
+            }
+            ability = (
+                attack.get("mechanism")
+                or details.get("伤害名称")
+                or str(attack.get("text") or "普通行动")
+                .split("造成", 1)[0]
+                .removesuffix("暴击，")
+                .removesuffix("格挡，")
+            )
         return f"{actor_name} 对 {attack['target']['name']} 使用 {ability}", actor_id
     return f"{actor_name} 开始行动", actor_id
 

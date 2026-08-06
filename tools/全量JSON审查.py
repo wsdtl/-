@@ -34,6 +34,7 @@ OBSOLETE_KEYS = frozenset(
     }
 )
 SLOT_KEYS = frozenset({"功法", "真意", "气机"})
+GENDERS = frozenset({"男", "女"})
 WEAPON_KEYS = frozenset({"名称", "等级", "经验", "器律"})
 ENEMY_WEAPON_KEYS = frozenset({"名称", "攻击"})
 SOUTHERN_REGIONS = frozenset(
@@ -202,6 +203,13 @@ class Audit:
                     )
 
     def _audit_definitions(self) -> None:
+        genders = self._json("定义/角色/性别.json")
+        if genders != {"取值": ["男", "女"]}:
+            self.add(
+                "角色定义",
+                "定义/角色/性别.json",
+                "修士性别定义必须且只能按男、女有序登记",
+            )
         attributes = self._json("定义/战斗/属性.json")
         if isinstance(attributes, dict):
             for name, definition in attributes.items():
@@ -244,6 +252,35 @@ class Audit:
             name: self._json(f"规则/角色/主体/{name}.json")
             for name in ("人物", "道侣", "敌方修士", "灵兽")
         }
+        expected_gender_sources = {
+            "人物": "创建选择",
+            "道侣": "实体",
+            "敌方修士": "随机",
+        }
+        for name, source in expected_gender_sources.items():
+            rule = role_rules[name]
+            gender_rule = rule.get("性别") if isinstance(rule, dict) else None
+            expected_gender_rule = {"来源": source, "定义": "性别"}
+            if name == "敌方修士":
+                expected_gender_rule["抽取"] = "等概率"
+            if gender_rule != expected_gender_rule:
+                self.add(
+                    "角色",
+                    f"规则/角色/主体/{name}.json",
+                    f"{name}性别规则必须引用性别定义并使用来源：{source}",
+                )
+        companion_rule = role_rules["道侣"]
+        if not isinstance(companion_rule, dict) or companion_rule.get("结契") != {
+            "性别关系": "不同"
+        }:
+            self.add(
+                "角色",
+                "规则/角色/主体/道侣.json",
+                "道侣结契必须要求双方性别不同",
+            )
+        beast_rule = role_rules["灵兽"]
+        if isinstance(beast_rule, dict) and "性别" in beast_rule:
+            self.add("角色", "规则/角色/主体/灵兽.json", "灵兽不得套用修士性别规则")
         growth_files = {
             path.stem for path in (DATA / "规则" / "角色" / "成长").glob("*.json")
         }
@@ -278,6 +315,8 @@ class Audit:
             self._audit_role_tiers(name, rule)
 
         weapon_names: set[str] = set()
+        companion_genders: Counter[str] = Counter()
+        genders_by_file: dict[str, Counter[str]] = defaultdict(Counter)
         grade_ids = {
             str(value.get("编号"))
             for value in self._json("定义/品级.json")
@@ -286,6 +325,16 @@ class Audit:
         for identity, raw in self.data.entities("道侣").items():
             row = materialize(raw)
             path = self.data.entity_record("道侣", identity).source_file
+            gender = row.get("性别")
+            if gender not in GENDERS:
+                self.add(
+                    "道侣",
+                    path,
+                    f"{row.get('名称', identity)} 性别必须来自性别定义",
+                )
+            else:
+                companion_genders[str(gender)] += 1
+                genders_by_file[path][str(gender)] += 1
             for key in ("功法池", "真意池", "气机池"):
                 if not isinstance(row.get(key), str) or not row[key].strip():
                     self.add("道侣", path, f"{row.get('名称', identity)} 缺少个人{key}")
@@ -338,11 +387,27 @@ class Audit:
                         "道侣", path, f"{row.get('名称', identity)} 圆满回礼数量非法"
                     )
 
+        if companion_genders != Counter({"男": 132, "女": 132}):
+            self.add(
+                "道侣",
+                "内容/世界",
+                f"道侣性别必须严格对半，当前男 {companion_genders['男']}、女 {companion_genders['女']}",
+            )
+        for path, counts in genders_by_file.items():
+            if abs(counts["男"] - counts["女"]) > 1:
+                self.add(
+                    "道侣",
+                    path,
+                    f"单个地点的道侣性别数量相差超过一人：男 {counts['男']}、女 {counts['女']}",
+                )
+
         for identity, raw in self.data.entities("敌人").items():
             row = materialize(raw)
             path = self.data.entity_record("敌人", identity).source_file
             kind = row.get("角色规则")
             if kind == "灵兽":
+                if "性别" in row:
+                    self.add("敌人", path, f"灵兽 {identity} 不得保存修士性别")
                 if "本命武器" in row:
                     self.add("敌人", path, f"灵兽 {identity} 不得定义本命武器")
                 growth = row.get("每级成长")
@@ -354,6 +419,12 @@ class Audit:
                 }:
                     self.add("敌人", path, f"灵兽 {identity} 必须保存四项完整每级成长")
             elif kind == "敌方修士":
+                if "性别" in row:
+                    self.add(
+                        "敌人",
+                        path,
+                        f"敌方修士 {identity} 的性别必须生成时随机，不得写死在敌人定义中",
+                    )
                 weapon = row.get("本命武器")
                 if not isinstance(weapon, dict) or set(weapon) != ENEMY_WEAPON_KEYS:
                     self.add(
@@ -371,6 +442,11 @@ class Audit:
     def _audit_role_initial_items(self, rule: Any) -> None:
         if not isinstance(rule, dict):
             return
+        grade_ids = {
+            str(value.get("编号"))
+            for value in self._json("定义/品级.json")
+            if isinstance(value, dict)
+        }
         for index, item in enumerate(rule.get("物品", [])):
             if not isinstance(item, dict) or not _entity_id(
                 item.get("编号"), ("10", "12", "14", "16")
@@ -385,6 +461,12 @@ class Audit:
                     "角色",
                     "规则/角色/主体/人物.json",
                     f"初始物品[{index}] 数量必须为正整数",
+                )
+            elif item.get("品级") not in grade_ids:
+                self.add(
+                    "角色",
+                    "规则/角色/主体/人物.json",
+                    f"初始物品[{index}] 必须使用有效两位品级编号",
                 )
             elif self.data is not None and item["编号"] not in self.data.entities(
                 "物品"
@@ -513,6 +595,19 @@ class Audit:
             if isinstance(effects, list)
             else {}
         )
+        gender_effect = effect_rules.get("转变性别")
+        if gender_effect != {
+            "类型": "转变性别",
+            "执行器": "转变性别",
+            "目标": "玩家自身",
+            "已有道侣": "禁止",
+            "必填字段": [],
+        }:
+            self.add(
+                "物品效果",
+                "定义/物品/使用效果.json",
+                "转变性别必须只作用于无道侣的玩家自身",
+            )
         for identity, raw in self.data.entities("物品").items():
             row = materialize(raw)
             record = self.data.entity_record("物品", identity)
@@ -636,6 +731,21 @@ class Audit:
     def _audit_alchemy(self) -> None:
         assert self.data is not None
         recipes = self.data.entities("丹方")
+        alchemy_rules = self._json("规则/炼药/丹则.json")
+        lead_rule = (
+            alchemy_rules.get("药引", {}) if isinstance(alchemy_rules, dict) else {}
+        )
+        if lead_rule.get("类别") != "兽宝" or not _positive_int(
+            lead_rule.get("每炉数量")
+        ):
+            self.add("炼药", "规则/炼药/丹则.json", "药引必须定义为每炉正数件兽宝")
+        try:
+            beast_leads = self.data.number_category_members("兽宝")
+        except Exception as exc:  # noqa: BLE001
+            self.add("炼药", "内容/物品/兽宝", f"兽宝虚拟全池无效：{exc}")
+            beast_leads = ()
+        if not beast_leads:
+            self.add("炼药", "内容/物品/兽宝", "兽宝虚拟全池不能为空")
         medicines = {
             identity: materialize(value)
             for identity, value in self.data.entities("物品").items()
@@ -695,6 +805,8 @@ class Audit:
         for identity, raw in recipes.items():
             row = materialize(raw)
             path = self.data.entity_record("丹方", identity).source_file
+            if "药引池" in row:
+                self.add("炼药", path, f"丹方 {identity} 不应重复声明全兽宝药引池")
             output = str(row.get("成丹") or "")
             outputs[output].append(identity)
             medicine = medicines.get(output)
@@ -733,10 +845,6 @@ class Audit:
                         path,
                         f"丹方 {identity} 的炉法共 {tastes} 味，不符合难度 {row.get('炼制难度')} 的范围",
                     )
-            try:
-                self.data.pool_members((str(row.get("药引池") or ""),), "物品")
-            except Exception as exc:  # noqa: BLE001
-                self.add("炼药", path, f"丹方 {identity} 药引池无效：{exc}")
         unused_furnaces = set(furnaces) - used_furnaces
         if unused_furnaces:
             self.add(
@@ -758,21 +866,6 @@ class Audit:
             "灵植池",
         )
         self._audit_realm_chain()
-        self._audit_alchemy_beast_leads()
-
-    def _audit_alchemy_beast_leads(self) -> None:
-        assert self.data is not None
-        beast_sources = {
-            path.stem for path in (DATA / "内容" / "物品" / "兽宝").glob("兽宝-*.json")
-        }
-        lead_file = self._json("内容/炼药/药引/药引-兽宝.json")
-        references = set(lead_file) if isinstance(lead_file, list) else set()
-        if references != beast_sources:
-            self.add(
-                "炼药",
-                "内容/炼药/药引/药引-兽宝.json",
-                f"药引总池必须覆盖全部兽宝来源，缺少={sorted(beast_sources - references)}，多出={sorted(references - beast_sources)}",
-            )
 
     def _audit_realm_chain(self) -> None:
         assert self.data is not None
@@ -1187,7 +1280,7 @@ class Audit:
             self._audit_region_terrain(name, row, path, terrains)
         self._audit_world_partition(regions)
         self._audit_world_definitions(terrains)
-        self._audit_world_role_distribution(locations)
+        self._audit_world_role_distribution(locations, regions)
         self._audit_roads(locations)
 
     def _audit_height_table(self, value: Any) -> None:
@@ -1217,7 +1310,7 @@ class Audit:
         definitions = self._json("定义/世界/地点功能.json")
         function_rules = (
             {
-                value.get("名称"): value.get("要求", {})
+                value.get("名称"): value
                 for value in definitions
                 if isinstance(value, dict) and value.get("名称")
             }
@@ -1225,10 +1318,11 @@ class Audit:
             else {}
         )
         for function in functions:
-            requirement = function_rules.get(function)
-            if requirement is None:
+            definition = function_rules.get(function)
+            if definition is None:
                 self.add("世界", path, f"地点 {name} 使用未登记功能：{function}")
                 continue
+            requirement = definition.get("要求", {})
             for field in requirement.get("非空字段", []):
                 if not row.get(field):
                     self.add(
@@ -1243,16 +1337,26 @@ class Audit:
                         path,
                         f"地点 {name} 的 {function} 功能缺少正数范围：{field}",
                     )
-        has_cultivators = "修士" in functions
+            for section in definition.get("同目录内容", []):
+                file_id = f"{name}{section}"
+                try:
+                    self.data.pool_members((file_id,), section)
+                except Exception as exc:  # noqa: BLE001
+                    self.add(
+                        "世界",
+                        path,
+                        f"地点 {name} 的 {function} 功能缺少同目录{section}内容：{exc}",
+                    )
         has_exploration = "探险" in functions
-        if has_cultivators != bool(row.get("道侣池")):
-            self.add("世界", path, f"地点 {name} 的修士功能与道侣池不一致")
+        for legacy_field in ("灵植池", "灵矿池", "道侣池", "敌人池"):
+            if legacy_field in row:
+                self.add(
+                    "世界", path, f"地点 {name} 不应保存可派生字段：{legacy_field}"
+                )
         if has_exploration:
-            if not row.get("敌人池"):
-                self.add("世界", path, f"地点 {name} 提供探险但没有敌人池")
             if not _ordered_pair(row.get("单次遭遇敌人数"), minimum=1):
                 self.add("世界", path, f"地点 {name} 单次遭遇敌人数非法")
-        elif row.get("敌人池") or row.get("单次遭遇敌人数"):
+        elif row.get("单次遭遇敌人数"):
             self.add("世界", path, f"地点 {name} 不提供探险却保存了探险数据")
 
     def _audit_region_terrain(
@@ -1358,7 +1462,9 @@ class Audit:
             )
 
     def _audit_world_role_distribution(
-        self, locations: dict[str, dict[str, Any]]
+        self,
+        locations: dict[str, dict[str, Any]],
+        regions: dict[str, dict[str, Any]],
     ) -> None:
         assert self.data is not None
         defense_kinds: set[str] = set()
@@ -1367,7 +1473,8 @@ class Audit:
             region = record.directory_owner or ""
             kinds: set[str] = set()
             enemy_ids: set[str] = set()
-            for pool in row.get("敌人池", []):
+            pools = (f"{name}敌人",) if "探险" in row.get("可用功能", ()) else ()
+            for pool in pools:
                 try:
                     for identity in self.data.pool_members((pool,), "敌人"):
                         enemy_ids.add(identity)
@@ -1386,7 +1493,13 @@ class Audit:
                 self.add("世界", record.source_file, f"北方地点 {name} 混入灵兽")
             if region == DEFENSE_REGION:
                 defense_kinds.update(kinds)
-            self._audit_location_drops(name, row, record.source_file, enemy_ids)
+            terrain = _terrain_at(tuple(row.get("坐标", ())), regions.get(region, {}))
+            self._audit_location_drops(
+                name,
+                terrain,
+                record.source_file,
+                enemy_ids,
+            )
         if defense_kinds != {"灵兽", "敌方修士"}:
             self.add(
                 "世界",
@@ -1397,35 +1510,32 @@ class Audit:
     def _audit_location_drops(
         self,
         location_name: str,
-        location: dict[str, Any],
+        terrain: str,
         path: str,
         enemy_ids: set[str],
     ) -> None:
         assert self.data is not None
-        expected_by_kind = {
-            "灵植": set(location.get("灵植池", ())),
-            "灵矿": set(location.get("灵矿池", ())),
-        }
+        for derived_pool in (f"灵植-{terrain}", f"灵矿-{terrain}"):
+            try:
+                self.data.pool_members((derived_pool,), "物品")
+            except Exception as exc:  # noqa: BLE001
+                self.add("世界", path, f"地点 {location_name} 的地形池无效：{exc}")
         for identity in enemy_ids:
             enemy = materialize(self.data.entity("敌人", identity))
-            pools = set(enemy.get("掉落", {}).get("物品池", ()))
-            for kind, expected in expected_by_kind.items():
-                if not expected.issubset(pools):
-                    self.add(
-                        "世界",
-                        path,
-                        f"地点 {location_name} 的敌人 {identity} 未携带当地{kind}池",
-                    )
-            beast_pools = {value for value in pools if str(value).startswith("兽宝-")}
+            drops = enemy.get("掉落", {})
+            if "物品池" in drops:
+                self.add("世界", path, f"敌人 {identity} 不应保存旧物品池字段")
+            extra_pools = set(drops.get("额外物品池", ()))
+            derived_prefixes = ("灵植-", "灵矿-", "兽宝-")
+            if any(str(value).startswith(derived_prefixes) for value in extra_pools):
+                self.add("世界", path, f"敌人 {identity} 的额外物品池混入可派生池")
+            for pool in extra_pools:
+                try:
+                    self.data.pool_members((str(pool),), "物品")
+                except Exception as exc:  # noqa: BLE001
+                    self.add("世界", path, f"敌人 {identity} 额外物品池无效：{exc}")
             if enemy.get("角色规则") == "灵兽":
                 unique_pool = f"兽宝-{identity}"
-                if beast_pools != {unique_pool}:
-                    self.add(
-                        "世界",
-                        path,
-                        f"灵兽 {identity} 必须且只能携带独有兽宝池 {unique_pool}",
-                    )
-                    continue
                 try:
                     members = self.data.pool_members((unique_pool,), "物品")
                 except Exception as exc:  # noqa: BLE001
@@ -1437,8 +1547,6 @@ class Audit:
                             path,
                             f"灵兽 {identity} 独有兽宝池至少需要三件兽宝",
                         )
-            elif beast_pools:
-                self.add("世界", path, f"敌方修士 {identity} 不得掉落兽宝池")
 
     def _audit_roads(self, locations: dict[str, dict[str, Any]]) -> None:
         roads = self._dataset("道路")
@@ -1608,6 +1716,17 @@ def _in_range(point: tuple[int, int], value: Any) -> bool:
         and value["x轴"][0] <= point[0] <= value["x轴"][1]
         and value["y轴"][0] <= point[1] <= value["y轴"][1]
     )
+
+
+def _terrain_at(point: tuple[int, int], region: dict[str, Any]) -> str:
+    matches = [
+        part
+        for part in region.get("地形分区", ())
+        if isinstance(part, dict) and _in_range(point, part.get("坐标范围"))
+    ]
+    if len(matches) != 1:
+        return ""
+    return str(matches[0].get("地形") or "")
 
 
 def _points(value: dict[str, list[int]]):

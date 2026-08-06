@@ -120,6 +120,11 @@ class JsonDataService:
 
         return self._require_loaded().all_members(section)
 
+    def number_category_members(self, number_category: str) -> tuple[str, ...]:
+        """返回一个编号类别的全部稳定身份，用于实体大类中的虚拟子池。"""
+
+        return self._require_loaded().members_by_number_category(number_category)
+
     def pool_members(
         self,
         file_ids: Sequence[str],
@@ -153,13 +158,13 @@ class JsonDataService:
             deduplicate=deduplicate,
         )
         return tuple(
-            (identity, _select_fields(value, field_names))
-            for identity, value in values
+            (identity, _select_fields(value, field_names)) for identity, value in values
         )
 
     def document_paths(self) -> tuple[str, ...]:
         return tuple(
-            document.relative_path for document in self._require_loaded().catalog.documents
+            document.relative_path
+            for document in self._require_loaded().catalog.documents
         )
 
     def _require_loaded(self) -> LoadedGameData:

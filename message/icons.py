@@ -6,10 +6,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import re
+from collections.abc import Mapping
 from types import MappingProxyType
-
 
 _ICON_KEY = re.compile(r"^[a-z][a-z0-9_.-]*$")
 _BASE_SOURCE = "message.base"

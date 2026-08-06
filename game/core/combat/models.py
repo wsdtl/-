@@ -232,6 +232,7 @@ class Fighter:
     tags: set[str] = dataclass_field(default_factory=set)
     tactic: list[Mapping[str, Any]] = dataclass_field(default_factory=list)
     battle_profile: dict[str, Any] = dataclass_field(default_factory=dict)
+    sex: str = ""
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -339,6 +340,7 @@ class RuntimeCombatantSnapshot:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = dataclass_field(default_factory=dict)
+    sex: str = ""
 
 
 @dataclass(frozen=True)

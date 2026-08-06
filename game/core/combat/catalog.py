@@ -112,6 +112,12 @@ class BattleReportCatalog:
     def damage_facts(self) -> frozenset[str]:
         return _strings(self.presentation, "伤害事实")
 
+    def settlement_kinds(self, category: str) -> frozenset[str]:
+        values = _mapping(self.normalization, "结算事件")
+        return frozenset(
+            str(value) for value in _sequence(values, str(category))
+        )
+
     @property
     def view_modes(self) -> list[dict[str, Any]]:
         return [deepcopy(dict(value)) for value in _sequence(self.normalization, "查看模式")]
@@ -194,6 +200,20 @@ class BattleReportCatalog:
         default_category = str(self.normalization["默认分类"])
         if default_category not in category_ids:
             raise ValueError("战报默认分类没有对应定义")
+        settlement = _mapping(self.normalization, "结算事件")
+        required_settlements = {
+            "角色伤害",
+            "战场伤害",
+            "资源恢复",
+            "资源消耗",
+            "状态添加",
+            "状态移除",
+        }
+        if set(settlement) != required_settlements:
+            raise ValueError("战报结算事件类别不完整")
+        for key in required_settlements:
+            if not _strings(settlement, key):
+                raise ValueError(f"战报结算事件不能为空：{key}")
         for resource_id in ("health", "spirit", "shield"):
             definition = _mapping(self.resources, resource_id)
             if not str(definition.get("label") or "").strip():
@@ -204,6 +224,38 @@ class BattleReportCatalog:
         for key in ("text", "modes", "filters", "snapshots"):
             if key not in ui:
                 raise ValueError(f"战报界面配置缺少：{key}")
+
+    def validate_event_kinds(self, event_kinds: Sequence[str]) -> None:
+        declared = {str(value) for value in event_kinds}
+        categories = set(_mapping(self.normalization, "类型分类"))
+        labels = set(_mapping(self.normalization, "类型名称"))
+        missing_categories = declared - categories
+        missing_labels = declared - labels
+        unknown_categories = categories - declared
+        unknown_labels = labels - declared
+        if missing_categories or missing_labels or unknown_categories or unknown_labels:
+            details = []
+            if missing_categories:
+                details.append("缺少分类：" + "、".join(sorted(missing_categories)))
+            if missing_labels:
+                details.append("缺少名称：" + "、".join(sorted(missing_labels)))
+            if unknown_categories:
+                details.append("废弃分类：" + "、".join(sorted(unknown_categories)))
+            if unknown_labels:
+                details.append("废弃名称：" + "、".join(sorted(unknown_labels)))
+            raise ValueError("战报事件映射与战斗事件定义不一致；" + "；".join(details))
+        settlement = _mapping(self.normalization, "结算事件")
+        unknown_settlements = {
+            str(kind)
+            for values in settlement.values()
+            for kind in values
+            if str(kind) not in declared
+        }
+        if unknown_settlements:
+            raise ValueError(
+                "战报结算事件未在战斗事件中定义："
+                + "、".join(sorted(unknown_settlements))
+            )
 
 
 def _mapping(value: Mapping[str, Any], key: str) -> Mapping[str, Any]:

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Any, Iterable
+from typing import Any
 
 from .schema import (
     Action,
     CommandLink,
     Document,
+    DocumentBlock,
     DocumentMessage,
     FieldSeparator,
     HeaderBlock,
@@ -24,10 +26,7 @@ from .schema import (
 )
 
 
-TextPart = object | Span | RichText
-
-
-def rich(*parts: TextPart) -> RichText:
+def rich(*parts: object) -> RichText:
     """把普通值和语义 span 整理为 RichText。"""
 
     result: list[Span] = []
@@ -35,8 +34,7 @@ def rich(*parts: TextPart) -> RichText:
         if isinstance(part, (Text, Link, CommandLink, FieldSeparator)):
             result.append(part)
         elif isinstance(part, tuple) and all(
-            isinstance(item, (Text, Link, CommandLink, FieldSeparator))
-            for item in part
+            isinstance(item, (Text, Link, CommandLink, FieldSeparator)) for item in part
         ):
             result.extend(part)
         elif part is not None:
@@ -50,11 +48,11 @@ class DocumentBuilder:
     """按内容顺序构建不可变 DocumentMessage。"""
 
     def __init__(self) -> None:
-        self._blocks: list[HeaderBlock | InlineBlock | SectionBlock | ImageBlock | NoteBlock] = []
+        self._blocks: list[DocumentBlock] = []
         self._actions: list[Action] = []
         self._section_index: int | None = None
 
-    def header(self, *parts: TextPart, color: str = "") -> "DocumentBuilder":
+    def header(self, *parts: object, color: str = "") -> DocumentBuilder:
         """添加消息主标题。"""
 
         self._blocks.append(HeaderBlock(rich(*parts), color))
@@ -63,36 +61,38 @@ class DocumentBuilder:
 
     def inline_section(
         self,
-        title: TextPart,
-        content: TextPart = "",
+        title: object,
+        content: object = "",
         *,
         icon: str = "",
-    ) -> "DocumentBuilder":
+    ) -> DocumentBuilder:
         """添加标题与内容同一行的短信息。"""
 
-        self._blocks.append(InlineBlock(rich(title), rich(content), str(icon or "").strip()))
+        self._blocks.append(
+            InlineBlock(rich(title), rich(content), str(icon or "").strip())
+        )
         self._section_index = None
         return self
 
-    def section(self, title: TextPart, *, icon: str = "") -> "DocumentBuilder":
+    def section(self, title: object, *, icon: str = "") -> DocumentBuilder:
         """开始一个新栏目；后续正文自动归属于该栏目。"""
 
         self._blocks.append(SectionBlock(rich(title), (), str(icon or "").strip()))
         self._section_index = len(self._blocks) - 1
         return self
 
-    def line(self, *parts: TextPart) -> "DocumentBuilder":
+    def line(self, *parts: object) -> DocumentBuilder:
         """向当前栏目添加普通正文。"""
 
         self._append_section_line(rich(*parts))
         return self
 
-    def field(self, label: object, value: object) -> "DocumentBuilder":
+    def field(self, label: object, value: object) -> DocumentBuilder:
         """添加一个普通文本字段。"""
 
         return self.line(str(label), ": ", value)
 
-    def row(self, *items: tuple[object, object]) -> "DocumentBuilder":
+    def row(self, *items: tuple[object, object]) -> DocumentBuilder:
         """在同一行添加多个字段，分隔空白由渲染器决定。"""
 
         parts: list[Span] = []
@@ -103,7 +103,7 @@ class DocumentBuilder:
         self._append_section_line(tuple(parts))
         return self
 
-    def item(self, index: int, *parts: TextPart) -> "DocumentBuilder":
+    def item(self, index: int, *parts: object) -> DocumentBuilder:
         """添加带稳定编号的列表项。"""
 
         if isinstance(index, bool) or not isinstance(index, int) or index < 1:
@@ -111,16 +111,16 @@ class DocumentBuilder:
         self._append_section_line(rich(f"[{index}] ", *parts))
         return self
 
-    def blank(self) -> "DocumentBuilder":
+    def blank(self) -> DocumentBuilder:
         """在当前栏目正文内添加空行。"""
 
         self._append_section_line(())
         return self
 
-    def note(self, *lines: TextPart) -> "DocumentBuilder":
+    def note(self, *lines: object) -> DocumentBuilder:
         """添加正文之后、动作按钮之前的附加说明。"""
 
-        content = tuple(rich(line) for line in lines if rich(line))
+        content = tuple(parsed for line in lines if (parsed := rich(line)))
         if content:
             self._blocks.append(NoteBlock(content))
             self._section_index = None
@@ -133,20 +133,20 @@ class DocumentBuilder:
         alt: object = "图片",
         width: int | None = None,
         height: int | None = None,
-    ) -> "DocumentBuilder":
+    ) -> DocumentBuilder:
         """添加可与正文一起发送的公网图片。"""
 
         self._blocks.append(ImageBlock(str(url or ""), str(alt or ""), width, height))
         self._section_index = None
         return self
 
-    def action(self, action: Action) -> "DocumentBuilder":
+    def action(self, action: Action) -> DocumentBuilder:
         """添加一个交互动作。"""
 
         self._actions.append(action)
         return self
 
-    def actions(self, actions: Iterable[Action]) -> "DocumentBuilder":
+    def actions(self, actions: Iterable[Action]) -> DocumentBuilder:
         """按顺序批量添加交互动作。"""
 
         self._actions.extend(actions)
@@ -165,7 +165,7 @@ class DocumentBuilder:
             raise ValueError("line/row/item 必须属于 section")
         block = self._blocks[self._section_index]
         if not isinstance(block, SectionBlock):
-            raise RuntimeError("当前消息块不是 section")
+            raise TypeError("当前消息块不是 section")
         self._blocks[self._section_index] = replace(block, lines=block.lines + (line,))
 
 
@@ -188,7 +188,7 @@ class M:
         return DocumentBuilder()
 
     @staticmethod
-    def image(image: Any, caption: TextPart = "") -> ImageMessage:
+    def image(image: Any, caption: object = "") -> ImageMessage:
         return ImageMessage(image=image, caption=rich(caption))
 
     @staticmethod
@@ -196,9 +196,17 @@ class M:
         return rich(value)
 
     @staticmethod
-    def link(label: TextPart, url: object) -> Link:
+    def link(label: object, url: object) -> Link:
         return Link(rich(label), str(url or "").strip())
 
     @staticmethod
-    def command(label: TextPart, command: object, *, submit: bool = True, reply: bool = False) -> CommandLink:
-        return CommandLink(rich(label), str(command or "").strip(), submit=submit, reply=reply)
+    def command(
+        label: object,
+        command: object,
+        *,
+        submit: bool = True,
+        reply: bool = False,
+    ) -> CommandLink:
+        return CommandLink(
+            rich(label), str(command or "").strip(), submit=submit, reply=reply
+        )

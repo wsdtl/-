@@ -576,6 +576,7 @@ class BattleEngine(MechanismRuntime):
                 f"{formation.definition.name}完成第{formation.rotations}次轮转",
                 values={
                     "阵法编号": formation.definition.identity,
+                    "阵法名称": formation.definition.name,
                     "方位": formation.definition.position,
                     "轮转次数": formation.rotations,
                     "阵势倍率": stage.impact_multiplier,
@@ -613,6 +614,7 @@ class BattleEngine(MechanismRuntime):
                         split_impact,
                         {
                             "阵法编号": formation.definition.identity,
+                            "阵法名称": formation.definition.name,
                             "方位": formation.definition.position,
                             "冲击目标": target.definition.identity
                             if isinstance(target, RuntimeFormation)
@@ -624,21 +626,31 @@ class BattleEngine(MechanismRuntime):
                     )
                 )
         collapsed: list[RuntimeFormation] = []
+        formation_absorbed: dict[int, float] = {}
         for formation in active:
             damage = formation_damage.get(id(formation), 0.0)
             if damage <= 0:
                 continue
+            formation_absorbed[id(formation)] = min(
+                formation.remaining_capacity, damage
+            )
             formation.remaining_capacity = max(
                 0.0, formation.remaining_capacity - damage
             )
             if formation.remaining_capacity <= 0 and not formation.collapsed:
                 formation.collapsed = True
                 collapsed.append(formation)
+        fighter_health_changes: dict[str, tuple[float, float]] = {}
         for fighter in context.fighters:
             damage = fighter_damage.get(fighter.id, 0.0)
             if damage > 0 and fighter.alive:
+                health_before = fighter.health
                 was_alive = fighter.alive
                 fighter.health = max(0.0, fighter.health - damage)
+                fighter_health_changes[fighter.id] = (
+                    health_before,
+                    fighter.health,
+                )
                 if was_alive and not fighter.alive:
                     source = context.left if fighter.side == 1 else context.right
                     values = {"实际数值": damage, "伤害形式": "阵法冲击"}
@@ -662,13 +674,40 @@ class BattleEngine(MechanismRuntime):
                     )
                     self._remove_source_lifetimes(context, fighter)
         for source, target, impact, values in impact_events:
+            event_values = dict(values)
+            if bool(event_values["是否命中阵法"]):
+                target_formation = next(
+                    (
+                        value
+                        for value in active
+                        if value.definition.identity == event_values["冲击目标"]
+                    ),
+                    None,
+                )
+                event_values["实际数值"] = (
+                    formation_absorbed.get(id(target_formation), impact)
+                    if target_formation is not None
+                    else impact
+                )
+            else:
+                health_before, health_after = fighter_health_changes.get(
+                    target.id, (target.health, target.health)
+                )
+                event_values.update(
+                    {
+                        "实际数值": health_before - health_after,
+                        "伤害前血气": health_before,
+                        "伤害后血气": health_after,
+                    }
+                )
             context.event(
                 "阵法冲击后",
                 source,
                 target,
-                "阵势完成宏观冲击",
+                f"{event_values['阵法名称']}完成宏观冲击",
                 impact,
-                values=values,
+                values=event_values,
+                tags=("阵法", "宏观冲击"),
             )
         for formation in collapsed:
             context.event(
@@ -678,6 +717,7 @@ class BattleEngine(MechanismRuntime):
                 f"{formation.definition.name}阵基崩解",
                 values={
                     "阵法编号": formation.definition.identity,
+                    "阵法名称": formation.definition.name,
                     "方位": formation.definition.position,
                     "原因": "阵基承载归零",
                     "累计轮转": formation.rotations,
@@ -773,6 +813,7 @@ class BattleEngine(MechanismRuntime):
             skill_cursor=max(0, int(snapshot.skill_cursor)),
             level=max(1, int(snapshot.level)),
             kind=str(snapshot.kind or "修士"),
+            sex=str(snapshot.sex or ""),
             owner_id=str(snapshot.owner_id),
             controller_id=str(snapshot.controller_id or snapshot.id),
             form=str(snapshot.form or "本相"),
@@ -1341,7 +1382,7 @@ class BattleEngine(MechanismRuntime):
             source=source,
             target=target,
             amount=amount,
-            values={"行动类型": damage_form},
+            values={"行动类型": damage_form, "伤害名称": label},
             tags=tags,
         )
         tags = tuple(judgement.tags)
@@ -1456,6 +1497,7 @@ class BattleEngine(MechanismRuntime):
         target.shield = resolution.shield_after
         target.health = resolution.health_after
         values = resolution.values()
+        values["伤害名称"] = resolution.request.label
         values["实际数值"] = resolution.actual_damage
         if resolution.critical:
             self._dispatch_event(
@@ -1641,6 +1683,7 @@ class BattleEngine(MechanismRuntime):
             amount, item_id = min(candidates)
             fighter.inventory[item_id] -= 1
             fighter.consumed_items[item_id] = fighter.consumed_items.get(item_id, 0) + 1
+            before, _ = self._resource_values(fighter, resource)
             self._mechanism_recover_resource(
                 context,
                 fighter,
@@ -1651,6 +1694,24 @@ class BattleEngine(MechanismRuntime):
                     "数值": amount,
                 },
                 1,
+            )
+            after, _ = self._resource_values(fighter, resource)
+            medicine = context.medicine_definitions[item_id]
+            context.event(
+                "使用丹药后",
+                fighter,
+                fighter,
+                f"{fighter.name}服用丹药恢复{resource}",
+                after - before,
+                values={
+                    "丹药编号": item_id,
+                    "资源": resource,
+                    "恢复比例": medicine.recovery_percent,
+                    "变化前数值": before,
+                    "变化后数值": after,
+                    "实际数值": after - before,
+                },
+                tags=("丹药", "恢复", resource),
             )
 
     @staticmethod

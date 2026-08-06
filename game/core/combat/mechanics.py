@@ -550,12 +550,15 @@ class MechanismRuntime:
         return self._compare(count, float(condition.get("层数", 1)), relation.removeprefix("层数"))
 
     def _condition_type(self, context, source, target, condition, _amount, event_values, _tags):
+        subject = source if str(condition.get("对象") or "目标") == "来源" else target
         kind = str(condition.get("类型") or "")
         expected = str(condition.get("值") or "")
         if kind == "参战身份":
-            return target.kind == expected or expected in target.tags
+            return subject.kind == expected or expected in subject.tags
         if kind == "形态":
-            return target.form == expected
+            return subject.form == expected
+        if kind == "性别":
+            return subject.sex == expected
         aliases = {"资源类型": "资源", "行动类型": "行动类型", "技能类型": "技能类型"}
         return str(event_values.get(aliases.get(kind, kind), "")) == expected
 
@@ -798,7 +801,22 @@ class MechanismRuntime:
                 existing.remaining_turns += status.remaining_turns
             else:
                 existing.remaining_turns = max(existing.remaining_turns, status.remaining_turns)
-            self._dispatch_event(context, kind="添加状态后", source=source, target=destination, values={"状态": status.name, "状态层数": status.stacks}, tags=status.tags)
+            applied_status = status if existing is None else existing
+            self._dispatch_event(
+                context,
+                kind="添加状态后",
+                source=source,
+                target=destination,
+                values={
+                    "状态": applied_status.name,
+                    "状态类别": applied_status.category,
+                    "状态层数": applied_status.stacks,
+                    "剩余行动": applied_status.remaining_turns,
+                    "持续单位": applied_status.duration_unit,
+                    "来源名称": applied_status.source_name,
+                },
+                tags=applied_status.tags,
+            )
             self._resolve_status_reactions(context, source, destination, status.name, multiplier)
             changed = True
         return changed
@@ -936,7 +954,14 @@ class MechanismRuntime:
                     kind="添加状态后",
                     source=source,
                     target=receiver,
-                    values={"状态": copied.name, "状态层数": copied.stacks},
+                    values={
+                        "状态": copied.name,
+                        "状态类别": copied.category,
+                        "状态层数": copied.stacks,
+                        "剩余行动": copied.remaining_turns,
+                        "持续单位": copied.duration_unit,
+                        "来源名称": copied.source_name,
+                    },
                     tags=copied.tags,
                 )
         return True

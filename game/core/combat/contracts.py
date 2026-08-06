@@ -101,6 +101,7 @@ class CombatantSpec:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
+    sex: str = ""
 
 
 @dataclass(frozen=True)
