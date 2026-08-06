@@ -33,7 +33,7 @@ class CombatFieldSpec:
 
 @dataclass(frozen=True)
 class CombatFormationSpec:
-    """战场级阵法引用；阵法不占角色构筑位。"""
+    """战场级阵法引用；阵法不占角色修行槽位。"""
 
     identity: str
     grade: str = "黄"
