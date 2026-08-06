@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from launch.adapter import MessageHandler
-
+from ..command import GameCommand
 from . import entry
 from . import runtime as runtime
 from .site import router
 
 
-@MessageHandler.fullmatch(cmd="web", priority=100, block=True)
+@GameCommand.fullmatch(
+    cmd="web",
+    access="public",
+    activity_rule=None,
+    hidden=True,
+)
 async def web_console(*, client_id: str, manager) -> None:
     await entry.show_entry(client_id=client_id, manager=manager)
 

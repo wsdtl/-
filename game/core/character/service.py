@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
+from game.core.activity import ActivityService
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -26,9 +27,15 @@ from .contracts import (
 class CharacterService:
     """拥有玩家角色状态写权限的唯一核心服务。"""
 
-    def __init__(self, data: JsonDataService, database: DatabaseService) -> None:
+    def __init__(
+        self,
+        data: JsonDataService,
+        database: DatabaseService,
+        activity: ActivityService,
+    ) -> None:
         self._data = data
         self._database = database
+        self._activity = activity
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -44,6 +51,8 @@ class CharacterService:
             raise RuntimeError("JSON 数据服务必须先于角色服务启动")
         if not self._database.status().initialized:
             raise RuntimeError("核心数据库必须先于角色服务启动")
+        if not self._activity.status().initialized:
+            raise RuntimeError("人物状态服务必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
         role_rule = role_rules.get("人物")
@@ -117,6 +126,7 @@ class CharacterService:
             StateMutation("character", "main", character_state, 0),
             StateMutation("cultivation", "main", cultivation_state, 0),
             StateMutation("weapon", "main", weapon_state, 0),
+            self._activity.initial_mutation(),
         ]
         for item_id, grade, quantity in item_rows:
             mutations.append(
@@ -227,7 +237,6 @@ class CharacterService:
             "属性": attributes,
             "属性加成": {},
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},
-            "状态": [],
             "自动用药": bool(self._role_rule.get("自动用药")),
             "位置": {"xy": list(command.birth_xy)},
         }

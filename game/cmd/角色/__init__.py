@@ -8,11 +8,23 @@ from game.features.chuangjian_renwu import (
     CreateCharacterRequest,
     InvalidCreateCharacterError,
 )
-from launch.adapter import MessageHandler
 from message import M
 
+from ..command import GameCommand, HelpSpec
 
-@MessageHandler.command(cmd="创建人物", priority=100, block=True)
+
+@GameCommand.command(
+    cmd="创建人物",
+    access="public",
+    activity_rule="仅未创建",
+    help=HelpSpec(
+        category="角色",
+        summary="建立当前账号的唯一修士人物",
+        usage=("创建人物 姓名 性别",),
+        side_effect="每个账号只能创建一个人物",
+        order=10,
+    ),
+)
 async def create_character(
     *,
     client_id: str,

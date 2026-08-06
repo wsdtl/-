@@ -8,6 +8,7 @@ from pathlib import Path
 from launch import C, OnEvent, config, logger
 
 from .config import game_config
+from .core.activity import ActivityService
 from .core.character import CharacterService
 from .core.combat import CombatService
 from .core.data import JsonDataService
@@ -26,6 +27,7 @@ class CoreServices:
     pool: PoolService
     world: WorldService
     database: DatabaseService
+    activity: ActivityService
     character: CharacterService
 
 
@@ -98,7 +100,16 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("transactions", database_status.transaction_count),
         )
     )
-    character = CharacterService(data, database)
+    activity = ActivityService(data, database)
+    activity_status = activity.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("人物状态核心微服务已启动"),
+            C.kv("statuses", activity_status.status_count),
+            C.kv("access_rules", activity_status.access_rule_count),
+        )
+    )
+    character = CharacterService(data, database, activity)
     character_status = character.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -114,6 +125,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         pool=pool,
         world=world,
         database=database,
+        activity=activity,
         character=character,
     )
     create_character = CreateCharacterFeature(data, world, character)
