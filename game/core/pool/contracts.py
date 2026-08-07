@@ -27,7 +27,7 @@ class PoolRequest:
 
 @dataclass(frozen=True)
 class PoolEntry:
-    identity: str
+    entity_id: str
     weight: int
 
 
@@ -42,8 +42,8 @@ class PoolResult:
     entries: tuple[PoolEntry, ...]
 
     @property
-    def identities(self) -> tuple[str, ...]:
-        return tuple(entry.identity for entry in self.entries)
+    def entity_ids(self) -> tuple[str, ...]:
+        return tuple(entry.entity_id for entry in self.entries)
 
 
 __all__ = [

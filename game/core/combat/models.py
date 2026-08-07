@@ -221,7 +221,7 @@ class Fighter:
     skill_cursor: int = 0
     current_skill: str = ""
     level: int = 1
-    kind: str = "修士"
+    combatant_type: str = "修士"
     side: int = 0
     owner_id: str = ""
     controller_id: str = ""
@@ -232,7 +232,7 @@ class Fighter:
     tags: set[str] = dataclass_field(default_factory=set)
     tactic: list[Mapping[str, Any]] = dataclass_field(default_factory=list)
     battle_profile: dict[str, Any] = dataclass_field(default_factory=dict)
-    sex: str = ""
+    gender: str = ""
     active: bool = True
     summoned: bool = False
     summon_template: str = ""
@@ -275,7 +275,7 @@ ListenerEntry = tuple[
 class CombatObject:
     id: str
     name: str
-    kind: str
+    object_type: str
     side: int
     owner_id: str
     remaining_actions: int = 0
@@ -321,7 +321,7 @@ class RuntimeCombatantSnapshot:
     name: str
     attributes: Mapping[str, float]
     level: int = 1
-    kind: str = "修士"
+    combatant_type: str = "修士"
     weapon_attack: float = 0.0
     techniques: tuple[Mapping[str, Any], ...] = ()
     health: float | None = None
@@ -340,7 +340,7 @@ class RuntimeCombatantSnapshot:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = dataclass_field(default_factory=dict)
-    sex: str = ""
+    gender: str = ""
 
 
 @dataclass(frozen=True)
@@ -357,7 +357,7 @@ class PreparedCombatField:
     name: str
     scene: str
     origin: str
-    coordinate: tuple[int, int] | None
+    xy: tuple[int, int] | None
     altitude: int | None
     terrain: str
     stages: tuple[PreparedFieldStage, ...]
@@ -372,7 +372,7 @@ class PreparedFormationStage:
 
 @dataclass(frozen=True)
 class PreparedFormation:
-    identity: str
+    formation_id: str
     name: str
     grade: str
     side: int

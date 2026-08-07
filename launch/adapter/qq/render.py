@@ -12,7 +12,6 @@ from message.schema import CommandLink
 from . import payload as qq_payload
 from .keyboard import validate_keyboard
 
-
 MAX_BUTTONS = 25
 MAX_BUTTONS_PER_ROW = 3
 
@@ -76,7 +75,7 @@ def _button(action: Action) -> dict:
         native_action["reply"] = action.reply
 
     return {
-        "id": action.id,
+        "id": action.action_id,
         "render_data": {
             "label": action.label,
             "visited_label": action.visited_label or action.label,

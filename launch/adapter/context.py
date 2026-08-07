@@ -1,7 +1,7 @@
 """协议中立的消息上下文与发送意图。
 
-业务层只能依赖本模块公开的身份、会话、能力和目标；QQ event 等协议对象只可
-存在于 driver_context/driver_target。常规账号识别使用 MessageIdentity，不需要读取私有事件。
+业务层只能依赖本模块公开的用户、请求、会话、能力和目标；QQ event 等协议对象
+只可存在于 driver_context/driver_target。
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
-
 
 CONVERSATION_PRIVATE = "private"
 CONVERSATION_GROUP = "group"
@@ -33,71 +32,31 @@ class AdapterCapabilities:
     active_push: bool = False
 
 
-@dataclass(frozen=True, order=True)
-class MessageIdentityClaim:
-    """驱动器从已验证事件中提取的一条稳定身份事实。"""
-
-    provider_id: str
-    tenant_id: str
-    subject_kind: str
-    scope_id: str
-    external_id: str
-
-    def __post_init__(self) -> None:
-        for field_name in ("provider_id", "tenant_id", "subject_kind", "external_id"):
-            value = str(getattr(self, field_name) or "").strip()
-            if not value:
-                raise ValueError(f"MessageIdentityClaim 缺少 {field_name}")
-            object.__setattr__(self, field_name, value)
-        object.__setattr__(self, "scope_id", str(self.scope_id or "").strip())
-
-    @property
-    def key(self) -> tuple[str, str, str, str, str]:
-        return (
-            self.provider_id,
-            self.tenant_id,
-            self.subject_kind,
-            self.scope_id,
-            self.external_id,
-        )
-
-
-@dataclass(frozen=True)
-class MessageIdentity:
-    """一条已验证消息证明的主身份与别名集合。"""
-
-    evidence_id: str
-    source_kind: str
-    primary: MessageIdentityClaim
-    aliases: tuple[MessageIdentityClaim, ...] = ()
-
-    def __post_init__(self) -> None:
-        for field_name in ("evidence_id", "source_kind"):
-            value = str(getattr(self, field_name) or "").strip()
-            if not value:
-                raise ValueError(f"MessageIdentity 缺少 {field_name}")
-            object.__setattr__(self, field_name, value)
-        claims = (self.primary, *tuple(self.aliases))
-        if len({claim.key for claim in claims}) != len(claims):
-            raise ValueError("MessageIdentity 存在重复身份事实")
-        namespaces = {(claim.provider_id, claim.tenant_id) for claim in claims}
-        if len(namespaces) != 1:
-            raise ValueError("一条消息身份不能跨平台或跨租户")
-        object.__setattr__(self, "aliases", tuple(self.aliases))
-
-
 @dataclass(frozen=True)
 class ReplyTarget:
-    """一次回复的目标。
-
-    公共层只识别 adapter / client_id / conversation_type。driver_target
-    由具体驱动解释，例如 QQ 会放 QqMessageEvent。
-    """
+    """一次回复的用户归属与实际发送目标。"""
 
     adapter: str
-    client_id: str
+    user_id: str
+    target_id: str
     conversation_type: str
     driver_target: Any = None
+
+    def __post_init__(self) -> None:
+        adapter = str(self.adapter or "").strip().lower()
+        user_id = str(self.user_id or "").strip()
+        target_id = str(self.target_id or "").strip()
+        conversation_type = str(self.conversation_type or "").strip().lower()
+        if not adapter:
+            raise ValueError("ReplyTarget 缺少 adapter")
+        if not target_id:
+            raise ValueError("ReplyTarget 缺少 target_id")
+        if conversation_type not in {CONVERSATION_PRIVATE, CONVERSATION_GROUP}:
+            raise ValueError(f"ReplyTarget 会话类型无效：{self.conversation_type}")
+        object.__setattr__(self, "adapter", adapter)
+        object.__setattr__(self, "user_id", user_id)
+        object.__setattr__(self, "target_id", target_id)
+        object.__setattr__(self, "conversation_type", conversation_type)
 
 
 @dataclass(frozen=True)
@@ -105,16 +64,37 @@ class MessageContext:
     """一条已规整消息的公共上下文。"""
 
     adapter: str
-    client_id: str
+    user_id: str
+    request_id: str
     command: str
     message: str
     raw_message: str
     conversation_type: str
     reply_target: ReplyTarget
     capabilities: AdapterCapabilities
-    identity: MessageIdentity
     driver_context: Any = None
     sender_name: str = ""
+
+    def __post_init__(self) -> None:
+        adapter = str(self.adapter or "").strip().lower()
+        user_id = str(self.user_id or "").strip()
+        request_id = str(self.request_id or "").strip()
+        conversation_type = str(self.conversation_type or "").strip().lower()
+        if not user_id:
+            raise ValueError("MessageContext 缺少 user_id")
+        if not request_id:
+            raise ValueError("MessageContext 缺少 request_id")
+        if self.reply_target.adapter != adapter:
+            raise ValueError("MessageContext 与 ReplyTarget 的 adapter 不一致")
+        if self.reply_target.conversation_type != conversation_type:
+            raise ValueError("MessageContext 与 ReplyTarget 的会话类型不一致")
+        if self.reply_target.user_id and self.reply_target.user_id != user_id:
+            raise ValueError("MessageContext 与 ReplyTarget 的 user_id 不一致")
+        object.__setattr__(self, "adapter", adapter)
+        object.__setattr__(self, "user_id", user_id)
+        object.__setattr__(self, "request_id", request_id)
+        object.__setattr__(self, "conversation_type", conversation_type)
+        object.__setattr__(self, "sender_name", " ".join(str(self.sender_name or "").split()))
 
 
 @dataclass(frozen=True)
@@ -145,7 +125,8 @@ class SendResult:
 
     success: bool
     adapter: str = ""
-    client_id: str = ""
+    user_id: str = ""
+    target_id: str = ""
     error: str = ""
 
 

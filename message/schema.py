@@ -126,7 +126,7 @@ ActionPermission = Literal["everyone", "admins", "specified"]
 class Action:
     """跨协议交互意图，权限提示不能代替服务端鉴权。"""
 
-    id: str
+    action_id: str
     label: str
     data: str
     behavior: ActionBehavior = "callback"
@@ -137,8 +137,8 @@ class Action:
     visited_label: str = ""
 
     def __post_init__(self) -> None:
-        if not self.id.strip():
-            raise ValueError("消息动作缺少稳定 id")
+        if not self.action_id.strip():
+            raise ValueError("消息动作缺少稳定 action_id")
         if not self.label.strip():
             raise ValueError("消息动作缺少 label")
         if not self.data.strip():

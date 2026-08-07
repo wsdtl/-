@@ -17,6 +17,14 @@ class CharacterAlreadyExistsError(CharacterCreationError):
     """该用户已经拥有角色。"""
 
 
+class CharacterNotFoundError(RuntimeError):
+    """该用户尚未创建人物。"""
+
+
+class CharacterStateError(RuntimeError):
+    """已经保存的角色资产不符合当前正式规则。"""
+
+
 @dataclass(frozen=True)
 class CharacterStatus:
     initialized: bool
@@ -46,11 +54,64 @@ class CharacterCreationResult:
     replayed: bool
 
 
+@dataclass(frozen=True)
+class EquippedContent:
+    category: str
+    slot: int
+    content_id: str
+    name: str
+    grade: str = ""
+
+
+@dataclass(frozen=True)
+class WeaponProfile:
+    name: str
+    level: int
+    experience: int
+    attack: int | float
+    stage: str
+    open_law_slots: int
+    equipped_laws: tuple[EquippedContent, ...]
+
+
+@dataclass(frozen=True)
+class InventorySummary:
+    stack_count: int
+    total_quantity: int
+
+
+@dataclass(frozen=True)
+class CharacterProfile:
+    user_id: str
+    name: str
+    gender: str
+    character_type: str
+    realm_id: str
+    realm_name: str
+    level: int
+    experience: int
+    spirit_stones: int
+    automatic_medicine: bool
+    xy: tuple[int, int]
+    attributes: tuple[tuple[str, int | float], ...]
+    resources: tuple[tuple[str, int | float], ...]
+    cultivation_slots: tuple[tuple[str, int], ...]
+    equipped_content: tuple[EquippedContent, ...]
+    weapon: WeaponProfile
+    inventory: InventorySummary
+
+
 __all__ = [
     "CharacterAlreadyExistsError",
     "CharacterCreateCommand",
     "CharacterCreationError",
     "CharacterCreationResult",
     "CharacterInputError",
+    "CharacterNotFoundError",
+    "CharacterProfile",
+    "CharacterStateError",
     "CharacterStatus",
+    "EquippedContent",
+    "InventorySummary",
+    "WeaponProfile",
 ]

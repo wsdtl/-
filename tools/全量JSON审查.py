@@ -159,6 +159,12 @@ class Audit:
         elif isinstance(value, list):
             for index, child in enumerate(value):
                 self._walk_common(path, child, (*trail, f"[{index}]"))
+        elif isinstance(value, float) and _has_machine_float_tail(value):
+            self.add(
+                "数值",
+                path,
+                f"发现未经规整的浮点数：{'.'.join(trail)} = {value!r}",
+            )
 
     def _audit_numbered_entities(self) -> None:
         assert self.data is not None
@@ -1678,6 +1684,19 @@ def _positive_int(value: Any) -> bool:
 
 def _positive_number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
+
+
+def _has_machine_float_tail(value: float) -> bool:
+    for digits in range(7):
+        rounded = round(value, digits)
+        if rounded != value and math.isclose(
+            value,
+            rounded,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            return True
+    return False
 
 
 def _ordered_pair(value: Any, *, minimum: int, maximum: int | None = None) -> bool:

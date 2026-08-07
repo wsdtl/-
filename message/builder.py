@@ -155,9 +155,9 @@ class DocumentBuilder:
     def build(self) -> DocumentMessage:
         """校验动作 ID 并冻结为不可变消息。"""
 
-        ids = [action.id for action in self._actions]
+        ids = [action.action_id for action in self._actions]
         if len(ids) != len(set(ids)):
-            raise ValueError("消息动作 id 不能重复")
+            raise ValueError("消息动作 action_id 不能重复")
         return DocumentMessage(Document(tuple(self._blocks), tuple(self._actions)))
 
     def _append_section_line(self, line: RichText) -> None:

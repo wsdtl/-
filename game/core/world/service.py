@@ -17,7 +17,7 @@ class WorldService:
         self._initialized = False
         self._locations: Mapping[str, Mapping[str, object]] = {}
         self._regions: Mapping[str, Mapping[str, object]] = {}
-        self._locations_by_coordinate: dict[
+        self._locations_by_xy: dict[
             tuple[int, int], tuple[str, Mapping[str, object]]
         ] = {}
         self._feature_contents: dict[str, tuple[str, ...]] = {}
@@ -34,34 +34,36 @@ class WorldService:
         self._regions = self._data.entities("区域")
         definitions = self._data.dataset("世界定义").get("地点功能")
         self._feature_contents = _feature_contents(definitions)
-        self._locations_by_coordinate = {}
-        for name, raw in self._locations.items():
-            coordinate = _coordinate(raw.get("坐标"), f"地点 {name}.坐标")
-            if coordinate in self._locations_by_coordinate:
-                raise JsonDataError(f"地点坐标重复：{coordinate}")
-            self._locations_by_coordinate[coordinate] = (name, raw)
+        self._locations_by_xy = {}
+        for location_name, raw in self._locations.items():
+            xy = _xy(raw.get("坐标"), f"地点 {location_name}.坐标")
+            if xy in self._locations_by_xy:
+                raise JsonDataError(f"地点坐标重复：{xy}")
+            self._locations_by_xy[xy] = (location_name, raw)
         terrain = self._data.dataset("地势").get("地势")
         if not isinstance(terrain, Mapping):
             raise JsonDataError("地势数据必须是对象")
         self._surface = _surface_grid(terrain.get("地表高度"))
-        self._bounds = _coordinate_bounds(terrain.get("坐标边界"))
+        self._bounds = _xy_bounds(terrain.get("坐标边界"))
         if len(self._surface) != self._bounds[3] - self._bounds[2] + 1:
             raise JsonDataError("地势地表高度的 y 轴尺寸与坐标边界不一致")
         if any(
             len(row) != self._bounds[1] - self._bounds[0] + 1 for row in self._surface
         ):
             raise JsonDataError("地势地表高度的 x 轴尺寸与坐标边界不一致")
-        for name, raw in self._locations.items():
-            coordinate = _coordinate(raw.get("坐标"), f"地点 {name}.坐标")
-            terrain_name = self._terrain_at(self._region_at(coordinate), coordinate)
+        for location_name, raw in self._locations.items():
+            xy = _xy(raw.get("坐标"), f"地点 {location_name}.坐标")
+            terrain_name = self._terrain_at(self._region_at(xy), xy)
             self._require_pool(f"灵植-{terrain_name}", "物品")
             self._require_pool(f"灵矿-{terrain_name}", "物品")
             for function in _strings(raw.get("可用功能")):
                 sections = self._feature_contents.get(function)
                 if sections is None:
-                    raise JsonDataError(f"地点 {name} 使用未登记功能：{function}")
+                    raise JsonDataError(
+                        f"地点 {location_name} 使用未登记功能：{function}"
+                    )
                 for section in sections:
-                    self._require_pool(f"{name}{section}", section)
+                    self._require_pool(f"{location_name}{section}", section)
         self._initialized = True
         return self.status()
 
@@ -75,20 +77,20 @@ class WorldService:
 
     def locate(self, query: LocationQuery) -> LocationView:
         self._require_initialized()
-        name = str(query.name or "").strip()
-        if bool(name) == (query.coordinate is not None):
+        location_name = str(query.location_name or "").strip()
+        if bool(location_name) == (query.xy is not None):
             raise ValueError("地点查询必须只提供地点名或 xy")
-        if name:
-            raw = self._locations.get(name)
+        if location_name:
+            raw = self._locations.get(location_name)
             if raw is None:
-                raise JsonDataError(f"地点不存在：{name}")
-            coordinate = _coordinate(raw.get("坐标"), f"地点 {name}.坐标")
+                raise JsonDataError(f"地点不存在：{location_name}")
+            xy = _xy(raw.get("坐标"), f"地点 {location_name}.坐标")
         else:
-            coordinate = _validate_coordinate(query.coordinate, self._bounds)
-            location = self._location_at(coordinate)
-            name, raw = location if location is not None else ("", {})
-        region = self._region_at(coordinate)
-        terrain = self._terrain_at(region, coordinate)
+            xy = _validate_xy(query.xy, self._bounds)
+            location = self._location_at(xy)
+            location_name, raw = location if location is not None else ("", {})
+        region = self._region_at(xy)
+        terrain = self._terrain_at(region, xy)
         functions = _strings(raw.get("可用功能"))
         content_sections = {
             section
@@ -97,15 +99,15 @@ class WorldService:
         }
         plant_pool = (f"灵植-{terrain}",)
         mineral_pool = (f"灵矿-{terrain}",)
-        companion_pool = (f"{name}道侣",) if name and "道侣" in content_sections else ()
-        enemy_pool = (f"{name}敌人",) if name and "敌人" in content_sections else ()
+        companion_pool = (f"{location_name}道侣",) if location_name and "道侣" in content_sections else ()
+        enemy_pool = (f"{location_name}敌人",) if location_name and "敌人" in content_sections else ()
         return LocationView(
-            name=name or str(raw.get("名称") or ""),
-            coordinate=coordinate,
+            location_name=location_name or str(raw.get("名称") or ""),
+            xy=xy,
             location_type=str(raw.get("地点类型") or "野外地表"),
             region=region,
             terrain=terrain,
-            altitude=self._altitude(coordinate),
+            altitude=self._altitude(xy),
             available_functions=functions,
             plant_pool=plant_pool,
             mineral_pool=mineral_pool,
@@ -114,11 +116,8 @@ class WorldService:
             enemy_count=_numbers(raw.get("单次遭遇敌人数")),
         )
 
-    def _location_at(
-        self,
-        coordinate: tuple[int, int],
-    ) -> tuple[str, Mapping[str, object]] | None:
-        return self._locations_by_coordinate.get(coordinate)
+    def _location_at(self, xy: tuple[int, int]) -> tuple[str, Mapping[str, object]] | None:
+        return self._locations_by_xy.get(xy)
 
     def _require_pool(self, file_id: str, section: str) -> None:
         try:
@@ -126,21 +125,21 @@ class WorldService:
         except JsonDataError as exc:
             raise JsonDataError(f"派生资源池无效：{file_id} -> {section}") from exc
 
-    def _region_at(self, coordinate: tuple[int, int]) -> str:
+    def _region_at(self, xy: tuple[int, int]) -> str:
         matches = [
             name
             for name, raw in self._regions.items()
-            if _in_range(coordinate, raw.get("坐标范围"))
+            if _in_range(xy, raw.get("坐标范围"))
         ]
         if len(matches) != 1:
-            raise JsonDataError(f"xy 必须且只能属于一个区域：{coordinate} -> {matches}")
+            raise JsonDataError(f"xy 必须且只能属于一个区域：{xy} -> {matches}")
         return matches[0]
 
-    def _altitude(self, coordinate: tuple[int, int]) -> int:
-        x, y = coordinate
+    def _altitude(self, xy: tuple[int, int]) -> int:
+        x, y = xy
         return self._surface[y - self._bounds[2]][x - self._bounds[0]]
 
-    def _terrain_at(self, region: str, coordinate: tuple[int, int]) -> str:
+    def _terrain_at(self, region: str, xy: tuple[int, int]) -> str:
         raw = self._regions[region]
         parts = raw.get("地形分区")
         if not isinstance(parts, Sequence) or isinstance(parts, (str, bytes)):
@@ -148,15 +147,15 @@ class WorldService:
         matches = [
             part
             for part in parts
-            if isinstance(part, Mapping) and _in_range(coordinate, part.get("坐标范围"))
+            if isinstance(part, Mapping) and _in_range(xy, part.get("坐标范围"))
         ]
         if len(matches) != 1:
             raise JsonDataError(
-                f"xy 必须且只能属于一个地形分区：{coordinate} -> {region}"
+                f"xy 必须且只能属于一个地形分区：{xy} -> {region}"
             )
         terrain = matches[0].get("地形")
         if not isinstance(terrain, str) or not terrain:
-            raise JsonDataError(f"地形分区缺少地形名称：{region} -> {coordinate}")
+            raise JsonDataError(f"地形分区缺少地形名称：{region} -> {xy}")
         return terrain
 
     def _require_initialized(self) -> None:
@@ -177,7 +176,7 @@ def _surface_grid(value: object) -> tuple[tuple[int, ...], ...]:
     return tuple(rows)
 
 
-def _coordinate_bounds(value: object) -> tuple[int, int, int, int]:
+def _xy_bounds(value: object) -> tuple[int, int, int, int]:
     if not isinstance(value, Mapping):
         raise JsonDataError("地势.坐标边界必须是对象")
     x_axis = value.get("x轴")
@@ -187,23 +186,23 @@ def _coordinate_bounds(value: object) -> tuple[int, int, int, int]:
     return (x_axis[0], x_axis[1], y_axis[0], y_axis[1])
 
 
-def _coordinate(value: object, label: str) -> tuple[int, int]:
+def _xy(value: object, label: str) -> tuple[int, int]:
     if not _valid_pair(value):
         raise JsonDataError(f"{label}必须是两个整数")
     return (value[0], value[1])
 
 
-def _validate_coordinate(
+def _validate_xy(
     value: tuple[int, int] | None,
     bounds: tuple[int, int, int, int],
 ) -> tuple[int, int]:
-    coordinate = _coordinate(value, "xy")
+    xy = _xy(value, "xy")
     if not (
-        bounds[0] <= coordinate[0] <= bounds[1]
-        and bounds[2] <= coordinate[1] <= bounds[3]
+        bounds[0] <= xy[0] <= bounds[1]
+        and bounds[2] <= xy[1] <= bounds[3]
     ):
-        raise JsonDataError(f"xy 超出世界边界：{coordinate}")
-    return coordinate
+        raise JsonDataError(f"xy 超出世界边界：{xy}")
+    return xy
 
 
 def _valid_pair(value: object) -> bool:
@@ -219,11 +218,11 @@ def _ordered_pair(value: object) -> bool:
     return _valid_pair(value) and value[0] <= value[1]
 
 
-def _in_range(coordinate: tuple[int, int], value: object) -> bool:
+def _in_range(xy: tuple[int, int], value: object) -> bool:
     if not isinstance(value, Mapping):
         return False
-    return _axis_contains(coordinate[0], value.get("x轴")) and _axis_contains(
-        coordinate[1], value.get("y轴")
+    return _axis_contains(xy[0], value.get("x轴")) and _axis_contains(
+        xy[1], value.get("y轴")
     )
 
 

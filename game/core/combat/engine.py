@@ -240,7 +240,7 @@ class BattleEngine(MechanismRuntime):
             key=lambda value: (
                 value.definition.side,
                 value.definition.position,
-                value.definition.identity,
+                value.definition.formation_id,
             ),
         ):
             context.event(
@@ -249,7 +249,7 @@ class BattleEngine(MechanismRuntime):
                 context.right if formation.side == 0 else context.left,
                 f"{formation.definition.name}以{formation.definition.grade}品展开",
                 values={
-                    "阵法编号": formation.definition.identity,
+                    "阵法编号": formation.definition.formation_id,
                     "阵法名称": formation.definition.name,
                     "品级": formation.definition.grade,
                     "方位": formation.definition.position,
@@ -262,7 +262,7 @@ class BattleEngine(MechanismRuntime):
     @staticmethod
     def _formation_result(value: RuntimeFormation) -> CombatFormationResult:
         return CombatFormationResult(
-            identity=value.definition.identity,
+            formation_id=value.definition.formation_id,
             name=value.definition.name,
             grade=value.definition.grade,
             side=value.definition.side,
@@ -287,7 +287,7 @@ class BattleEngine(MechanismRuntime):
             for fighter in fighters
             if fighter.counts_for_victory
             and not fighter.summoned
-            and fighter.kind != "构造物"
+            and fighter.combatant_type != "构造物"
         )
         source = Fighter(
             id=f"战场环境:{definition.environment_id}",
@@ -302,7 +302,7 @@ class BattleEngine(MechanismRuntime):
             },
             health=1,
             spirit=0,
-            kind="战场环境",
+            combatant_type="战场环境",
             side=-1,
             can_act=False,
             counts_for_victory=False,
@@ -348,7 +348,7 @@ class BattleEngine(MechanismRuntime):
         amount: float,
     ) -> None:
         field = context.field
-        if field is None or source.kind == "战场环境" or amount <= 0:
+        if field is None or source.combatant_type == "战场环境" or amount <= 0:
             return
         field.accumulated_damage += float(amount)
         context.event(
@@ -418,7 +418,7 @@ class BattleEngine(MechanismRuntime):
             name=definition.name,
             scene=definition.scene,
             origin=definition.origin,
-            coordinate=definition.coordinate,
+            xy=definition.xy,
             altitude=definition.altitude,
             terrain=definition.terrain,
             stage_index=field.stage_index,
@@ -518,7 +518,7 @@ class BattleEngine(MechanismRuntime):
             key=lambda value: (
                 value.definition.side,
                 value.definition.position,
-                value.definition.identity,
+                value.definition.formation_id,
             ),
         ):
             stage = formation.definition.stages[
@@ -546,7 +546,7 @@ class BattleEngine(MechanismRuntime):
                         enemy_formations,
                         key=lambda value: (
                             value.definition.position,
-                            value.definition.identity,
+                            value.definition.formation_id,
                         ),
                     ),
                 )
@@ -575,7 +575,7 @@ class BattleEngine(MechanismRuntime):
                 context.right if formation.side == 0 else context.left,
                 f"{formation.definition.name}完成第{formation.rotations}次轮转",
                 values={
-                    "阵法编号": formation.definition.identity,
+                    "阵法编号": formation.definition.formation_id,
                     "阵法名称": formation.definition.name,
                     "方位": formation.definition.position,
                     "轮转次数": formation.rotations,
@@ -613,10 +613,10 @@ class BattleEngine(MechanismRuntime):
                         target_fighter,
                         split_impact,
                         {
-                            "阵法编号": formation.definition.identity,
+                            "阵法编号": formation.definition.formation_id,
                             "阵法名称": formation.definition.name,
                             "方位": formation.definition.position,
-                            "冲击目标": target.definition.identity
+                            "冲击目标": target.definition.formation_id
                             if isinstance(target, RuntimeFormation)
                             else target.id,
                             "覆盖目标数": len(targets),
@@ -680,7 +680,7 @@ class BattleEngine(MechanismRuntime):
                     (
                         value
                         for value in active
-                        if value.definition.identity == event_values["冲击目标"]
+                        if value.definition.formation_id == event_values["冲击目标"]
                     ),
                     None,
                 )
@@ -716,7 +716,7 @@ class BattleEngine(MechanismRuntime):
                 context.right if formation.side == 0 else context.left,
                 f"{formation.definition.name}阵基崩解",
                 values={
-                    "阵法编号": formation.definition.identity,
+                    "阵法编号": formation.definition.formation_id,
                     "阵法名称": formation.definition.name,
                     "方位": formation.definition.position,
                     "原因": "阵基承载归零",
@@ -812,8 +812,8 @@ class BattleEngine(MechanismRuntime):
             medicine_threshold=self._clamp(snapshot.medicine_threshold, 0, 1),
             skill_cursor=max(0, int(snapshot.skill_cursor)),
             level=max(1, int(snapshot.level)),
-            kind=str(snapshot.kind or "修士"),
-            sex=str(snapshot.sex or ""),
+            combatant_type=str(snapshot.combatant_type or "修士"),
+            gender=str(snapshot.gender or ""),
             owner_id=str(snapshot.owner_id),
             controller_id=str(snapshot.controller_id or snapshot.id),
             form=str(snapshot.form or "本相"),
@@ -830,7 +830,7 @@ class BattleEngine(MechanismRuntime):
             name=fighter.name,
             attributes=dict(fighter.attributes),
             level=fighter.level,
-            kind=fighter.kind,
+            combatant_type=fighter.combatant_type,
             health=max(0.0, round(fighter.health, 3)),
             spirit=max(0.0, round(fighter.spirit, 3)),
             shield=max(0.0, round(fighter.shield, 3)),
@@ -1568,12 +1568,12 @@ class BattleEngine(MechanismRuntime):
                 values=values,
                 tags=tags,
             )
-            if target.kind == "构造物" or target.summoned:
+            if target.combatant_type == "构造物" or target.summoned:
                 self._retire_battle_object(
                     context,
                     source,
                     target,
-                    "构造物" if target.kind == "构造物" else "参战者",
+                    "构造物" if target.combatant_type == "构造物" else "参战者",
                 )
             else:
                 self._remove_source_lifetimes(context, target)
@@ -1658,7 +1658,7 @@ class BattleEngine(MechanismRuntime):
                         actor,
                         shell or actor,
                         f"{obj.name}消散",
-                        values={"对象ID": obj.id, "对象类型": obj.kind},
+                        values={"对象ID": obj.id, "对象类型": obj.object_type},
                     )
 
     def _use_medicine(self, context, fighter):

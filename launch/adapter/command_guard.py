@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import isawaitable
 from itertools import count
-from typing import Any, Callable
+from typing import Any
 
 from .context import MessageContext
 
@@ -18,7 +19,6 @@ class CommandGuardContext:
     """一次命令守卫检查需要的公共上下文。"""
 
     message_context: MessageContext
-    bypass_guards: bool = False
     command_metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -28,10 +28,10 @@ class CommandGuardContext:
         return self.message_context.adapter
 
     @property
-    def client_id(self) -> str:
-        """触发命令的公共入口身份。"""
+    def user_id(self) -> str:
+        """触发命令的统一游戏用户编号。"""
 
-        return self.message_context.client_id
+        return self.message_context.user_id
 
     @property
     def cmd(self) -> str:
@@ -67,13 +67,13 @@ class CommandGuardDecision:
     reason: str = ""
 
     @staticmethod
-    def allow() -> "CommandGuardDecision":
+    def allow() -> CommandGuardDecision:
         """构造放行决定。"""
 
         return CommandGuardDecision()
 
     @staticmethod
-    def block(reply: object | None = None, reason: str = "") -> "CommandGuardDecision":
+    def block(reply: object | None = None, reason: str = "") -> CommandGuardDecision:
         """构造拦截决定，可携带一次统一回复。"""
 
         return CommandGuardDecision(blocked=True, reply=reply, reason=reason)
@@ -130,19 +130,24 @@ def clear_command_guards() -> None:
 def registered_command_guards() -> tuple[CommandGuardEntry, ...]:
     """返回当前已注册守卫，按执行顺序排序。"""
 
-    return tuple(sorted(_guards.values(), key=lambda item: (-item.priority, item.order)))
+    return tuple(
+        sorted(_guards.values(), key=lambda item: (-item.priority, item.order))
+    )
 
 
 async def run_command_guards(context: CommandGuardContext) -> CommandGuardDecision:
     """按优先级执行守卫；任一守卫拦截后立即停止。"""
 
-    if context.bypass_guards:
-        return CommandGuardDecision.allow()
-
     for entry in registered_command_guards():
-        decision = entry.guard(context)
-        if isawaitable(decision):
-            decision = await decision
+        try:
+            decision = entry.guard(context)
+            if isawaitable(decision):
+                decision = await decision
+        except Exception:  # noqa: BLE001 - a broken guard must fail closed
+            return CommandGuardDecision.block(
+                "命令暂时无法执行，请稍后重试。",
+                reason=f"命令守卫执行失败：{entry.name}",
+            )
 
         normalized = _normalize_decision(decision)
         if normalized.blocked:
@@ -152,10 +157,11 @@ async def run_command_guards(context: CommandGuardContext) -> CommandGuardDecisi
 
 
 def _normalize_decision(decision: object) -> CommandGuardDecision:
-    """兼容守卫返回 None/False 表示放行，True 表示无回复拦截。"""
+    """守卫必须返回明确决定；未知返回值按失败关闭。"""
 
     if isinstance(decision, CommandGuardDecision):
         return decision
-    if decision is True:
-        return CommandGuardDecision.block()
-    return CommandGuardDecision.allow()
+    return CommandGuardDecision.block(
+        "命令暂时无法执行，请稍后重试。",
+        reason="命令守卫返回了无效结果",
+    )

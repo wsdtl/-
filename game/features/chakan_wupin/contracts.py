@@ -1,0 +1,17 @@
+"""查看物品玩法的公共结果。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from game.core.item_catalog import ItemDetail, ItemSummary
+
+
+@dataclass(frozen=True)
+class ItemInspectionResult:
+    query: str
+    detail: ItemDetail | None = None
+    candidates: tuple[ItemSummary, ...] = ()
+
+
+__all__ = ["ItemInspectionResult"]

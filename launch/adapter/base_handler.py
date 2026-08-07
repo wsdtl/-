@@ -34,7 +34,7 @@ class BaseMessageHandler(BaseAdapter):
     每个驱动器应该独立维护自己的 handler、dispatch、manager 和队列策略。
 
     业务回调可接收的公共上下文字段：
-    - client_id: 触发消息的调用方身份。
+    - user_id: 触发消息的统一游戏用户编号。
     - message: command 模式下命令词之后的参数，其余模式为空。
     - manager: 当前驱动器的回复器。
     - cmd: 命令片段。
@@ -45,7 +45,7 @@ class BaseMessageHandler(BaseAdapter):
     - match: regex 模式的完整消息命中对象，其余模式为 None。
 
     驱动器回复器必须兼容：
-        async def send(message, client_id, is_log=True, request_id=None) -> bool
+        async def send(message, is_log=True, request_id=None) -> bool
     """
 
     @staticmethod

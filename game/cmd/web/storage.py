@@ -19,7 +19,7 @@ class MessageFlowRow:
     direction: str
     adapter: str
     request_id: str
-    client_id: str
+    user_id: str
     sender_name: str
     message_type: str
     content: str
@@ -62,7 +62,7 @@ class MessageFlowStore:
                     direction TEXT NOT NULL,
                     adapter TEXT NOT NULL,
                     request_id TEXT NOT NULL,
-                    client_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
                     sender_name TEXT NOT NULL,
                     message_type TEXT NOT NULL,
                     content TEXT NOT NULL,
@@ -86,7 +86,7 @@ class MessageFlowStore:
         direction: str,
         adapter: str,
         request_id: str,
-        client_id: str,
+        user_id: str,
         sender_name: str,
         message_type: str,
         content: str,
@@ -100,7 +100,7 @@ class MessageFlowStore:
             cursor = connection.execute(
                 """
                 INSERT INTO log_message_flows (
-                    direction, adapter, request_id, client_id, sender_name,
+                    direction, adapter, request_id, user_id, sender_name,
                     message_type, content, image, interactions_json,
                     content_truncated, created_at, created_at_timestamp, expires_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -109,7 +109,7 @@ class MessageFlowStore:
                     direction,
                     adapter,
                     request_id,
-                    client_id,
+                    user_id,
                     sender_name,
                     message_type,
                     content,
@@ -216,7 +216,7 @@ def _row(row: sqlite3.Row) -> MessageFlowRow:
         direction=str(row["direction"]),
         adapter=str(row["adapter"]),
         request_id=str(row["request_id"]),
-        client_id=str(row["client_id"]),
+        user_id=str(row["user_id"]),
         sender_name=str(row["sender_name"]),
         message_type=str(row["message_type"]),
         content=str(row["content"]),

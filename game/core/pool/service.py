@@ -42,8 +42,8 @@ class PoolService:
             raise RuntimeError("JSON 数据微服务必须先于资源池微服务启动")
         for section in sorted(WEIGHTED_SECTIONS):
             self._weights[section] = {
-                identity: _weight(identity, fields.get("权重"))
-                for identity, fields in self._data.entity_fields(section, ("权重",))
+                entity_id: _weight(entity_id, fields.get("权重"))
+                for entity_id, fields in self._data.entity_fields(section, ("权重",))
             }
         self._initialized = True
         return self.status()
@@ -111,7 +111,7 @@ class PoolService:
             cached = self._candidate_cache.get(cache_key)
             if cached is not None:
                 return cached
-            identities = (
+            entity_ids = (
                 self._data.all_members(section)
                 if full_pool
                 else self._data.pool_members(
@@ -121,16 +121,16 @@ class PoolService:
                 )
             )
             candidates = tuple(
-                PoolEntry(identity=identity, weight=self._weights[section][identity])
-                for identity in identities
+                PoolEntry(entity_id=entity_id, weight=self._weights[section][entity_id])
+                for entity_id in entity_ids
             )
             self._candidate_cache[cache_key] = candidates
             return candidates
 
 
-def _weight(identity: str, weight: object) -> int:
+def _weight(entity_id: str, weight: object) -> int:
     if isinstance(weight, bool) or not isinstance(weight, int) or weight < 1:
-        raise ValueError(f"资源池实体 {identity} 缺少正整数权重")
+        raise ValueError(f"资源池实体 {entity_id} 缺少正整数权重")
     return weight
 
 

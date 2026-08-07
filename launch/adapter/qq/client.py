@@ -4,22 +4,23 @@
 和发送消息。驱动器的 webhook 接收、事件排队和命令派发不放在这里。
 """
 
-from base64 import b64encode
 import json
 import time
+from base64 import b64encode
 from threading import Lock
 from typing import Any, Dict
 
 import urllib3
 from urllib3.exceptions import (
     ConnectTimeoutError,
-    HTTPError as Urllib3Error,
     NewConnectionError,
 )
+from urllib3.exceptions import (
+    HTTPError as Urllib3Error,
+)
 
-from launch.log import C, logger
 from launch.config import config
-
+from launch.log import C, logger
 
 QQ_TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 QQ_OPEN_API_BASE = "https://api.sgroup.qq.com"
@@ -69,7 +70,7 @@ class QqOpenApiClient:
 
     def send_c2c_payload(
         self,
-        openid: str,
+        user_id: str,
         payload: dict,
         message_id: str = "",
         event_id: str = "",
@@ -78,7 +79,7 @@ class QqOpenApiClient:
         """按 QQ OpenAPI 消息载荷回复 C2C 私聊消息。"""
 
         return self._post_openapi(
-            f"/v2/users/{openid}/messages",
+            f"/v2/users/{user_id}/messages",
             self._reply_payload(payload, message_id, event_id, is_wakeup=is_wakeup),
         )
 
@@ -94,14 +95,14 @@ class QqOpenApiClient:
             log_title="QQ 按钮回调已确认",
         )
 
-    def upload_c2c_image(self, openid: str, image_bytes: bytes) -> str:
+    def upload_c2c_image(self, user_id: str, image_bytes: bytes) -> str:
         """上传 C2C 私聊图片，返回发消息接口可使用的 file_info。"""
 
-        return self._upload_image_file_info(f"/v2/users/{openid}/files", image_bytes)
+        return self._upload_image_file_info(f"/v2/users/{user_id}/files", image_bytes)
 
     def send_group_payload(
         self,
-        group_openid: str,
+        group_id: str,
         payload: dict,
         message_id: str = "",
         event_id: str = "",
@@ -109,14 +110,14 @@ class QqOpenApiClient:
         """按 QQ OpenAPI 消息载荷回复群消息。"""
 
         return self._post_openapi(
-            f"/v2/groups/{group_openid}/messages",
+            f"/v2/groups/{group_id}/messages",
             self._reply_payload(payload, message_id, event_id),
         )
 
-    def upload_group_image(self, group_openid: str, image_bytes: bytes) -> str:
+    def upload_group_image(self, group_id: str, image_bytes: bytes) -> str:
         """上传群聊图片，返回发消息接口可使用的 file_info。"""
 
-        return self._upload_image_file_info(f"/v2/groups/{group_openid}/files", image_bytes)
+        return self._upload_image_file_info(f"/v2/groups/{group_id}/files", image_bytes)
 
     @staticmethod
     def _reply_payload(
@@ -393,7 +394,7 @@ class QqOpenApiClient:
             target_type = "私聊" if parts[-3] == "users" else "群聊"
             return [
                 C.kv("target", target_type),
-                C.kv("openid", QqOpenApiClient._short_id(parts[-2])),
+                C.kv("target", QqOpenApiClient._short_id(parts[-2])),
             ]
         return [C.kv("path", path)]
 

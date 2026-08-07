@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
+from types import MappingProxyType
 from uuid import uuid4
 
 from .contracts import (
@@ -283,7 +284,7 @@ def _snapshot(address: StateAddress, row: sqlite3.Row | tuple[object, ...]) -> S
     value = json.loads(str(state_json))
     if not isinstance(value, dict):
         raise DatabaseError("状态 JSON 根值必须是对象")
-    return StateSnapshot(address, value, int(version), str(updated_at))
+    return StateSnapshot(address, _freeze_json(value), int(version), str(updated_at))
 
 
 def _receipt_from_row(
@@ -384,6 +385,16 @@ def _json_value(value: object) -> object:
         return {str(key): _json_value(raw) for key, raw in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_value(item) for item in value]
+    return value
+
+
+def _freeze_json(value: object) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType(
+            {str(key): _freeze_json(raw) for key, raw in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
     return value
 
 

@@ -58,34 +58,16 @@ def current_qq_message_id() -> str:
     return current_qq_event().message_id
 
 
-def current_qq_user_openid() -> str:
-    """读取当前 QQ 私聊用户 openid；群聊通常为空。"""
+def current_qq_user_id() -> str:
+    """读取当前 QQ 用户编号，与公共 user_id 完全一致。"""
 
-    return current_qq_event().user_openid
-
-
-def current_qq_member_openid() -> str:
-    """读取当前 QQ 群成员 openid；私聊通常为空。"""
-
-    return current_qq_event().member_openid
+    return current_qq_event().user_id
 
 
-def current_qq_actor_openid() -> str:
-    """读取当前 QQ 操作者统一 openid，与 client_id 对齐。"""
+def current_qq_group_id() -> str:
+    """读取当前 QQ 群编号；私聊事件返回空字符串。"""
 
-    return current_qq_event().actor_openid
-
-
-def current_qq_button_permission_user_id() -> str:
-    """读取 QQ 按钮权限候选 ID；正式安全校验仍应使用 actor_openid。"""
-
-    return current_qq_actor_openid()
-
-
-def current_qq_group_openid() -> str:
-    """读取当前 QQ 群 openid；私聊事件返回空字符串。"""
-
-    return current_qq_event().group_openid
+    return current_qq_event().group_id
 
 
 def current_qq_interaction_id() -> str:

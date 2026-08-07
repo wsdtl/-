@@ -76,6 +76,37 @@ def test_commit_writes_multiple_states_atomically(tmp_path) -> None:
     assert character.version == inventory.version == 1
 
 
+def test_returned_snapshot_is_recursively_read_only(tmp_path) -> None:
+    service = DatabaseService(tmp_path / "game.db")
+    service.initialize()
+    _run(
+        service.commit(
+            _command(
+                request_id="event-read-only",
+                mutations=(
+                    StateMutation(
+                        "character",
+                        "main",
+                        {"属性": {"攻击": 12}, "功法": ["310001"]},
+                        0,
+                    ),
+                ),
+            )
+        )
+    )
+
+    snapshot = _run(service.get(StateAddress("10001", "character", "main")))
+
+    assert snapshot is not None
+    with pytest.raises(TypeError):
+        snapshot.value["属性"] = {}  # type: ignore[index]
+    attributes = snapshot.value["属性"]
+    assert isinstance(attributes, dict) is False
+    with pytest.raises(TypeError):
+        attributes["攻击"] = 99  # type: ignore[index]
+    assert snapshot.value["功法"] == ("310001",)
+
+
 def test_same_request_is_replayed_without_second_write(tmp_path) -> None:
     service = DatabaseService(tmp_path / "game.db")
     service.initialize()

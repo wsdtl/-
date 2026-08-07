@@ -125,7 +125,7 @@ class QqDriverRuntime:
             )
             return
 
-        if not await self._reserve_user_event(event.client_id):
+        if not await self._reserve_user_event(event.user_id):
             logger.opt(colors=True).warning(
                 C.join(
                     C.warn("QQ 单用户事件排队已满"),
@@ -136,7 +136,7 @@ class QqDriverRuntime:
             return
 
         if not await self._reserve_waiting_event():
-            await self._release_user_event(event.client_id)
+            await self._release_user_event(event.user_id)
             logger.opt(colors=True).warning(
                 C.join(
                     C.warn("QQ webhook 后台队列已满"),
@@ -147,7 +147,7 @@ class QqDriverRuntime:
 
         if not await self._deduplicator.remember_once(event):
             await self._release_waiting_event()
-            await self._release_user_event(event.client_id)
+            await self._release_user_event(event.user_id)
             logger.opt(colors=True).warning(
                 C.join(
                     C.warn("QQ 重复事件已跳过"),
@@ -161,7 +161,7 @@ class QqDriverRuntime:
         except asyncio.QueueFull:
             await self._deduplicator.forget(event)
             await self._release_waiting_event()
-            await self._release_user_event(event.client_id)
+            await self._release_user_event(event.user_id)
             logger.opt(colors=True).warning(
                 C.join(
                     C.warn("QQ webhook 后台队列已满"),
@@ -173,7 +173,7 @@ class QqDriverRuntime:
         emit_message_event(
             event_from_incoming(
                 adapter="qq",
-                client_id=event.client_id,
+                user_id=event.user_id,
                 request_id=event.event_id or event.message_id,
                 message_type="text",
                 content=event.content,
@@ -243,7 +243,7 @@ class QqDriverRuntime:
 
     async def _run_event_task(self, event: QqMessageEvent) -> None:
         async def run_with_limits() -> bool:
-            user_lock = await self._user_lock(event.client_id)
+            user_lock = await self._user_lock(event.user_id)
             async with user_lock:
                 if self._process_event is None:
                     raise RuntimeError("QQ 事件处理器尚未绑定")
@@ -263,7 +263,7 @@ class QqDriverRuntime:
             )
         finally:
             await self._release_waiting_event()
-            await self._release_user_event(event.client_id)
+            await self._release_user_event(event.user_id)
 
     async def _ack_interaction(self, interaction_id: str) -> None:
         try:
@@ -324,7 +324,7 @@ class QqDriverRuntime:
             except asyncio.QueueEmpty:
                 return dropped
             await self._release_waiting_event()
-            await self._release_user_event(event.client_id)
+            await self._release_user_event(event.user_id)
             queue.task_done()
             dropped += 1
 
@@ -340,27 +340,27 @@ class QqDriverRuntime:
             if self._waiting_events > 0:
                 self._waiting_events -= 1
 
-    async def _reserve_user_event(self, client_id: str) -> bool:
+    async def _reserve_user_event(self, user_id: str) -> bool:
         async with self._user_guard:
-            count = self._user_counts.get(client_id, 0)
+            count = self._user_counts.get(user_id, 0)
             if count >= self.settings.user_max_waiting_events:
                 return False
-            self._user_counts[client_id] = count + 1
-            self._user_locks.setdefault(client_id, asyncio.Lock())
+            self._user_counts[user_id] = count + 1
+            self._user_locks.setdefault(user_id, asyncio.Lock())
             return True
 
-    async def _release_user_event(self, client_id: str) -> None:
+    async def _release_user_event(self, user_id: str) -> None:
         async with self._user_guard:
-            count = self._user_counts.get(client_id, 0) - 1
+            count = self._user_counts.get(user_id, 0) - 1
             if count > 0:
-                self._user_counts[client_id] = count
+                self._user_counts[user_id] = count
                 return
-            self._user_counts.pop(client_id, None)
-            self._user_locks.pop(client_id, None)
+            self._user_counts.pop(user_id, None)
+            self._user_locks.pop(user_id, None)
 
-    async def _user_lock(self, client_id: str) -> asyncio.Lock:
+    async def _user_lock(self, user_id: str) -> asyncio.Lock:
         async with self._user_guard:
-            return self._user_locks.setdefault(client_id, asyncio.Lock())
+            return self._user_locks.setdefault(user_id, asyncio.Lock())
 
     def _shutdown_interaction_executor(self) -> None:
         executor = self._interaction_executor

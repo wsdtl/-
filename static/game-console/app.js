@@ -285,7 +285,7 @@
     const meta = document.createElement("div");
     meta.className = "message-meta";
     const sender = document.createElement("span");
-    sender.textContent = record.sender_name || record.client_id || "未知";
+    sender.textContent = record.sender_name || record.user_id || "未知";
     const adapter = document.createElement("span");
     adapter.className = `adapter-tag ${record.adapter === "local" ? "local" : "qq"}`;
     adapter.textContent = record.adapter === "local" ? "本地" : record.adapter === "qq" ? "QQ" : record.adapter;
@@ -329,7 +329,7 @@
       button.className = `action-button ${interaction.style || "primary"}`;
       button.textContent = interaction.label || "执行";
       button.dataset.flowId = String(record.flow_id);
-      button.dataset.interactionId = interaction.id;
+      button.dataset.actionId = interaction.action_id;
       button.dataset.behavior = interaction.behavior || "callback";
       button.dataset.value = interaction.data || "";
       container.appendChild(button);
@@ -338,7 +338,7 @@
   }
 
   async function handleMessageClick(event) {
-    const target = event.target.closest("[data-interaction-id]");
+    const target = event.target.closest("[data-action-id]");
     if (!target) return;
     const behavior = target.dataset.behavior;
     if (behavior === "fill") {
@@ -351,11 +351,11 @@
     }
     target.disabled = true;
     try {
-      const data = await requestJson("/game-console/api/interaction", {
+      const data = await requestJson("/game-console/api/action", {
         method: "POST",
         body: JSON.stringify({
           flow_id: Number(target.dataset.flowId),
-          interaction_id: target.dataset.interactionId,
+          action_id: target.dataset.actionId,
         }),
       });
       if (data.kind === "fill") prefill(data.value || "");

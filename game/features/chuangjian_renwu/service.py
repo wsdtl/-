@@ -46,20 +46,20 @@ class CreateCharacterFeature:
         if not isinstance(source, Mapping):
             raise JsonDataError("人物.json.创建缺少初始出生地")
         section = str(source.get("数据集") or "").strip()
-        identity = str(source.get("实体") or "").strip()
+        entity_id = str(source.get("实体") or "").strip()
         field = str(source.get("字段") or "").strip()
-        entity = self._data.entity(section, identity)
+        entity = self._data.entity(section, entity_id)
         birthplace = str(entity.get(field) or "").strip()
         if not birthplace:
             raise JsonDataError("人物初始出生地引用没有得到地点名")
-        self._world.locate(LocationQuery(name=birthplace))
+        self._world.locate(LocationQuery(location_name=birthplace))
         self._birthplace = birthplace
         return birthplace
 
     async def create(self, request: CreateCharacterRequest) -> CreateCharacterResult:
         if not self._birthplace:
             raise RuntimeError("创建人物玩法微服务尚未初始化")
-        location = self._world.locate(LocationQuery(name=self._birthplace))
+        location = self._world.locate(LocationQuery(location_name=self._birthplace))
         try:
             created = await self._character.create(
                 CharacterCreateCommand(
@@ -67,7 +67,7 @@ class CreateCharacterFeature:
                     request_id=request.request_id,
                     name=request.name,
                     gender=request.gender,
-                    birth_xy=location.coordinate,
+                    birth_xy=location.xy,
                 )
             )
         except CharacterInputError as exc:
@@ -88,8 +88,8 @@ class CreateCharacterFeature:
             gender=created.gender,
             realm_id=created.realm_id,
             realm_name=created.realm_name,
-            location_name=location.name,
-            coordinate=location.coordinate,
+            location_name=location.location_name,
+            xy=location.xy,
             region=location.region,
             terrain=location.terrain,
             altitude=location.altitude,

@@ -12,7 +12,6 @@ from message import render_local_message
 from ..context import SendOptions, SendRequest, current_reply_target
 from .event import LocalCommandEvent
 
-
 current_event: ContextVar[LocalCommandEvent | None] = ContextVar(
     "local_current_event",
     default=None,
@@ -24,7 +23,7 @@ class LocalReply:
     """本地驱动器捕获到的一次业务回复。"""
 
     message: object
-    client_id: str
+    user_id: str
     options: SendOptions
     request_id: object | None = None
 
@@ -67,7 +66,6 @@ class LocalReplyManager:
     async def send(
         self,
         message: object,
-        client_id: str,
         is_log: bool = True,
         request_id: object | None = None,
     ) -> bool:
@@ -77,7 +75,7 @@ class LocalReplyManager:
         if result is None:
             if is_log:
                 logger.opt(colors=True).warning(
-                    f"{C.warn('本地回复失败，缺少本地分发上下文')} {C.kv('client', client_id)}"
+                    f"{C.warn('本地回复失败，缺少本地分发上下文')} {C.kv('user', '-') }"
                 )
             return False
 
@@ -89,11 +87,11 @@ class LocalReplyManager:
                 )
             return False
 
-        reply_client_id = self._reply_client_id(request, client_id)
+        reply_user_id = self._reply_user_id(request, result.event.user_id)
         reply_request_id = request.request_id or result.event.event_id
         reply = LocalReply(
             message=render_local_message(request.message, markdown=request.options.markdown),
-            client_id=reply_client_id,
+            user_id=reply_user_id,
             options=request.options,
             request_id=reply_request_id,
         )
@@ -102,7 +100,7 @@ class LocalReplyManager:
         emit_message_event(
             event_from_outgoing(
                 adapter="local",
-                client_id=reply.client_id,
+                user_id=reply.user_id,
                 request_id=reply_request_id,
                 message=request.message,
             )
@@ -128,14 +126,14 @@ class LocalReplyManager:
         )
 
     @staticmethod
-    def _reply_client_id(request: SendRequest, fallback: str) -> str:
-        """优先使用显式回复目标上的入口身份。"""
+    def _reply_user_id(request: SendRequest, fallback: str) -> str:
+        """优先使用显式回复目标上的游戏用户身份。"""
 
-        if request.target is not None and request.target.client_id:
-            return str(request.target.client_id)
+        if request.target is not None and request.target.user_id:
+            return str(request.target.user_id)
         event = current_event.get()
-        if event is not None and event.client_id:
-            return str(event.client_id)
+        if event is not None and event.user_id:
+            return str(event.user_id)
         return str(fallback or "").strip()
 
 

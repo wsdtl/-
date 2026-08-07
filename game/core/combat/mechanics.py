@@ -554,11 +554,11 @@ class MechanismRuntime:
         kind = str(condition.get("类型") or "")
         expected = str(condition.get("值") or "")
         if kind == "参战身份":
-            return subject.kind == expected or expected in subject.tags
+            return subject.combatant_type == expected or expected in subject.tags
         if kind == "形态":
             return subject.form == expected
         if kind == "性别":
-            return subject.sex == expected
+            return subject.gender == expected
         aliases = {"资源类型": "资源", "行动类型": "行动类型", "技能类型": "技能类型"}
         return str(event_values.get(aliases.get(kind, kind), "")) == expected
 
@@ -1371,7 +1371,7 @@ class MechanismRuntime:
                 spirit=max(0.0, float(attributes.get("精神上限", 0))),
                 skills=[self._skill_from_definition(source, index, value, prefix=object_id) for index, value in enumerate(definition.get("技能") or ())],
                 passives=[{"机制": f"{object_id}:{i}", "结算顺序": i, "节点": copy.deepcopy(value)} for i, value in enumerate(definition.get("被动") or ())],
-                kind=str(definition.get("身份") or "召唤物"),
+                combatant_type=str(definition.get("身份") or "召唤物"),
                 side=side,
                 owner_id=source.id,
                 controller_id=source.controller_id or source.id,
@@ -1391,7 +1391,7 @@ class MechanismRuntime:
                 attributes={"血气上限": durability, "精神上限": 0, "护盾上限": 0, "攻击": 0, "防御": float(definition.get("防御", 0)), "速度": 1},
                 health=durability,
                 spirit=0,
-                kind="构造物",
+                combatant_type="构造物",
                 side=side,
                 owner_id=source.id,
                 controller_id=source.id,
@@ -1413,12 +1413,12 @@ class MechanismRuntime:
         objects = [obj for obj in context.combat_objects.values() if obj.id == object_id or (not object_id and obj.owner_id == source.id)]
         for obj in objects:
             shell = context.fighter_by_id(obj.id)
-            self._retire_battle_object(context, source, shell or target, obj.kind, object_id=obj.id)
+            self._retire_battle_object(context, source, shell or target, obj.object_type, object_id=obj.id)
         return bool(candidates or objects)
 
     def _retire_battle_object(self, context, source, fighter, kind, *, object_id=""):
-        identity = object_id or fighter.id
-        obj = context.combat_objects.pop(identity, None)
+        combat_object_id = object_id or fighter.id
+        obj = context.combat_objects.pop(combat_object_id, None)
         if obj is not None:
             obj.active = False
             context.mark_listener_index_dirty()
@@ -1431,7 +1431,7 @@ class MechanismRuntime:
             kind="战斗对象退场后",
             source=source,
             target=fighter,
-            values={"对象ID": identity, "对象类型": kind},
+            values={"对象ID": combat_object_id, "对象类型": kind},
         )
         self._remove_source_lifetimes(context, fighter)
         return True
@@ -1704,16 +1704,16 @@ class MechanismRuntime:
             candidates = [value for value in candidates if not value.alive]
         if selector.get("排除自身", False):
             candidates = [value for value in candidates if value is not source]
-        identity = str(selector.get("身份") or "")
-        if identity:
-            candidates = [value for value in candidates if value.kind == identity or identity in value.tags]
+        combatant_type = str(selector.get("身份") or "")
+        if combatant_type:
+            candidates = [value for value in candidates if value.combatant_type == combatant_type or combatant_type in value.tags]
         object_type = str(selector.get("对象类型") or "参战者")
         if object_type == "参战者":
-            candidates = [value for value in candidates if value.kind != "构造物"]
+            candidates = [value for value in candidates if value.combatant_type != "构造物"]
         elif object_type == "召唤物":
             candidates = [value for value in candidates if value.summoned]
         elif object_type == "构造物":
-            candidates = [value for value in candidates if value.kind == "构造物"]
+            candidates = [value for value in candidates if value.combatant_type == "构造物"]
         elif object_type != "任意":
             raise ValueError(f"未知战斗对象类型：{object_type}")
         status_name = str(selector.get("拥有状态") or "")

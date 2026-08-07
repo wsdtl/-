@@ -175,11 +175,11 @@ def build_battle_report_presentation(
             f"战场: {field['name']} · {field['stage_name']}",
             f"地势承伤: {field['accumulated_damage']} / {field['health_basis']}",
         ]
-        coordinate = field.get("coordinate")
-        if isinstance(coordinate, Mapping):
+        xy = field.get("xy")
+        if isinstance(xy, Mapping):
             field_lines.insert(
                 1,
-                f"xy: ({coordinate['x']}, {coordinate['y']}) · 海拔 {field['altitude']} 米",
+                f"xy: ({xy['x']}, {xy['y']}) · 海拔 {field['altitude']} 米",
             )
     formation_lines = [
         _formation_summary_line(value) for value in report.get("formations") or ()

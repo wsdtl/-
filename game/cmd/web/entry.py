@@ -6,7 +6,7 @@ from launch.paths import public_url
 from message import Action, M
 
 
-async def show_entry(*, client_id: str, manager) -> None:
+async def show_entry(*, manager) -> None:
     url = public_url("game-console")
     reply = (
         M.document()
@@ -15,7 +15,7 @@ async def show_entry(*, client_id: str, manager) -> None:
         .action(Action("web_console.open", "打开管理台", url, behavior="link"))
         .build()
     )
-    await manager.send(reply, client_id)
+    await manager.send(reply)
 
 
 __all__ = ["show_entry"]

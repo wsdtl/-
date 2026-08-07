@@ -171,7 +171,6 @@ class AdapterReplyManager:
     async def send(
         self,
         message: object,
-        client_id: str,
         is_log: bool = True,
         request_id: object | None = None,
     ) -> bool:
@@ -193,14 +192,13 @@ class AdapterReplyManager:
                 logger.opt(colors=True).warning(
                     C.join(
                         C.warn("回复失败，缺少当前适配器上下文"),
-                        C.kv("client", client_id),
+                        C.kv("user", _current_user_id()),
                     )
                 )
             return False
 
         return await manager.send(
             message,
-            client_id,
             is_log=is_log,
             request_id=request_id,
         )
@@ -229,6 +227,11 @@ class AdapterReplyManager:
         if spec is None:
             return None
         return spec.manager
+
+
+def _current_user_id() -> str:
+    context = current_message_context()
+    return context.user_id if context is not None else "-"
 
 
 manager = AdapterReplyManager()

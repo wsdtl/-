@@ -60,11 +60,11 @@ class JsonDataService:
             {document.descriptor.data_name: document.value for document in documents}
         )
 
-    def entity(self, section: str, identity: str) -> Mapping[str, Any]:
+    def entity(self, section: str, entity_id: str) -> Mapping[str, Any]:
         """按类别和稳定身份取得一个不可变正式实体。"""
 
         section_name = str(section or "").strip()
-        entity_id = str(identity or "").strip()
+        entity_id = str(entity_id or "").strip()
         loaded = self._require_loaded()
         values = loaded.entities.get(section_name)
         if values is None:
@@ -84,11 +84,11 @@ class JsonDataService:
             raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
         return values
 
-    def entity_record(self, section: str, identity: str) -> JsonEntity:
+    def entity_record(self, section: str, entity_id: str) -> JsonEntity:
         """取得实体类别、编号类别、源文件和不可变正文。"""
 
         section_name = str(section or "").strip()
-        entity_id = str(identity or "").strip()
+        entity_id = str(entity_id or "").strip()
         records = self._require_loaded().entity_records.get(section_name)
         if records is None:
             raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
@@ -111,8 +111,8 @@ class JsonDataService:
         if values is None:
             raise JsonDataError(f"未知实体类别：{section_name or '<空>'}")
         return tuple(
-            (identity, _select_fields(value, field_names))
-            for identity, value in values.items()
+            (entity_id, _select_fields(value, field_names))
+            for entity_id, value in values.items()
         )
 
     def all_members(self, section: str) -> tuple[str, ...]:
@@ -139,7 +139,7 @@ class JsonDataService:
             section,
             deduplicate=deduplicate,
         )
-        return tuple(identity for identity, _ in values)
+        return tuple(entity_id for entity_id, _ in values)
 
     def pool_fields(
         self,
@@ -158,7 +158,8 @@ class JsonDataService:
             deduplicate=deduplicate,
         )
         return tuple(
-            (identity, _select_fields(value, field_names)) for identity, value in values
+            (entity_id, _select_fields(value, field_names))
+            for entity_id, value in values
         )
 
     def document_paths(self) -> tuple[str, ...]:

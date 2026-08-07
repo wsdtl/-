@@ -8,7 +8,7 @@ from message import Action, DocumentMessage, M
 GAME_NAME = "晓楠修仙"
 
 
-async def show_help(query: str = "", *, client_id: str, manager) -> None:
+async def show_help(query: str = "", *, manager) -> None:
     normalized = " ".join(str(query or "").split())
     if not normalized:
         message = _home_message()
@@ -18,7 +18,7 @@ async def show_help(query: str = "", *, client_id: str, manager) -> None:
         message = _detail_message(entry)
     else:
         message = _not_found_message(normalized)
-    await manager.send(message, client_id)
+    await manager.send(message)
 
 
 def _home_message() -> DocumentMessage:

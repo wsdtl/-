@@ -20,7 +20,7 @@ NUMBERED_ENTITY_LIST = "编号实体列表"
 NUMBERED_ENTITY_POOL = "编号实体池"
 NAMED_ENTITY_POOL = "命名实体池"
 NAMED_ENTITY = "命名实体"
-IDENTITY_POOL = "编号池"
+ENTITY_ID_POOL = "编号池"
 SOURCE_POOL = "源池"
 
 DOCUMENT_SHAPES = frozenset(
@@ -31,7 +31,7 @@ DOCUMENT_SHAPES = frozenset(
         NUMBERED_ENTITY_POOL,
         NAMED_ENTITY_POOL,
         NAMED_ENTITY,
-        IDENTITY_POOL,
+        ENTITY_ID_POOL,
         SOURCE_POOL,
     }
 )
@@ -41,7 +41,7 @@ ENTITY_SHAPES = frozenset(
         NUMBERED_ENTITY_POOL,
         NAMED_ENTITY_POOL,
         NAMED_ENTITY,
-        IDENTITY_POOL,
+        ENTITY_ID_POOL,
         SOURCE_POOL,
     }
 )

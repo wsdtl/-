@@ -29,9 +29,9 @@ class CommandRequest(BaseModel):
     command: str
 
 
-class InteractionRequest(BaseModel):
+class ActionRequest(BaseModel):
     flow_id: int
-    interaction_id: str
+    action_id: str
 
 
 def current_session(request: Request) -> ConsoleSession:
@@ -186,15 +186,13 @@ async def dispatch_command(
     }
 
 
-@router.post("/api/interaction")
-async def dispatch_interaction(
-    payload: InteractionRequest,
+@router.post("/api/action")
+async def dispatch_action(
+    payload: ActionRequest,
     _: Annotated[ConsoleSession, Depends(write_session)],
 ) -> dict[str, object]:
     try:
-        result = await service.execute_interaction(
-            payload.flow_id, payload.interaction_id
-        )
+        result = await service.execute_action(payload.flow_id, payload.action_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionError as exc:

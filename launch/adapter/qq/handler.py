@@ -21,7 +21,7 @@ from ..context import (
 )
 from ..depends import call_with_dependencies
 from .client import client
-from .event import QqMessageEvent, parse_message_event, qq_message_identity
+from .event import QqMessageEvent, parse_message_event
 from .manager import current_event, manager
 from .rules import (
     QqCommandMatch,
@@ -292,7 +292,7 @@ class QqEventHandler(BaseMessageHandler):
             if not decision.blocked:
                 return False
             if decision.reply is not None:
-                await manager.send(decision.reply, event.client_id)
+                await manager.send(decision.reply)
             return True
         finally:
             reset_current_message_context(context_token)
@@ -305,7 +305,7 @@ class QqEventHandler(BaseMessageHandler):
             await call_with_dependencies(
                 item.rule.func,
                 {
-                    "client_id": event.client_id,
+                    "user_id": message_context.user_id,
                     "message": item.message,
                     "manager": manager,
                     "cmd": item.command,
@@ -327,22 +327,21 @@ class QqEventHandler(BaseMessageHandler):
         )
         reply_target = ReplyTarget(
             adapter="qq",
-            client_id=event.client_id,
+            user_id=event.user_id,
+            target_id=event.group_id or event.user_id,
             conversation_type=conversation_type,
             driver_target=event,
         )
         return MessageContext(
             adapter="qq",
-            client_id=event.client_id,
+            user_id=event.user_id,
+            request_id=event.event_id or event.interaction_id or event.message_id,
             command=item.command,
             message=item.message,
             raw_message=event.content,
             conversation_type=conversation_type,
             reply_target=reply_target,
             capabilities=QqEventHandler.CAPABILITIES,
-            identity=qq_message_identity(
-                event, bot_app_id=config.get("QQ_BOT_APP_ID", "")
-            ),
             driver_context=event,
             sender_name=event.sender_name,
         )
@@ -363,10 +362,9 @@ class QqEventHandler(BaseMessageHandler):
     ) -> list[str]:
         parts = [
             C.kv("type", QqEventHandler._event_type_label(event.event_type)),
-            C.kv("client", QqEventHandler._short_id(event.client_id)),
-            C.kv("group", QqEventHandler._short_id(event.group_openid)),
+            C.kv("user", QqEventHandler._short_id(event.user_id)),
+            C.kv("group", QqEventHandler._short_id(event.group_id)),
             C.kv("msg", QqEventHandler._short_id(event.message_id)),
-            C.kv("actor_source", QqEventHandler._actor_identity_source(event)),
         ]
         if event.interaction_id:
             parts.append(
@@ -375,14 +373,6 @@ class QqEventHandler(BaseMessageHandler):
         if include_message:
             parts.append(C.kv("message", QqEventHandler._short_text(event.content)))
         return parts
-
-    @staticmethod
-    def _actor_identity_source(event: QqMessageEvent) -> str:
-        if event.member_openid and event.actor_openid == event.member_openid:
-            return "member"
-        if event.user_openid and event.actor_openid == event.user_openid:
-            return "user"
-        return "fallback"
 
     @staticmethod
     def _event_type_label(event_type: str) -> str:

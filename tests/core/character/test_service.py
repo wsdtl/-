@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from game.core.activity import ActivityService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateAddress
+from game.core.player_state import PlayerStateService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CharacterExistsError,
@@ -30,9 +30,9 @@ def _feature(tmp_path: Path) -> tuple[CreateCharacterFeature, DatabaseService]:
     database.initialize()
     world = WorldService(data)
     world.initialize()
-    activity = ActivityService(data, database)
-    activity.initialize()
-    character = CharacterService(data, database, activity)
+    player_state = PlayerStateService(data, database)
+    player_state.initialize()
+    character = CharacterService(data, database, player_state)
     character.initialize()
     feature = CreateCharacterFeature(data, world, character)
     feature.initialize()
@@ -56,13 +56,13 @@ def test_create_character_commits_all_initial_states(tmp_path: Path) -> None:
         ("character", "main"),
         ("cultivation", "main"),
         ("weapon", "main"),
-        ("character_status", "main"),
+        ("player_state", "main"),
         ("inventory", "丹药:100002:01"),
         ("inventory", "丹药:100005:01"),
     }
     character = _run(database.get(StateAddress("qq-1", "character", "main")))
     assert character is not None
-    assert character.value["位置"] == {"xy": [8, 8]}
+    assert character.value["位置"] == {"xy": (8, 8)}
     assert "状态" not in character.value
 
 

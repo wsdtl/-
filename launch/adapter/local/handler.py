@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Pattern, Set, Tuple, Union
 
-from launch.config import config
 from launch.log import C, logger
 from launch.message_events import emit_message_event, event_from_incoming
 
@@ -21,7 +20,7 @@ from ..context import (
     set_current_message_context,
 )
 from ..depends import call_with_dependencies
-from .event import LocalCommandEvent, local_command_event, local_message_identity
+from .event import LocalCommandEvent, local_command_event
 from .manager import LocalDispatchResult, current_event, manager
 
 TextCommands = Union[str, List[str], Tuple[str, ...]]
@@ -87,26 +86,22 @@ class LocalEventHandler(BaseMessageHandler):
     async def dispatch(
         event: LocalCommandEvent | None = None,
         *,
-        client_id: str = "",
+        user_id: str = "",
         raw_message: str = "",
         sender_name: str = "",
         conversation_type: str = CONVERSATION_PRIVATE,
         event_id: str = "",
-        bypass_guards: bool = False,
     ) -> LocalDispatchResult:
         """分发一条本地命令事件。"""
 
         if event is None:
             event = local_command_event(
-                client_id=client_id,
+                user_id=user_id,
                 raw_message=raw_message,
                 sender_name=sender_name,
                 conversation_type=conversation_type,
                 event_id=event_id,
-                bypass_guards=bypass_guards,
             )
-        elif bypass_guards and not event.bypass_guards:
-            event = replace(event, bypass_guards=True)
         result = LocalDispatchResult(event=event)
         result_token = manager.bind_result(result)
         event_token = current_event.set(event)
@@ -114,7 +109,7 @@ class LocalEventHandler(BaseMessageHandler):
             emit_message_event(
                 event_from_incoming(
                     adapter="local",
-                    client_id=event.client_id,
+                    user_id=event.user_id,
                     request_id=event.event_id,
                     message_type="text",
                     content=event.raw_message,
@@ -128,7 +123,7 @@ class LocalEventHandler(BaseMessageHandler):
                 logger.opt(colors=True).debug(
                     C.join(
                         C.warn("本地消息未命中命令"),
-                        C.kv("client", event.client_id or "-"),
+                        C.kv("user", event.user_id or "-"),
                         C.kv(
                             "message", LocalEventHandler._short_text(event.raw_message)
                         ),
@@ -158,7 +153,6 @@ class LocalEventHandler(BaseMessageHandler):
             decision = await run_command_guards(
                 CommandGuardContext(
                     message_context=message_context,
-                    bypass_guards=event.bypass_guards,
                     command_metadata=item.rule.metadata,
                 )
             )
@@ -166,7 +160,7 @@ class LocalEventHandler(BaseMessageHandler):
                 return False
 
             if decision.reply is not None:
-                await manager.send(decision.reply, event.client_id)
+                await manager.send(decision.reply)
             return True
         finally:
             reset_current_message_context(context_token)
@@ -307,7 +301,7 @@ class LocalEventHandler(BaseMessageHandler):
             await call_with_dependencies(
                 item.rule.func,
                 {
-                    "client_id": event.client_id,
+                    "user_id": message_context.user_id,
                     "message": item.message,
                     "manager": manager,
                     "cmd": item.command,
@@ -330,20 +324,21 @@ class LocalEventHandler(BaseMessageHandler):
 
         reply_target = ReplyTarget(
             adapter="local",
-            client_id=event.client_id,
+            user_id=event.user_id,
+            target_id=event.user_id,
             conversation_type=event.conversation_type,
             driver_target=event,
         )
         return MessageContext(
             adapter="local",
-            client_id=event.client_id,
+            user_id=event.user_id,
+            request_id=event.event_id,
             command=item.command,
             message=item.message,
             raw_message=event.raw_message,
             conversation_type=event.conversation_type,
             reply_target=reply_target,
             capabilities=LocalEventHandler.CAPABILITIES,
-            identity=local_message_identity(event, tenant_id=config.project.id),
             driver_context=event,
             sender_name=event.sender_name,
         )

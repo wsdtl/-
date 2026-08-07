@@ -54,7 +54,6 @@ class HelpSpec:
 class CommandHelpEntry:
     command: str
     aliases: tuple[str, ...]
-    access: str
     spec: HelpSpec
 
 
@@ -69,12 +68,10 @@ class HelpRegistry:
         self,
         commands: str | Sequence[str],
         spec: HelpSpec,
-        *,
-        access: str,
     ) -> CommandHelpEntry:
         normalized = _commands(commands)
         primary = normalized[0]
-        entry = CommandHelpEntry(primary, normalized[1:], _text(access).lower(), spec)
+        entry = CommandHelpEntry(primary, normalized[1:], spec)
         existing = self._entries.get(primary)
         if existing is not None:
             if existing != entry:

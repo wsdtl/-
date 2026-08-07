@@ -74,7 +74,7 @@ FOUNDATION_NAMES = (
     ("玄门生元", "洞真观神", "玄枢破妄", "玄关镇体", "洞虚步天"),
     ("虚空炼血", "太虚凝神", "虚刃断界", "无相护真", "蹑虚无迹"),
     ("天人养元", "三元归神", "法体合锋", "天人不坏", "六合同尘"),
-    ("乘愿生身", "万法归心", "大道藏锋", "金身不灭", "乘光越界"),
+    ("乘愿生身", "万法归心", "大道藏锋", "金身不灭", "乘光渡关"),
     ("劫火铸血", "九霄镇神", "天雷砺锋", "玄穹镇厄", "天门遁影"),
 )
 
@@ -162,7 +162,8 @@ FURNACES = {
 
 
 def _number(value: float) -> int | float:
-    return int(value) if value.is_integer() else value
+    normalized = round(value, 10)
+    return int(normalized) if normalized.is_integer() else normalized
 
 
 def _foundation_bonus(node: int, attribute: str) -> int | float:

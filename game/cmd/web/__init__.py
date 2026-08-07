@@ -10,12 +10,11 @@ from .site import router
 
 @GameCommand.fullmatch(
     cmd="web",
-    access="public",
-    activity_rule=None,
+    guard_rule="始终可用",
     hidden=True,
 )
-async def web_console(*, client_id: str, manager) -> None:
-    await entry.show_entry(client_id=client_id, manager=manager)
+async def web_console(*, manager) -> None:
+    await entry.show_entry(manager=manager)
 
 
 __all__ = ["router"]

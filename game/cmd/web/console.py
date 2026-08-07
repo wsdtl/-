@@ -31,7 +31,7 @@ from .auth import ConsoleAuthService
 from .models import ConsoleFlowRecord
 from .storage import MessageFlowStore
 
-CONSOLE_CLIENT_ID = "web.heavenly_dao"
+CONSOLE_USER_ID = "web.heavenly_dao"
 CONSOLE_SENDER_NAME = "天道"
 SESSION_COOKIE_NAME = "xiaonan_console_session"
 MAX_COMMAND_LENGTH = 4000
@@ -167,7 +167,7 @@ class MessageConsoleService:
         if len(normalized) > MAX_COMMAND_LENGTH:
             raise ValueError(f"命令不能超过 {MAX_COMMAND_LENGTH} 个字符")
         result = await dispatch_local_message(
-            client_id=CONSOLE_CLIENT_ID,
+            user_id=CONSOLE_USER_ID,
             raw_message=normalized,
             sender_name=CONSOLE_SENDER_NAME,
         )
@@ -175,7 +175,7 @@ class MessageConsoleService:
             emit_message_event(
                 event_from_outgoing(
                     adapter="local",
-                    client_id=CONSOLE_CLIENT_ID,
+                    user_id=CONSOLE_USER_ID,
                     request_id=result.event.event_id,
                     message=(
                         M.document()
@@ -194,8 +194,8 @@ class MessageConsoleService:
             )
         return result
 
-    async def execute_interaction(
-        self, flow_id: int, interaction_id: str
+    async def execute_action(
+        self, flow_id: int, action_id: str
     ) -> InteractionResult:
         row = self.storage.get(flow_id)
         if row is None:
@@ -205,7 +205,7 @@ class MessageConsoleService:
             (
                 item
                 for item in record.interactions
-                if item.id == str(interaction_id or "")
+                if item.action_id == str(action_id or "")
             ),
             None,
         )
@@ -253,13 +253,13 @@ class MessageConsoleService:
             sender_name = (
                 "晓楠修仙"
                 if event.direction == "outgoing"
-                else event.client_id or "未知用户"
+                else event.user_id or "未知用户"
             )
         normalized = MessageEvent(
             direction=event.direction,
             adapter=event.adapter,
             request_id=event.request_id,
-            client_id=event.client_id,
+            user_id=event.user_id,
             message_type=event.message_type,
             content=content,
             sender_name=sender_name,
@@ -270,7 +270,7 @@ class MessageConsoleService:
             direction=normalized.direction,
             adapter=normalized.adapter,
             request_id=normalized.request_id,
-            client_id=normalized.client_id,
+            user_id=normalized.user_id,
             sender_name=normalized.sender_name,
             message_type=normalized.message_type,
             content=normalized.content,
@@ -368,7 +368,7 @@ class MessageConsoleService:
             return
         if (
             interaction.permission == "specified"
-            and CONSOLE_CLIENT_ID in interaction.specified_user_ids
+            and CONSOLE_USER_ID in interaction.specified_user_ids
         ):
             return
         raise PermissionError("该交互不允许天道身份执行")
@@ -422,7 +422,7 @@ def _record_from_row(row) -> ConsoleFlowRecord:
             interactions.append(
                 MessageInteraction(
                     kind=str(value.get("kind") or "action"),
-                    id=str(value.get("id") or ""),
+                    action_id=str(value.get("action_id") or ""),
                     label=str(value.get("label") or ""),
                     data=str(value.get("data") or ""),
                     behavior=str(value.get("behavior") or "callback"),
@@ -442,7 +442,7 @@ def _record_from_row(row) -> ConsoleFlowRecord:
         direction=str(row.direction),
         adapter=str(row.adapter),
         request_id=str(row.request_id),
-        client_id=str(row.client_id),
+        user_id=str(row.user_id),
         sender_name=str(row.sender_name),
         message_type=str(row.message_type),
         content=str(row.content),
@@ -466,8 +466,8 @@ def _bounded_text(value: object, maximum_bytes: int) -> tuple[str, bool]:
 
 
 __all__ = [
-    "CONSOLE_CLIENT_ID",
     "CONSOLE_SENDER_NAME",
+    "CONSOLE_USER_ID",
     "SESSION_COOKIE_NAME",
     "InteractionResult",
     "MessageConsoleService",

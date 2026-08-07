@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
-from game.core.activity import ActivityService
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -14,13 +13,20 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.player_state import PlayerStateService
 
 from .contracts import (
     CharacterAlreadyExistsError,
     CharacterCreateCommand,
     CharacterCreationResult,
     CharacterInputError,
+    CharacterNotFoundError,
+    CharacterProfile,
+    CharacterStateError,
     CharacterStatus,
+    EquippedContent,
+    InventorySummary,
+    WeaponProfile,
 )
 
 
@@ -31,11 +37,11 @@ class CharacterService:
         self,
         data: JsonDataService,
         database: DatabaseService,
-        activity: ActivityService,
+        player_state: PlayerStateService,
     ) -> None:
         self._data = data
         self._database = database
-        self._activity = activity
+        self._player_state = player_state
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -51,7 +57,7 @@ class CharacterService:
             raise RuntimeError("JSON 数据服务必须先于角色服务启动")
         if not self._database.status().initialized:
             raise RuntimeError("核心数据库必须先于角色服务启动")
-        if not self._activity.status().initialized:
+        if not self._player_state.status().initialized:
             raise RuntimeError("人物状态服务必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
@@ -105,6 +111,56 @@ class CharacterService:
             initial_item_count=len(initial_items),
         )
 
+    async def profile(self, user_id: str) -> CharacterProfile:
+        """读取一个人物的完整角色事实，不补造缺失状态。"""
+
+        self._require_initialized()
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            raise ValueError("user_id 不能为空")
+        snapshots = await self._database.list_for_user(normalized_user_id)
+        states = {
+            (snapshot.address.state_type, snapshot.address.state_key): snapshot.value
+            for snapshot in snapshots
+        }
+        character = states.get(("character", "main"))
+        if character is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        cultivation = states.get(("cultivation", "main"))
+        weapon = states.get(("weapon", "main"))
+        if cultivation is None or weapon is None:
+            raise CharacterStateError("人物资产不完整：缺少修行槽或本命武器")
+
+        realm_id = _state_text(character.get("境界"), "人物.境界")
+        realm_name = _state_text(
+            self._data.entity("境界", realm_id).get("名称"),
+            f"境界 {realm_id}.名称",
+        )
+        cultivation_slots, equipped_content = self._cultivation_profile(cultivation)
+        weapon_profile = self._weapon_profile(weapon)
+        inventory = _inventory_summary(states)
+        return CharacterProfile(
+            user_id=normalized_user_id,
+            name=_state_text(character.get("姓名"), "人物.姓名"),
+            gender=_state_text(character.get("性别"), "人物.性别"),
+            character_type=_state_text(character.get("角色类型"), "人物.角色类型"),
+            realm_id=realm_id,
+            realm_name=realm_name,
+            level=_state_positive_int(character.get("等级"), "人物.等级"),
+            experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
+            spirit_stones=_state_nonnegative_int(character.get("灵石"), "人物.灵石"),
+            automatic_medicine=_state_bool(
+                character.get("自动用药"), "人物.自动用药"
+            ),
+            xy=_state_xy(_state_mapping(character.get("位置"), "人物.位置").get("xy")),
+            attributes=_state_numbers(character.get("属性"), "人物.属性"),
+            resources=_state_numbers(character.get("资源"), "人物.资源"),
+            cultivation_slots=cultivation_slots,
+            equipped_content=equipped_content,
+            weapon=weapon_profile,
+            inventory=inventory,
+        )
+
     async def create(self, command: CharacterCreateCommand) -> CharacterCreationResult:
         self._require_initialized()
         self._validate_command(command)
@@ -126,7 +182,7 @@ class CharacterService:
             StateMutation("character", "main", character_state, 0),
             StateMutation("cultivation", "main", cultivation_state, 0),
             StateMutation("weapon", "main", weapon_state, 0),
-            self._activity.initial_mutation(),
+            self._player_state.initial_mutation(),
         ]
         for item_id, grade, quantity in item_rows:
             mutations.append(
@@ -194,6 +250,80 @@ class CharacterService:
                 raise JsonDataError(f"人物初始物品使用未知品级：{item_id} -> {grade}")
         if not self._attributes:
             raise JsonDataError("战斗定义.属性不能为空")
+        _number(self._weapon_rule.get("基础攻击"), "本命武器.基础攻击")
+        _number(self._weapon_rule.get("每级攻击"), "本命武器.每级攻击")
+
+    def _cultivation_profile(
+        self, cultivation: Mapping[str, object]
+    ) -> tuple[tuple[tuple[str, int], ...], tuple[EquippedContent, ...]]:
+        slot_counts: list[tuple[str, int]] = []
+        equipped: list[EquippedContent] = []
+        for category in ("功法", "真意", "气机"):
+            raw_slots = cultivation.get(category)
+            if not isinstance(raw_slots, Sequence) or isinstance(
+                raw_slots, (str, bytes)
+            ):
+                raise CharacterStateError(f"修行槽.{category}必须是数组")
+            slot_counts.append((category, len(raw_slots)))
+            for slot, raw in enumerate(raw_slots, start=1):
+                if raw is None:
+                    continue
+                entry = _state_mapping(raw, f"修行槽.{category}[{slot}]")
+                content_id = _state_text(
+                    entry.get("编号"), f"修行槽.{category}[{slot}].编号"
+                )
+                grade = _state_text(
+                    entry.get("品级"), f"修行槽.{category}[{slot}].品级"
+                )
+                name = _state_text(
+                    self._data.entity(category, content_id).get("名称"),
+                    f"{category} {content_id}.名称",
+                )
+                equipped.append(
+                    EquippedContent(category, slot, content_id, name, grade)
+                )
+        return tuple(slot_counts), tuple(equipped)
+
+    def _weapon_profile(self, weapon: Mapping[str, object]) -> WeaponProfile:
+        level = _state_positive_int(weapon.get("等级"), "本命武器.等级")
+        stage = _stage_for_level(self._weapon_stage_rule, level)
+        stage_name = _state_text(stage.get("名称"), "器则.器阶.名称")
+        stored_stage = _state_text(weapon.get("器阶"), "本命武器.器阶")
+        if stored_stage != stage_name:
+            raise CharacterStateError(
+                f"本命武器器阶与等级不符：{stored_stage} != {stage_name}"
+            )
+        open_slots = _state_nonnegative_int(
+            stage.get("开放器律孔"), "器则.器阶.开放器律孔"
+        )
+        raw_laws = weapon.get("器律")
+        if not isinstance(raw_laws, Sequence) or isinstance(raw_laws, (str, bytes)):
+            raise CharacterStateError("本命武器.器律必须是编号数组")
+        if len(raw_laws) > open_slots:
+            raise CharacterStateError("本命武器已装器律超过当前开放孔数")
+        equipped_laws: list[EquippedContent] = []
+        for slot, raw in enumerate(raw_laws, start=1):
+            content_id = _state_text(raw, f"本命武器.器律[{slot}]")
+            name = _state_text(
+                self._data.entity("器律", content_id).get("名称"),
+                f"器律 {content_id}.名称",
+            )
+            equipped_laws.append(
+                EquippedContent("器律", slot, content_id, name)
+            )
+        return WeaponProfile(
+            name=_state_text(weapon.get("名称"), "本命武器.名称"),
+            level=level,
+            experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
+            attack=(
+                _number(self._weapon_rule.get("基础攻击"), "本命武器.基础攻击")
+                + _number(self._weapon_rule.get("每级攻击"), "本命武器.每级攻击")
+                * (level - 1)
+            ),
+            stage=stage_name,
+            open_law_slots=open_slots,
+            equipped_laws=tuple(equipped_laws),
+        )
 
     def _validate_command(self, command: CharacterCreateCommand) -> None:
         if not command.user_id.strip() or not command.request_id.strip():
@@ -271,6 +401,70 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
+def _state_mapping(value: object, label: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise CharacterStateError(f"{label}必须是对象")
+    return value
+
+
+def _state_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CharacterStateError(f"{label}必须是非空字符串")
+    return value.strip()
+
+
+def _state_positive_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise CharacterStateError(f"{label}必须是正整数")
+    return value
+
+
+def _state_nonnegative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise CharacterStateError(f"{label}必须是非负整数")
+    return value
+
+
+def _state_bool(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise CharacterStateError(f"{label}必须是布尔值")
+    return value
+
+
+def _state_xy(value: object) -> tuple[int, int]:
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes))
+        or len(value) != 2
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in value)
+    ):
+        raise CharacterStateError("人物.位置.xy必须是两个整数")
+    return (value[0], value[1])
+
+
+def _state_numbers(
+    value: object, label: str
+) -> tuple[tuple[str, int | float], ...]:
+    fields = _state_mapping(value, label)
+    result: list[tuple[str, int | float]] = []
+    for name, raw in fields.items():
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise CharacterStateError(f"{label}.{name}必须是数值")
+        result.append((str(name), raw))
+    return tuple(result)
+
+
+def _inventory_summary(
+    states: Mapping[tuple[str, str], Mapping[str, object]],
+) -> InventorySummary:
+    quantities = tuple(
+        _state_positive_int(value.get("数量"), f"背包.{state_key}.数量")
+        for (state_type, state_key), value in states.items()
+        if state_type == "inventory"
+    )
+    return InventorySummary(len(quantities), sum(quantities))
+
+
 def _strings(value: object) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
@@ -296,13 +490,13 @@ def _initial_items(role_rule: Mapping[str, object]) -> tuple[tuple[str, str, int
     result: list[tuple[str, str, int]] = []
     for index, raw in enumerate(raw_items):
         entry = _mapping(raw, f"人物.json.物品[{index}]")
-        identity = str(entry.get("编号") or "").strip()
+        item_id = str(entry.get("编号") or "").strip()
         grade = str(entry.get("品级") or "").strip()
         quantity = entry.get("数量")
-        if not identity or not grade or isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+        if not item_id or not grade or isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
             raise JsonDataError(f"人物.json.物品[{index}]字段无效")
-        result.append((identity, grade, quantity))
-    if len({(identity, grade) for identity, grade, _ in result}) != len(result):
+        result.append((item_id, grade, quantity))
+    if len({(item_id, grade) for item_id, grade, _ in result}) != len(result):
         raise JsonDataError("人物.json.物品不能重复同一编号和品级")
     return tuple(result)
 

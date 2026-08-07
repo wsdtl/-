@@ -33,7 +33,7 @@ class CreateCharacterResult:
     realm_id: str
     realm_name: str
     location_name: str
-    coordinate: tuple[int, int]
+    xy: tuple[int, int]
     region: str
     terrain: str
     altitude: int

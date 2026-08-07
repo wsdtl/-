@@ -36,7 +36,7 @@ class MessageInteraction:
     """一项可由其它驱动器重新呈现的协议中立交互。"""
 
     kind: str
-    id: str
+    action_id: str
     label: str
     data: str
     behavior: str
@@ -54,7 +54,7 @@ class MessageEvent:
     direction: str
     adapter: str
     request_id: str
-    client_id: str
+    user_id: str
     message_type: str
     content: str
     sender_name: str = ""
@@ -118,7 +118,7 @@ def emit_message_event(event: MessageEvent) -> None:
 def event_from_incoming(
     *,
     adapter: str,
-    client_id: object,
+    user_id: object,
     request_id: object = "",
     message_type: object = "text",
     content: object = "",
@@ -130,7 +130,7 @@ def event_from_incoming(
         direction="incoming",
         adapter=_clean_token(adapter, "unknown"),
         request_id=_clean_token(request_id),
-        client_id=_clean_token(client_id),
+        user_id=_clean_token(user_id),
         message_type=_normalize_message_type(message_type),
         content=_clean_content(content),
         sender_name=_clean_token(sender_name),
@@ -140,7 +140,7 @@ def event_from_incoming(
 def event_from_outgoing(
     *,
     adapter: str,
-    client_id: object,
+    user_id: object,
     request_id: object = "",
     message: object = "",
 ) -> MessageEvent:
@@ -151,7 +151,7 @@ def event_from_outgoing(
         direction="outgoing",
         adapter=_clean_token(adapter, "unknown"),
         request_id=_clean_token(request_id),
-        client_id=_clean_token(client_id),
+        user_id=_clean_token(user_id),
         message_type=snapshot.message_type,
         content=snapshot.content,
         image=snapshot.image,
@@ -178,11 +178,11 @@ def snapshot_from_message(message: object) -> MessageSnapshot:
         interactions = [_interaction_from_action(action) for action in semantic.document.actions]
 
         def command_renderer(command: CommandLink) -> str:
-            interaction_id = f"command-link-{len(interactions) + 1}"
+            action_id = f"command-link-{len(interactions) + 1}"
             interactions.append(
                 MessageInteraction(
                     kind="command_link",
-                    id=interaction_id,
+                    action_id=action_id,
                     label=render_rich_text(command.label),
                     data=command.command,
                     behavior="send" if command.submit else "fill",
@@ -192,7 +192,7 @@ def snapshot_from_message(message: object) -> MessageSnapshot:
                 )
             )
             label = render_rich_markdown(command.label)
-            return f"[{label}](webcmd://{interaction_id})"
+            return f"[{label}](webcmd://{action_id})"
 
         return MessageSnapshot(
             message_type="markdown",
@@ -249,7 +249,7 @@ def snapshot_from_message(message: object) -> MessageSnapshot:
 def _interaction_from_action(action: Action) -> MessageInteraction:
     return MessageInteraction(
         kind="action",
-        id=action.id,
+        action_id=action.action_id,
         label=action.label,
         data=action.data,
         behavior=action.behavior,
@@ -290,7 +290,7 @@ def _native_keyboard_interactions(keyboard: object) -> tuple[MessageInteraction,
             interactions.append(
                 MessageInteraction(
                     kind="action",
-                    id=str(button.get("id") or f"native-{len(interactions) + 1}"),
+                    action_id=str(button.get("id") or f"native-{len(interactions) + 1}"),
                     label=label,
                     data=data,
                     behavior=behavior,
@@ -315,13 +315,13 @@ def _extract_native_command_links(content: str) -> tuple[str, tuple[MessageInter
         command = unquote(str((query.get("command") or [""])[0])).strip()
         if not command:
             return match.group(0)
-        interaction_id = f"command-link-{len(interactions) + 1}"
+        action_id = f"command-link-{len(interactions) + 1}"
         submit = str((query.get("enter") or ["true"])[0]).lower() == "true"
         reply = str((query.get("reply") or ["false"])[0]).lower() == "true"
         interactions.append(
             MessageInteraction(
                 kind="command_link",
-                id=interaction_id,
+                action_id=action_id,
                 label=match.group(1),
                 data=command,
                 behavior="send" if submit else "fill",
@@ -330,7 +330,7 @@ def _extract_native_command_links(content: str) -> tuple[str, tuple[MessageInter
                 submit=submit,
             )
         )
-        return f"[{match.group(1)}](webcmd://{interaction_id})"
+        return f"[{match.group(1)}](webcmd://{action_id})"
 
     return _NATIVE_COMMAND_LINK_RE.sub(replace, content), tuple(interactions)
 

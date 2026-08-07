@@ -29,7 +29,7 @@ class JsonDataStatus:
 class JsonEntity:
     """数据服务交付的稳定实体身份、来源和不可变正文。"""
 
-    identity: str
+    entity_id: str
     section: str
     number_category: str
     source_file: str

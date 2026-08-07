@@ -28,12 +28,12 @@ def load_battle_foundation(
             "状态反应": rules["状态反应"],
             "环境规则": rules["环境"],
             "战场环境": {
-                identity: materialize(value)
-                for identity, value in data.entities("战场环境").items()
+                environment_id: materialize(value)
+                for environment_id, value in data.entities("战场环境").items()
             },
             "阵法": {
-                identity: materialize(value)
-                for identity, value in data.entities("阵法").items()
+                formation_id: materialize(value)
+                for formation_id, value in data.entities("阵法").items()
             },
             "阵法规则": materialize(data.dataset("阵法规则")["炼制"]),
         }
@@ -59,16 +59,16 @@ def load_battle_mechanisms(
     nodes: dict[str, dict[str, Any]] = {}
     names: dict[str, str] = {}
     name_sources: dict[str, str] = {}
-    for identity, raw in data.entities("机制").items():
-        path = f"机制[{identity}]"
+    for mechanism_id, raw in data.entities("机制").items():
+        path = f"机制[{mechanism_id}]"
         entry = _mapping(materialize(raw), path)
         unknown = set(entry) - {"编号", "名称", "节点"}
         if unknown:
             raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
-        declared_identity = str(entry.get("编号") or "").strip()
+        declared_id = str(entry.get("编号") or "").strip()
         name = str(entry.get("名称") or "").strip()
         node = _mapping(entry.get("节点"), f"{path}.节点")
-        if declared_identity != identity:
+        if declared_id != mechanism_id:
             raise ValueError(f"{path}.编号与数据索引不一致")
         if not name:
             raise ValueError(f"{path}.名称不能为空")
@@ -77,8 +77,8 @@ def load_battle_mechanisms(
                 f"机制名称重复：{name}，位于 {name_sources[name]} 与 {path}"
             )
         _validate_event_bound_abilities(node, f"{path}.节点")
-        nodes[identity] = dict(node)
-        names[identity] = name
+        nodes[mechanism_id] = dict(node)
+        names[mechanism_id] = name
         name_sources[name] = path
     if not nodes:
         raise ValueError("JSON 数据微服务没有登记战斗机制")
@@ -176,13 +176,13 @@ def _validate_battle_environments(
     if not environments:
         raise ValueError("战场环境不能为空")
     names: set[str] = set()
-    for identity, raw in environments.items():
-        path = f"战场环境[{identity}]"
+    for environment_id, raw in environments.items():
+        path = f"战场环境[{environment_id}]"
         environment = _mapping(raw, path)
         unknown = set(environment) - {"编号", "名称", "阶段"}
         if unknown:
             raise ValueError(f"{path}存在未知字段：{'、'.join(sorted(unknown))}")
-        if str(environment.get("编号") or "") != identity:
+        if str(environment.get("编号") or "") != environment_id:
             raise ValueError(f"{path}.编号与数据索引不一致")
         name = str(environment.get("名称") or "").strip()
         if not name or name in names:
@@ -249,12 +249,12 @@ def _validate_formations(formations: Mapping[str, Any]) -> None:
     if not formations:
         raise ValueError("阵法不能为空")
     names: set[str] = set()
-    for identity, raw in formations.items():
-        path = f"阵法[{identity}]"
+    for formation_id, raw in formations.items():
+        path = f"阵法[{formation_id}]"
         value = _mapping(raw, path)
         if set(value) != {"编号", "名称", "宏观监测", "阵法核心", "品级"}:
             raise ValueError(f"{path}字段必须完整且不能包含额外字段")
-        if str(value.get("编号") or "") != identity:
+        if str(value.get("编号") or "") != formation_id:
             raise ValueError(f"{path}.编号与数据索引不一致")
         name = str(value.get("名称") or "").strip()
         if not name or name in names:

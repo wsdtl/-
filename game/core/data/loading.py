@@ -9,7 +9,7 @@ from typing import Any
 
 from .contracts import JsonDataError, JsonEntity
 from .files import (
-    IDENTITY_POOL,
+    ENTITY_ID_POOL,
     NAMED_ENTITY,
     NAMED_ENTITY_POOL,
     NUMBERED_ENTITY_LIST,
@@ -26,7 +26,7 @@ from .files import (
 @dataclass(frozen=True)
 class PoolDefinition:
     section: str
-    identities: tuple[str, ...] = ()
+    entity_ids: tuple[str, ...] = ()
     source_files: tuple[str, ...] = ()
 
 
@@ -69,11 +69,11 @@ class LoadedGameData:
             return tuple(result)
         unique: list[tuple[str, Mapping[str, Any]]] = []
         seen: set[str] = set()
-        for identity, value in result:
-            if identity in seen:
+        for entity_id, value in result:
+            if entity_id in seen:
                 continue
-            seen.add(identity)
-            unique.append((identity, value))
+            seen.add(entity_id)
+            unique.append((entity_id, value))
         return tuple(unique)
 
     def all_members(self, section: str) -> tuple[str, ...]:
@@ -112,13 +112,13 @@ class LoadedGameData:
             raise JsonDataError(f"资源池形成循环引用：{chain}")
         entities = self.entities[section]
         result: list[tuple[str, Mapping[str, Any]]] = []
-        for identity in pool.identities:
-            value = entities.get(identity)
+        for entity_id in pool.entity_ids:
+            value = entities.get(entity_id)
             if value is None:
                 raise JsonDataError(
-                    f"资源池引用不存在的{section}：{document.relative_path} -> {identity}"
+                    f"资源池引用不存在的{section}：{document.relative_path} -> {entity_id}"
                 )
-            result.append((identity, value))
+            result.append((entity_id, value))
         next_stack = (*stack, canonical)
         for source_file in pool.source_files:
             result.extend(self._resolve_pool_file(source_file, section, next_stack))
@@ -182,25 +182,25 @@ def _index_content(
         _validate_document_shape(document)
         if not descriptor.section:
             continue
-        if descriptor.shape in {IDENTITY_POOL, SOURCE_POOL}:
+        if descriptor.shape in {ENTITY_ID_POOL, SOURCE_POOL}:
             pools[document.file_id] = _reference_pool(document, descriptor.section)
             continue
         entries = _document_entries(document)
         if descriptor.source_pool:
             pools[document.file_id] = PoolDefinition(
                 section=descriptor.section,
-                identities=tuple(identity for identity, _ in entries),
+                entity_ids=tuple(entity_id for entity_id, _ in entries),
             )
         values = entities.get(descriptor.section)
         if values is None:
             continue
-        for identity, value in entries:
-            previous = values.get(identity)
+        for entity_id, value in entries:
+            previous = values.get(entity_id)
             if previous is None:
-                values[identity] = value
-                sources[descriptor.section][identity] = document.relative_path
-                records[descriptor.section][identity] = JsonEntity(
-                    identity=identity,
+                values[entity_id] = value
+                sources[descriptor.section][entity_id] = document.relative_path
+                records[descriptor.section][entity_id] = JsonEntity(
+                    entity_id=entity_id,
                     section=descriptor.section,
                     number_category=descriptor.number_category,
                     source_file=document.file_id,
@@ -208,10 +208,10 @@ def _index_content(
                     value=value,
                 )
                 continue
-            if _entity_identity(previous) != _entity_identity(value):
+            if _entity_signature(previous) != _entity_signature(value):
                 raise JsonDataError(
-                    f"实体身份冲突：{descriptor.section} {identity} 同时定义于 "
-                    f"{sources[descriptor.section][identity]} 与 {document.relative_path}"
+                    f"实体身份冲突：{descriptor.section} {entity_id} 同时定义于 "
+                    f"{sources[descriptor.section][entity_id]} 与 {document.relative_path}"
                 )
     return entities, records, pools
 
@@ -221,12 +221,12 @@ def _index_number_category_members(
 ) -> dict[str, tuple[str, ...]]:
     members: dict[str, set[str]] = {}
     for values in records.values():
-        for identity, record in values.items():
+        for entity_id, record in values.items():
             if record.number_category:
-                members.setdefault(record.number_category, set()).add(identity)
+                members.setdefault(record.number_category, set()).add(entity_id)
     return {
-        category: tuple(sorted(identities))
-        for category, identities in sorted(members.items())
+        category: tuple(sorted(entity_ids))
+        for category, entity_ids in sorted(members.items())
     }
 
 
@@ -243,13 +243,13 @@ def _document_entries(
     if descriptor.shape == NAMED_ENTITY:
         if not isinstance(value, Mapping):
             raise JsonDataError(f"命名内容文件根值必须是对象：{document.relative_path}")
-        identity = document.file_id
+        entity_id = document.file_id
         declared_name = value.get("名称")
-        if declared_name is not None and str(declared_name).strip() != identity:
+        if declared_name is not None and str(declared_name).strip() != entity_id:
             raise JsonDataError(
                 f"命名内容身份必须使用文件名：{document.relative_path} -> {declared_name}"
             )
-        return ((identity, value),)
+        return ((entity_id, value),)
     raise JsonDataError(f"内容文档形态不受支持：{document.relative_path}")
 
 
@@ -269,17 +269,17 @@ def _numbered_entries(
             raise JsonDataError(
                 f"内容对象必须是字典：{document.relative_path} -> {section}[{index}]"
             )
-        identity = str(raw.get("编号") or "").strip()
-        if not identity:
+        entity_id = str(raw.get("编号") or "").strip()
+        if not entity_id:
             raise JsonDataError(
                 f"内容对象缺少编号：{document.relative_path} -> {section}[{index}]"
             )
-        if identity in seen:
+        if entity_id in seen:
             raise JsonDataError(
-                f"内容文件存在重复编号：{document.relative_path} -> {identity}"
+                f"内容文件存在重复编号：{document.relative_path} -> {entity_id}"
             )
-        seen.add(identity)
-        result.append((identity, raw))
+        seen.add(entity_id)
+        result.append((entity_id, raw))
     if not result:
         raise JsonDataError(f"编号内容文件不能为空：{document.relative_path}")
     return tuple(result)
@@ -295,12 +295,12 @@ def _named_collection_entries(
             f"命名内容集合必须是非空对象：{document.relative_path} -> {section}"
         )
     result = []
-    for identity, raw in value.items():
+    for entity_id, raw in value.items():
         if not isinstance(raw, Mapping):
             raise JsonDataError(
-                f"命名内容对象必须是字典：{document.relative_path} -> {section}.{identity}"
+                f"命名内容对象必须是字典：{document.relative_path} -> {section}.{entity_id}"
             )
-        result.append((str(identity), raw))
+        result.append((str(entity_id), raw))
     return tuple(result)
 
 
@@ -313,10 +313,10 @@ def _reference_pool(document: JsonDocument, section: str) -> PoolDefinition:
     references = tuple(item.strip() for item in value)
     if len(references) != len(set(references)):
         raise JsonDataError(f"引用池包含重复成员：{document.relative_path}")
-    if document.descriptor.shape == IDENTITY_POOL:
+    if document.descriptor.shape == ENTITY_ID_POOL:
         if not all(_looks_like_entity_id(item) for item in references):
             raise JsonDataError(f"编号池只能保存六位实体编号：{document.relative_path}")
-        return PoolDefinition(section=section, identities=references)
+        return PoolDefinition(section=section, entity_ids=references)
     if any(_looks_like_entity_id(item) for item in references):
         raise JsonDataError(f"源池只能保存源文件名：{document.relative_path}")
     return PoolDefinition(section=section, source_files=references)
@@ -391,18 +391,18 @@ def _validate_number_prefixes(
         prefixes = allowed.get(category, set())
         if not prefixes:
             raise JsonDataError(f"定义/编号.json 没有登记{category}编号前缀")
-        for identity, _ in _numbered_entries(
+        for entity_id, _ in _numbered_entries(
             document.value,
             document,
             descriptor.section,
         ):
-            if len(identity) != digits or not identity.isdigit():
+            if len(entity_id) != digits or not entity_id.isdigit():
                 raise JsonDataError(
-                    f"{descriptor.section}编号不符合{digits}位数字规则：{identity}"
+                    f"{descriptor.section}编号不符合{digits}位数字规则：{entity_id}"
                 )
-            if identity[:prefix_digits] not in prefixes:
+            if entity_id[:prefix_digits] not in prefixes:
                 raise JsonDataError(
-                    f"{descriptor.section}编号前缀不属于{category}：{identity}"
+                    f"{descriptor.section}编号前缀不属于{category}：{entity_id}"
                 )
 
 
@@ -437,7 +437,7 @@ def _looks_like_entity_id(value: str) -> bool:
     return len(value) == 6 and value.isdigit()
 
 
-def _entity_identity(value: Mapping[str, Any]) -> dict[str, Any]:
+def _entity_signature(value: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): raw for key, raw in value.items()}
 
 

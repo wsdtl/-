@@ -39,7 +39,7 @@ class RuntimeBattleReportParticipant:
     color: str = ""
     extra: Mapping[str, Any] = field(default_factory=dict)
     level: int = 1
-    kind: str = "修士"
+    combatant_type: str = "修士"
 
 
 def build_battle_report(
@@ -68,7 +68,7 @@ def build_battle_report(
     outcome_by_id = {value.id: value for value in outcome_results}
     for participant in participants:
         result = outcome_by_id[participant.id]
-        if int(participant.level) != result.level or str(participant.kind) != result.kind:
+        if int(participant.level) != result.level or str(participant.combatant_type) != result.combatant_type:
             raise ValueError(f"战报参战者类别或等级与战斗结果不一致：{participant.name}")
 
     palette = catalog.participant_colors
@@ -77,7 +77,7 @@ def build_battle_report(
         for index, value in enumerate(participants)
     }
     participants_by_id = {value.id: value for value in participants}
-    formations_by_id = {value.identity: value for value in outcome.formations}
+    formations_by_id = {value.formation_id: value for value in outcome.formations}
     known_mechanisms = dict(mechanism_names or {})
     event_reports = [
         _event_report(
@@ -184,9 +184,9 @@ def _field_report(
     field: CombatFieldResult,
     events: Sequence[BattleEvent],
 ) -> dict[str, Any]:
-    coordinate = (
-        {"x": field.coordinate[0], "y": field.coordinate[1]}
-        if field.coordinate is not None
+    xy = (
+        {"x": field.xy[0], "y": field.xy[1]}
+        if field.xy is not None
         else None
     )
     changes = [
@@ -207,7 +207,7 @@ def _field_report(
         "name": field.name,
         "origin": field.origin,
         "scene": field.scene,
-        "coordinate": coordinate,
+        "xy": xy,
         "altitude": field.altitude,
         "terrain": field.terrain,
         "stage_index": field.stage_index,
@@ -265,7 +265,7 @@ def _participant_report(
         "name": participant.name,
         "title": participant.title,
         "level": max(1, int(participant.level)),
-        "kind": str(participant.kind or "参战者"),
+        "combatant_type": str(participant.combatant_type or "参战者"),
         "color": color,
         "outcome": outcome_label,
         "resources": resources,
@@ -410,10 +410,10 @@ def _formation_report(
         event
         for event in events
         if event.kind == "阵法冲击后"
-        and str(event.values.get("阵法编号") or "") == formation.identity
+        and str(event.values.get("阵法编号") or "") == formation.formation_id
     ]
     return {
-        "id": formation.identity,
+        "id": formation.formation_id,
         "name": formation.name,
         "grade": formation.grade,
         "side": "left" if formation.side == 0 else "right",
@@ -528,8 +528,8 @@ def _mechanism_names(
         value = dict(raw_value)
         executor = _ability_executor(value, ability_definitions)
         if executor == "引用机制":
-            identity = str(value.get("机制") or "")
-            result.append(str((mechanism_names or {}).get(identity) or identity))
+            mechanism_id = str(value.get("机制") or "")
+            result.append(str((mechanism_names or {}).get(mechanism_id) or mechanism_id))
         else:
             result.append(str(value.get("名称") or value.get("能力") or ""))
     return [value for value in result if value]

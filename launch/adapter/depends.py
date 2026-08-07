@@ -13,7 +13,6 @@ from typing import Any, Callable, Dict, Mapping, Tuple
 
 from .context import current_message_context, current_reply_target
 
-
 _current_message_context: ContextVar[dict[str, Any]] = ContextVar(
     "adapter_current_message_context",
     default={},
@@ -67,7 +66,7 @@ def _expanded_context(values: Mapping[str, Any]) -> dict[str, Any]:
         context.setdefault("message_context", message_context)
         context.setdefault("reply_target", message_context.reply_target)
         context.setdefault("adapter_capabilities", message_context.capabilities)
-        context.setdefault("message_identity", message_context.identity)
+        context.setdefault("request_id", message_context.request_id)
     else:
         reply_target = context.get("reply_target") or current_reply_target()
         if reply_target is not None:

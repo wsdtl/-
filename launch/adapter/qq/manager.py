@@ -5,8 +5,8 @@
 私聊或群聊接口。
 """
 
-import json
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -31,7 +31,6 @@ from .keyboard import validate_keyboard
 from .render import render_qq_message
 from .target import QqSendTarget
 
-
 current_event: ContextVar[QqMessageEvent | None] = ContextVar(
     "qq_current_event",
     default=None,
@@ -48,7 +47,7 @@ class QqQueuedReply:
 
     message: object
     target: QqSendTarget
-    client_id: str
+    user_id: str
     options: SendOptions
     is_log: bool = True
     request_id: object | None = None
@@ -57,7 +56,7 @@ class QqQueuedReply:
 class QqReplyManager:
     """按当前 QQ 事件上下文发送私聊或群聊回复。
 
-    业务层只传入 message 和 client_id；QQ 真正发消息还需要知道本次
+    业务层只传入 message；QQ 真正发消息还需要知道本次
     webhook 是 C2C 还是群事件，以及原始 message_id/event_id。handler
     处理事件前会把 QqMessageEvent 放进 current_event，回复器从这里
     取 QQ 私有上下文，再调用对应 OpenAPI。
@@ -163,17 +162,16 @@ class QqReplyManager:
     async def send(
         self,
         message: object,
-        client_id: str,
         is_log: bool = True,
         request_id: object | None = None,
     ) -> bool:
         """发送一条 QQ 回复。
 
-        client_id 保持项目统一回复接口的参数形状。新框架优先使用
-        SendRequest.target，普通调用则从当前消息上下文推导回复目标。
+        显式主动发送使用 SendRequest.target，普通调用从当前消息上下文
+        推导回复目标和关联用户。
         """
 
-        request = self._normalize_request(message, client_id, is_log, request_id)
+        request = self._normalize_request(message, is_log, request_id)
         target = self._send_target_from_request(request)
         if target is None:
             if request.options.log:
@@ -183,7 +181,7 @@ class QqReplyManager:
         item = QqQueuedReply(
             message=request.message,
             target=target,
-            client_id=self._request_client_id(request, client_id, target),
+            user_id=self._request_user_id(request, target),
             options=request.options,
             is_log=request.options.log,
             request_id=request.request_id,
@@ -225,7 +223,6 @@ class QqReplyManager:
     @staticmethod
     def _normalize_request(
         message: object,
-        client_id: str,
         is_log: bool,
         request_id: object | None,
     ) -> SendRequest:
@@ -259,15 +256,16 @@ class QqReplyManager:
         return None
 
     @staticmethod
-    def _request_client_id(request: SendRequest, fallback: str, target: QqSendTarget) -> str:
-        """优先使用显式发送目标上的业务入口 ID。"""
+    def _request_user_id(request: SendRequest, target: QqSendTarget) -> str:
+        """读取本次发送关联的统一游戏用户编号。"""
 
         reply_target = request.target
-        if reply_target is not None and reply_target.client_id:
-            return str(reply_target.client_id)
-        if target.client_id:
-            return str(target.client_id)
-        return str(fallback)
+        if reply_target is not None and reply_target.user_id:
+            return str(reply_target.user_id)
+        event = current_event.get()
+        if event is not None and event.user_id:
+            return event.user_id
+        return target.user_id
 
     async def _send_worker(self, index: int) -> None:
         """后台发送 QQ 回复。
@@ -333,7 +331,7 @@ class QqReplyManager:
         emit_message_event(
             event_from_outgoing(
                 adapter="qq",
-                client_id=item.client_id,
+                user_id=item.user_id,
                 request_id=item.request_id or item.target.event_id or item.target.message_id,
                 message=item.message,
             )
@@ -378,14 +376,14 @@ class QqReplyManager:
 
         if send_target.is_group:
             client.send_group_payload(
-                send_target.group_openid,
+                send_target.group_id,
                 payload,
                 send_target.message_id,
                 send_target.event_id,
             )
         else:
             client.send_c2c_payload(
-                send_target.user_openid,
+                send_target.user_id,
                 payload,
                 send_target.message_id,
                 send_target.event_id,
@@ -399,7 +397,13 @@ class QqReplyManager:
 
         return [
             C.kv("type", "群聊" if item.target.is_group else "私聊"),
-            C.kv("client", QqReplyManager._short_id(item.client_id)),
+            C.kv("user", QqReplyManager._short_id(item.user_id)),
+            C.kv(
+                "target",
+                QqReplyManager._short_id(
+                    item.target.group_id or item.target.user_id
+                ),
+            ),
             C.kv("request_id", item.request_id or "-"),
         ]
 
@@ -491,9 +495,9 @@ class QqReplyManager:
             raise ValueError("QQ 图片消息内容为空或格式不支持")
 
         if target.is_group:
-            file_info = client.upload_group_image(target.group_openid, image_bytes)
+            file_info = client.upload_group_image(target.group_id, image_bytes)
         else:
-            file_info = client.upload_c2c_image(target.user_openid, image_bytes)
+            file_info = client.upload_c2c_image(target.user_id, image_bytes)
 
         return {
             "content": str(content or " "),
@@ -572,11 +576,11 @@ class QqReplyManager:
     def _apply_mention(payload: dict, target: QqSendTarget, options: SendOptions) -> dict:
         """按发送选项给群消息补 at。"""
 
-        mention_openid = QqReplyManager._mention_openid(target, options)
-        if not payload or not mention_openid:
+        mention_user_id = QqReplyManager._mention_user_id(target, options)
+        if not payload or not mention_user_id:
             return payload
 
-        mention_text = f"<@{mention_openid}>"
+        mention_text = f"<@{mention_user_id}>"
         result = dict(payload)
         msg_type = int(result.get("msg_type") or 0)
 
@@ -597,8 +601,8 @@ class QqReplyManager:
         return result
 
     @staticmethod
-    def _mention_openid(target: QqSendTarget, options: SendOptions) -> str:
-        """计算本次群消息需要 at 的 openid。"""
+    def _mention_user_id(target: QqSendTarget, options: SendOptions) -> str:
+        """计算本次群消息需要 at 的 user_id。"""
 
         if not target.is_group:
             return ""
@@ -607,7 +611,7 @@ class QqReplyManager:
         if not value or value in {MENTION_DEFAULT, MENTION_NONE}:
             return ""
         if value == MENTION_SENDER:
-            return target.member_openid or target.actor_openid
+            return target.user_id
         if value.startswith("<@") and value.endswith(">"):
             value = value[2:-1]
         return value.strip().lstrip("!")

@@ -15,14 +15,14 @@ class WorldStatus:
 
 @dataclass(frozen=True)
 class LocationQuery:
-    name: str = ""
-    coordinate: tuple[int, int] | None = None
+    location_name: str = ""
+    xy: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
 class LocationView:
-    name: str
-    coordinate: tuple[int, int]
+    location_name: str
+    xy: tuple[int, int]
     location_type: str
     region: str
     terrain: str

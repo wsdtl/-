@@ -24,7 +24,7 @@ def record_payload(record: ConsoleFlowRecord) -> dict[str, object]:
         "direction": record.direction,
         "adapter": record.adapter,
         "request_id": record.request_id,
-        "client_id": record.client_id,
+        "user_id": record.user_id,
         "sender_name": record.sender_name,
         "message_type": record.message_type,
         "content": record.content,
@@ -109,10 +109,10 @@ def _inline(value: str, flow_id: int) -> str:
             label = _format_text(link_match.group(1))
             target = link_match.group(2)
             if target.startswith("webcmd://"):
-                interaction_id = target.removeprefix("webcmd://")
+                action_id = target.removeprefix("webcmd://")
                 result.append(
                     '<button type="button" class="inline-command" '
-                    f'data-flow-id="{flow_id}" data-interaction-id="{html.escape(interaction_id, quote=True)}">'
+                    f'data-flow-id="{flow_id}" data-action-id="{html.escape(action_id, quote=True)}">'
                     f"{label}</button>"
                 )
             elif safe_target := _safe_url(target):

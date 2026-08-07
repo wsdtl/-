@@ -15,7 +15,7 @@ class ConsoleFlowRecord:
     direction: str
     adapter: str
     request_id: str
-    client_id: str
+    user_id: str
     sender_name: str
     message_type: str
     content: str

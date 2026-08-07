@@ -64,7 +64,7 @@ def test_unknown_icon_fails_during_rendering() -> None:
 def test_action_ids_must_be_unique_within_a_message() -> None:
     action = Action("confirm", "确认", "确认操作")
 
-    with pytest.raises(ValueError, match="id 不能重复"):
+    with pytest.raises(ValueError, match="action_id 不能重复"):
         M.document().action(action).action(action).build()
 
 

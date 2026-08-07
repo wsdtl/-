@@ -26,7 +26,7 @@ class CombatFieldSpec:
     environment_id: str
     scene: str
     origin: str
-    coordinate: tuple[int, int] | None = None
+    xy: tuple[int, int] | None = None
     altitude: int | None = None
     terrain: str = ""
 
@@ -35,7 +35,7 @@ class CombatFieldSpec:
 class CombatFormationSpec:
     """战场级阵法引用；阵法不占角色修行槽位。"""
 
-    identity: str
+    formation_id: str
     grade: str = "黄"
     position: int = 0
     materials: Mapping[str, float] = field(default_factory=dict)
@@ -45,7 +45,7 @@ class CombatFormationSpec:
 class CombatMedicineSpec:
     """调用方提交的战斗恢复丹快照，不依赖物品业务对象。"""
 
-    identity: str
+    medicine_id: str
     resource: str
     recovery_percent: int
 
@@ -53,7 +53,7 @@ class CombatMedicineSpec:
 @dataclass(frozen=True)
 class CombatBuildRef:
     section: str
-    identity: str
+    content_id: str
     instance_id: str = ""
     born_order: int = 0
     power_multiplier: float = 1.0
@@ -81,7 +81,7 @@ class CombatantSpec:
     name: str
     attributes: Mapping[str, float]
     level: int = 1
-    kind: str = "修士"
+    combatant_type: str = "修士"
     weapon_attack: float = 0.0
     build: tuple[CombatBuildRef, ...] = ()
     health: float | None = None
@@ -101,7 +101,7 @@ class CombatantSpec:
     tags: tuple[str, ...] = ()
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
-    sex: str = ""
+    gender: str = ""
 
 
 @dataclass(frozen=True)
@@ -142,7 +142,7 @@ class CombatFieldResult:
     name: str
     scene: str
     origin: str
-    coordinate: tuple[int, int] | None
+    xy: tuple[int, int] | None
     altitude: int | None
     terrain: str
     stage_index: int
@@ -159,7 +159,7 @@ class CombatFieldResult:
 
 @dataclass(frozen=True)
 class CombatFormationResult:
-    identity: str
+    formation_id: str
     name: str
     grade: str
     side: int
@@ -248,7 +248,7 @@ class CombatantResult:
     name: str
     attributes: Mapping[str, float]
     level: int
-    kind: str
+    combatant_type: str
     health: float
     spirit: float
     shield: float

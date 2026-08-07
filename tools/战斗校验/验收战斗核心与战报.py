@@ -26,30 +26,30 @@ from game.core.combat import (
 from game.core.data import JsonDataService
 
 
-def _build(identities: tuple[str, str, str, str]) -> tuple[CombatBuildRef, ...]:
+def _build(content_ids: tuple[str, str, str, str]) -> tuple[CombatBuildRef, ...]:
     sections = ("功法", "真意", "气机", "器律")
     return tuple(
         CombatBuildRef(
             section=section,
-            identity=identity,
+            content_id=content_id,
             born_order=index + 1,
         )
-        for index, (section, identity) in enumerate(zip(sections, identities))
+        for index, (section, content_id) in enumerate(zip(sections, content_ids))
     )
 
 
 def _fighter(
-    identity: str,
+    combatant_id: str,
     name: str,
-    sex: str,
+    gender: str,
     build: tuple[str, str, str, str],
     speed: int,
 ) -> CombatantSpec:
     return CombatantSpec(
-        id=identity,
+        id=combatant_id,
         name=name,
-        kind="修士",
-        sex=sex,
+        combatant_type="修士",
+        gender=gender,
         level=30,
         attributes={
             "血气上限": 5000,

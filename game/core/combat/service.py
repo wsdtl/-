@@ -126,15 +126,15 @@ class CombatService:
     ) -> PreparedFormation | None:
         if spec is None:
             return None
-        identity = str(spec.identity or "").strip()
+        formation_id = str(spec.formation_id or "").strip()
         try:
-            raw = self._require_engine().catalog.formations[identity]
+            raw = self._require_engine().catalog.formations[formation_id]
         except KeyError as exc:
-            raise ValueError(f"战斗核心未登记阵法：{identity or '<空>'}") from exc
+            raise ValueError(f"战斗核心未登记阵法：{formation_id or '<空>'}") from exc
         grade_name = str(spec.grade or "黄").strip()
         grades = {str(value["品级"]): value for value in raw["品级"]}
         if grade_name not in grades:
-            raise ValueError(f"阵法品级不存在：{identity} / {grade_name}")
+            raise ValueError(f"阵法品级不存在：{formation_id} / {grade_name}")
         grade = grades[grade_name]
         if grade_name == "圣":
             minimum = {str(k): float(v) for k, v in grade["最低消耗"].items()}
@@ -145,11 +145,11 @@ class CombatService:
             unknown_materials = set(actual) - materials
             if unknown_materials:
                 raise ValueError(
-                    f"圣品阵法包含未知材料：{identity} / "
+                    f"圣品阵法包含未知材料：{formation_id} / "
                     + "、".join(sorted(unknown_materials))
                 )
             if any(actual.get(key, 0) < value for key, value in minimum.items()):
-                raise ValueError(f"圣品阵法材料不足：{identity}")
+                raise ValueError(f"圣品阵法材料不足：{formation_id}")
             weights = {str(k): float(v) for k, v in grade["圣品权重"].items()}
             if not math.isclose(
                 sum(weights.values()),
@@ -157,7 +157,7 @@ class CombatService:
                 rel_tol=0,
                 abs_tol=1e-9,
             ):
-                raise ValueError(f"圣品阵法权重和错误：{identity}")
+                raise ValueError(f"圣品阵法权重和错误：{formation_id}")
             minimum_multiplier = float(growth["最低投入倍率"])
             total = 1.0
             for direction in directions:
@@ -198,7 +198,7 @@ class CombatService:
             for value in grade["地势阶段"]
         )
         return PreparedFormation(
-            identity,
+            formation_id,
             str(raw["名称"]),
             grade_name,
             side,
@@ -226,17 +226,17 @@ class CombatService:
         origin = str(spec.origin or "").strip()
         if origin not in {"地表", "秘境"}:
             raise ValueError(f"未知战场来源：{origin or '<空>'}")
-        coordinate = spec.coordinate
+        xy = spec.xy
         altitude = spec.altitude
         terrain = str(spec.terrain or "").strip()
         if origin == "地表":
-            if coordinate is None or len(coordinate) != 2:
+            if xy is None or len(xy) != 2:
                 raise ValueError("地表战场必须提供 xy")
             if altitude is None or not terrain:
                 raise ValueError("地表战场必须提供海拔和区域地形")
-            coordinate = (int(coordinate[0]), int(coordinate[1]))
+            xy = (int(xy[0]), int(xy[1]))
             altitude = int(altitude)
-        elif coordinate is not None or altitude is not None:
+        elif xy is not None or altitude is not None:
             raise ValueError("秘境战场不能伪造地表 xy 或海拔")
         stages = tuple(
             PreparedFieldStage(
@@ -252,7 +252,7 @@ class CombatService:
             name=str(raw["名称"]),
             scene=str(spec.scene or "").strip() or str(raw["名称"]),
             origin=origin,
-            coordinate=coordinate,
+            xy=xy,
             altitude=altitude,
             terrain=terrain,
             stages=stages,
@@ -262,10 +262,10 @@ class CombatService:
         techniques = []
         for index, reference in enumerate(value.build):
             section = str(reference.section or "").strip()
-            identity = str(reference.identity or "").strip()
+            content_id = str(reference.content_id or "").strip()
             if section not in BUILD_SECTIONS:
                 raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
-            definition = materialize(self._data.entity(section, identity))
+            definition = materialize(self._data.entity(section, content_id))
             definition["来源类别"] = section
             definition["实例"] = (
                 reference.instance_id or f"{value.id}:{section}:{index}"
@@ -281,8 +281,8 @@ class CombatService:
             name=value.name,
             attributes=copy.deepcopy(dict(value.attributes)),
             level=value.level,
-            kind=value.kind,
-            sex=value.sex,
+            combatant_type=value.combatant_type,
+            gender=value.gender,
             weapon_attack=value.weapon_attack,
             techniques=tuple(techniques),
             health=value.health,
@@ -329,13 +329,13 @@ class CombatService:
 
     @staticmethod
     def _medicine_definitions(request: CombatRequest) -> dict[str, Any]:
-        definitions = {value.identity: value for value in request.medicine_definitions}
+        definitions = {value.medicine_id: value for value in request.medicine_definitions}
         if len(definitions) != len(request.medicine_definitions):
             raise ValueError("恢复丹定义编号不能重复")
         inventory_ids = {
-            str(identity)
+            str(item_id)
             for combatant in (*request.left_team, *request.right_team)
-            for identity, quantity in combatant.inventory.items()
+            for item_id, quantity in combatant.inventory.items()
             if int(quantity) > 0
         }
         unknown = set(definitions) - inventory_ids
@@ -375,7 +375,7 @@ class CombatService:
                 RuntimeBattleReportParticipant(
                     id=value.id,
                     name=value.name,
-                    title=(display.title if display and display.title else value.kind),
+                    title=(display.title if display and display.title else value.combatant_type),
                     attributes=attributes,
                     initial_health=(
                         value.health
@@ -416,7 +416,7 @@ class CombatService:
                     color=display.color if display else "",
                     extra=display.extra if display else {},
                     level=value.level,
-                    kind=value.kind,
+                    combatant_type=value.combatant_type,
                 )
             )
         report = build_battle_report(
