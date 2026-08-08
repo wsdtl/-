@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .contracts import (
     DatabaseStatus,
+    LocationRecord,
+    NearbyLocationRecord,
     StateAddress,
     StateSnapshot,
     TransactionCommand,
@@ -36,13 +38,14 @@ class DatabaseService:
         return self.status()
 
     def status(self) -> DatabaseStatus:
-        state_count, transaction_count = (
-            self._store.counts() if self._initialized else (0, 0)
+        state_count, location_count, transaction_count = (
+            self._store.counts() if self._initialized else (0, 0, 0)
         )
         return DatabaseStatus(
             initialized=self._initialized,
             path=self.path,
             state_count=state_count,
+            location_count=location_count,
             transaction_count=transaction_count,
         )
 
@@ -55,6 +58,35 @@ class DatabaseService:
     ) -> tuple[StateSnapshot, ...]:
         self._require_initialized()
         return await asyncio.to_thread(self._store.list_for_user, user_id, state_type)
+
+    async def get_many(
+        self, addresses: tuple[StateAddress, ...]
+    ) -> tuple[StateSnapshot, ...]:
+        self._require_initialized()
+        return await asyncio.to_thread(self._store.get_many, addresses)
+
+    async def get_location(self, user_id: str) -> LocationRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(self._store.get_location, user_id)
+
+    async def nearby_locations(
+        self,
+        *,
+        origin_xy: tuple[int, int],
+        radius_meters: int,
+        cell_size_meters: int,
+        limit: int,
+        exclude_user_id: str,
+    ) -> tuple[NearbyLocationRecord, ...]:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.nearby_locations,
+            origin_xy=origin_xy,
+            radius_meters=radius_meters,
+            cell_size_meters=cell_size_meters,
+            limit=limit,
+            exclude_user_id=exclude_user_id,
+        )
 
     async def commit(self, command: TransactionCommand) -> TransactionReceipt:
         self._require_initialized()

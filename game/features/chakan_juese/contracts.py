@@ -18,6 +18,7 @@ class CharacterOverviewMissingError(CharacterOverviewError):
 @dataclass(frozen=True)
 class CharacterOverviewResult:
     character: CharacterProfile
+    xy: tuple[int, int]
     location_name: str
     region: str
     terrain: str

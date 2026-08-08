@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Pattern
+from re import Pattern
+from typing import Any
 
 TextCommands = str | list[str] | tuple[str, ...]
 RegexCommands = Pattern | list[Pattern] | tuple[Pattern, ...]

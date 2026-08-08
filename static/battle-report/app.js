@@ -2,18 +2,16 @@ import {
   applyVisual,
   renderCompactTimeline,
   renderDetailedTimeline,
-  renderRawDataAccess,
-} from "./timeline.js?v=19";
+} from "./timeline.js?v=20";
 import {
   activateMotion,
   controlButton,
-  formatTime,
   node,
   renderGauge,
   renderParticipantRecord,
   renderStatusGroup,
   safeToken,
-} from "./ui.js?v=19";
+} from "./ui.js?v=20";
 
 const root = document.querySelector("#reportRoot");
 const announcer = node("p", "visually-hidden", "");
@@ -24,15 +22,14 @@ document.body.append(announcer);
 const state = {
   report: null,
   segmentIndex: 0,
-  mode: "compact",
-  filter: "all",
-  snapshot: "after",
+  mode: "",
+  filter: "",
+  snapshot: "",
   participantExpanded: false,
   segments: new Map(),
   events: new Map(),
   participants: new Map(),
   transitions: new Map(),
-  raw: new Map(),
   previewBundle: null,
 };
 
@@ -49,19 +46,19 @@ main().catch((error) => {
 
 async function main() {
   const report = await loadReport();
-  if (report.schema !== "game.battle_report.presentation" || report.version !== 3) {
+  if (report.schema !== "game.battle_report.presentation" || report.version !== 4) {
     renderUnsupportedReport(report);
     return;
   }
   state.report = report;
-  state.mode = report.ui.modes[0].id;
-  state.filter = report.ui.filters[0].id;
-  state.snapshot = report.ui.snapshots[report.ui.snapshots.length - 1].id;
+  state.mode = report.ui.defaults.mode;
+  state.filter = report.ui.defaults.filter;
+  state.snapshot = report.ui.defaults.snapshot;
   report.detail.segments.forEach((segment) => state.segments.set(segment.index, segment));
   if (report.detail.segments.length) {
     state.segmentIndex = report.detail.segments[0].index;
   }
-  document.title = `${report.game_name || "万象行纪"} · ${report.summary.title}`;
+  document.title = report.document_title;
   renderReport();
 }
 
@@ -71,8 +68,9 @@ async function loadReport() {
     return JSON.parse(embedded.textContent || "null");
   }
   const localPath = new URLSearchParams(window.location.search).get("report");
-  if (localPath || document.querySelector('meta[name="battle-report-preview-data"]')) {
-    return fetchJson(localPath || "./演示战报.json");
+  const preview = document.querySelector('meta[name="battle-report-preview-data"]');
+  if (localPath || preview) {
+    return fetchJson(localPath || preview.content);
   }
   const path = reportBasePath();
   if (!path) {
@@ -94,7 +92,7 @@ async function handleControlClick(event) {
         return;
       }
       if (value === "detail") {
-        announce("正在读取全部事件");
+        announce(state.report.ui.text.loading_events);
         await ensureEvents(state.segmentIndex);
       }
       state.mode = value;
@@ -116,7 +114,7 @@ async function handleControlClick(event) {
       }
       state.snapshot = value;
       if (state.participantExpanded) {
-        announce("正在读取参战者状态");
+        announce(state.report.ui.text.loading_participants);
         await ensureParticipants(state.segmentIndex, state.snapshot);
       }
       renderReport();
@@ -127,7 +125,7 @@ async function handleControlClick(event) {
       state.participantExpanded = !state.participantExpanded;
       if (state.participantExpanded) {
         renderReport();
-        announce("正在读取参战者状态");
+        announce(state.report.ui.text.loading_participants);
         await ensureParticipants(state.segmentIndex, state.snapshot);
       }
       renderReport();
@@ -162,10 +160,10 @@ async function selectSegment(index) {
   if (!Number.isInteger(index) || index < 0 || index >= count || index === state.segmentIndex) {
     return;
   }
-  announce(`正在读取第 ${index + 1} 个战斗片段`);
+  announce(fillTemplate(state.report.ui.text.switching_segment, { 当前片段: index + 1 }));
   await ensureSegment(index);
   state.segmentIndex = index;
-  state.filter = state.report.ui.filters[0].id;
+  state.filter = state.report.ui.defaults.filter;
   state.participantExpanded = false;
   if (state.mode === "detail") {
     await ensureEvents(index);
@@ -175,7 +173,7 @@ async function selectSegment(index) {
   heading?.setAttribute("tabindex", "-1");
   heading?.focus({ preventScroll: true });
   heading?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
-  announce(`已切换到第 ${index + 1} 个战斗片段`);
+  announce(fillTemplate(state.report.ui.text.switched_segment, { 当前片段: index + 1 }));
 }
 
 async function ensureSegment(index) {
@@ -220,16 +218,6 @@ async function ensureTransition(index, sequence) {
   return payload;
 }
 
-async function ensureRaw(index) {
-  if (state.raw.has(index)) {
-    return state.raw.get(index);
-  }
-  const payload = await loadEndpoint("raw", { segmentIndex: index });
-  assertProtocol(payload);
-  state.raw.set(index, payload);
-  return payload;
-}
-
 async function loadEndpoint(kind, values) {
   const preview = document.querySelector('meta[name="battle-report-preview-data"]');
   if (preview) {
@@ -243,7 +231,6 @@ async function loadEndpoint(kind, values) {
     events: `${base}/segments/${index}/events`,
     participants: `${base}/segments/${index}/participants/${encodeURIComponent(values.snapshot || "")}`,
     transition: `${base}/segments/${index}/transitions/${values.sequence}`,
-    raw: `${base}/segments/${index}/raw`,
   };
   return fetchJson(paths[kind]);
 }
@@ -269,14 +256,12 @@ function previewValue(bundle, kind, values) {
   if (kind === "transition") {
     return bundle.transitions[`${index}:${values.sequence}`];
   }
-  if (kind === "raw") {
-    return bundle.raw[index];
-  }
-  throw new Error("预览数据类型不受支持。");
+  throw new Error(state.report.ui.text.unsupported_detail);
 }
 
 function renderReport() {
   const report = state.report;
+  root.removeAttribute("aria-busy");
   root.replaceChildren();
   root.className = "report-shell report-ready";
   document.body.dataset.mode = state.mode;
@@ -293,7 +278,7 @@ function renderReport() {
   }
   const segment = currentSegment();
   if (!segment) {
-    root.append(node("section", "error-state", "战报片段读取失败。"));
+    root.append(node("section", "error-state", report.ui.text.segment_load_failed));
     return;
   }
   if (report.detail.segment_count > 1) {
@@ -302,21 +287,15 @@ function renderReport() {
   root.append(renderMatchup(segment));
   root.append(renderViewToolbar());
   root.append(renderReportBody(segment));
-  root.append(
-    renderRawDataAccess(report.ui, () => ensureRaw(state.segmentIndex)),
-  );
   requestAnimationFrame(() => activateMotion(root));
 }
 
 function renderSummaryHeader(report) {
   const text = report.ui.text;
-  const start = formatTime(report.started_at);
-  const finish = formatTime(report.finished_at);
-  const time = report.started_at === report.finished_at ? start : `${start} 至 ${finish}`;
   const header = node("header", "report-header");
   header.append(
     node("div", "brand-line", [
-      node("span", "brand-name", report.game_name || "万象行纪"),
+      node("span", "brand-name", report.game_name),
       node("span", "brand-divider", text.brand_suffix),
     ]),
   );
@@ -324,7 +303,7 @@ function renderSummaryHeader(report) {
     node("div", "title-row", [
       node("div", "title-copy", [
         node("h1", "", report.summary.title),
-        node("p", "report-time", time),
+        node("p", "report-time", report.time_label),
       ]),
       node("div", `result-stamp ${safeToken(report.summary.tone)}`, [
         node("span", "", text.settlement_label),
@@ -363,10 +342,10 @@ function renderMatchup(segment) {
   return node("section", "matchup segment-overview", [
     first,
     node("div", "versus", [
-      node("strong", "", "VS"),
+      node("strong", "", state.report.ui.text.versus_label),
       segment.duration_label ? node("span", "", segment.duration_label) : null,
       middleTeams
-        ? node("small", "", state.report.ui.text.additional_team_template.replace("{count}", String(middleTeams)))
+        ? node("small", "", fillTemplate(state.report.ui.text.additional_team_template, { 数量: middleTeams }))
         : null,
     ]),
     last,
@@ -385,7 +364,7 @@ function renderSegmentNavigation() {
   const text = state.report.ui.text;
   const options = Array.from({ length: count }, (_, index) => {
     const segment = state.segments.get(index);
-    const option = node("option", "", `${index + 1} / ${count} · ${segment?.title || `片段 ${index + 1}`}`);
+    const option = node("option", "", `${index + 1} / ${count} · ${segment?.title || ""}`);
     option.value = String(index);
     option.selected = index === state.segmentIndex;
     return option;
@@ -399,7 +378,7 @@ function renderSegmentNavigation() {
         "segment-scroll",
         Array.from({ length: count }, (_, index) =>
           controlButton(
-            state.segments.get(index)?.title || `片段 ${index + 1}`,
+            state.segments.get(index)?.title || "",
             "segment",
             String(index),
             index === state.segmentIndex,
@@ -457,7 +436,7 @@ function renderActiveTimeline(segment) {
     const detail = state.events.get(state.segmentIndex);
     return detail
       ? renderDetailedTimeline(detail, state.filter, state.report.ui, comparison)
-      : loadingPanel("全部事件读取中");
+      : loadingPanel(state.report.ui.text.events_loading);
   }
   return renderCompactTimeline(segment, state.report.ui, comparison);
 }
@@ -491,7 +470,7 @@ function renderSummaryPanel(segment) {
           "participant-stack",
           loaded.participants.map((participant) => renderParticipantSummary(participant)),
         )
-      : loadingPanel("参战者状态读取中");
+      : loadingPanel(state.report.ui.text.participants_loading);
     const content = node("div", "participant-disclosure-content", [
       node("div", "participant-disclosure-inner", [
         node("div", "panel-heading", [snapshotSwitch]),
@@ -544,8 +523,8 @@ function optionExists(options, value) {
 }
 
 function assertProtocol(value) {
-  if (value?.schema !== "game.battle_report.presentation" || value?.version !== 3) {
-    throw new Error("战报明细协议暂不支持。");
+  if (value?.schema !== "game.battle_report.presentation" || value?.version !== 4) {
+    throw new Error(state.report.ui.text.unsupported_detail);
   }
 }
 
@@ -564,6 +543,7 @@ async function fetchJson(url) {
 }
 
 function renderUnsupportedReport(report) {
+  root.removeAttribute("aria-busy");
   root.replaceChildren(
     node("section", "error-state", [
       node("h1", "", "内容协议暂不支持"),
@@ -573,6 +553,7 @@ function renderUnsupportedReport(report) {
 }
 
 function renderError(message) {
+  root.removeAttribute("aria-busy");
   root.replaceChildren(
     node("section", "error-state", [
       node("h1", "", "内容暂时无法打开"),
@@ -609,6 +590,13 @@ function focusControl(action, value) {
     const suffix = value ? `[data-value="${CSS.escape(value)}"]` : "";
     root.querySelector(`[data-action="${CSS.escape(action)}"]${suffix}`)?.focus();
   });
+}
+
+function fillTemplate(template, values) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
+    String(template || ""),
+  );
 }
 
 function reducedMotion() {

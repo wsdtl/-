@@ -28,6 +28,7 @@ class DatabaseStatus:
     initialized: bool
     path: Path
     state_count: int
+    location_count: int
     transaction_count: int
 
 
@@ -48,6 +49,7 @@ class StateSnapshot:
 
 @dataclass(frozen=True)
 class StateMutation:
+    user_id: str
     state_type: str
     state_key: str
     value: JsonObject | None
@@ -55,7 +57,15 @@ class StateMutation:
 
 
 @dataclass(frozen=True)
+class LocationMutation:
+    user_id: str
+    xy: tuple[int, int] | None
+    expected_version: int
+
+
+@dataclass(frozen=True)
 class StateChange:
+    user_id: str
     state_type: str
     state_key: str
     operation: str
@@ -68,7 +78,7 @@ class TransactionCommand:
     user_id: str
     request_id: str
     business_type: str
-    mutations: tuple[StateMutation, ...]
+    operations: tuple[StateMutation | LocationMutation, ...]
     payload: JsonObject
 
 
@@ -83,10 +93,28 @@ class TransactionReceipt:
     changes: tuple[StateChange, ...]
 
 
+@dataclass(frozen=True)
+class LocationRecord:
+    user_id: str
+    xy: tuple[int, int]
+    version: int
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class NearbyLocationRecord:
+    user_id: str
+    xy: tuple[int, int]
+    horizontal_distance_squared_meters: int
+
+
 __all__ = [
     "DatabaseError",
     "DatabaseStatus",
     "IdempotencyConflictError",
+    "LocationMutation",
+    "LocationRecord",
+    "NearbyLocationRecord",
     "StateAddress",
     "StateChange",
     "StateConflictError",

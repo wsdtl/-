@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 ACTION_TYPES = {0, 1, 2, 3}
 PERMISSION_TYPES = {0, 1, 2, 3}
 
@@ -17,13 +16,13 @@ def validate_keyboard(value: object) -> dict[str, Any]:
     """校验 keyboard 并返回原对象的浅拷贝。"""
 
     if not isinstance(value, dict):
-        raise ValueError("QQ keyboard 必须是对象")
+        raise TypeError("QQ keyboard 必须是对象")
     if value.get("id"):
         return dict(value)
 
     content = value.get("content")
     if not isinstance(content, dict):
-        raise ValueError("QQ keyboard 缺少 content 对象")
+        raise TypeError("QQ keyboard 缺少 content 对象")
     rows = content.get("rows")
     if not isinstance(rows, list) or not rows:
         raise ValueError("QQ keyboard rows 必须是非空列表")
@@ -31,7 +30,7 @@ def validate_keyboard(value: object) -> dict[str, Any]:
     seen_ids: set[str] = set()
     for row_index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
-            raise ValueError(f"QQ keyboard 第 {row_index} 行必须是对象")
+            raise TypeError(f"QQ keyboard 第 {row_index} 行必须是对象")
         buttons = row.get("buttons")
         if not isinstance(buttons, list) or not buttons:
             raise ValueError(f"QQ keyboard 第 {row_index} 行没有按钮")
@@ -48,7 +47,7 @@ def _validate_button(
 ) -> None:
     location = f"第 {row_index} 行第 {column_index} 个按钮"
     if not isinstance(button, dict):
-        raise ValueError(f"QQ keyboard {location}必须是对象")
+        raise TypeError(f"QQ keyboard {location}必须是对象")
 
     button_id = str(button.get("id") or "").strip()
     if not button_id:
@@ -63,7 +62,7 @@ def _validate_button(
 
     action = button.get("action")
     if not isinstance(action, dict):
-        raise ValueError(f"QQ keyboard {location}缺少 action 对象")
+        raise TypeError(f"QQ keyboard {location}缺少 action 对象")
     action_type = _integer_field(action, "type", f"QQ keyboard {location}action.type")
     if action_type not in ACTION_TYPES:
         raise ValueError(f"QQ keyboard {location}action.type 不支持：{action_type}")
@@ -72,7 +71,7 @@ def _validate_button(
 
     permission = action.get("permission")
     if not isinstance(permission, dict):
-        raise ValueError(f"QQ keyboard {location}缺少 action.permission")
+        raise TypeError(f"QQ keyboard {location}缺少 action.permission")
     permission_type = _integer_field(
         permission,
         "type",
@@ -84,13 +83,13 @@ def _validate_button(
     if action_type == 2:
         for field in ("enter", "reply"):
             if not isinstance(action.get(field), bool):
-                raise ValueError(f"QQ keyboard {location}type=2 时 action.{field} 必须是 bool")
+                raise TypeError(f"QQ keyboard {location}type=2 时 action.{field} 必须是 bool")
 
 
 def _integer_field(source: dict[str, Any], field: str, label: str) -> int:
     value = source.get(field)
     if isinstance(value, bool):
-        raise ValueError(f"{label} 必须是整数")
+        raise TypeError(f"{label} 必须是整数")
     try:
         return int(value)
     except (TypeError, ValueError) as exc:

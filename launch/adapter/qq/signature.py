@@ -6,7 +6,6 @@ import time
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-
 SIGNATURE_HEADER = "X-Signature-Ed25519"
 TIMESTAMP_HEADER = "X-Signature-Timestamp"
 EVENT_SIGNATURE_MAX_AGE_SECONDS = 300.0
@@ -21,7 +20,7 @@ def make_validation_signature(bot_secret: str, plain_token: str, event_ts: str) 
 
     seed = _secret_seed(bot_secret)
     private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
-    message = f"{event_ts}{plain_token}".encode("utf-8")
+    message = f"{event_ts}{plain_token}".encode()
     return private_key.sign(message).hex()
 
 

@@ -1124,10 +1124,6 @@ details[open] > :not(summary) {
   overflow-wrap: anywhere;
 }
 
-.raw-details {
-  margin-left: 15px;
-}
-
 .frame-comparison {
   padding-top: 4px;
   border-top: 1px dashed #d3dcd7;
@@ -1229,22 +1225,6 @@ details[open] > :not(summary) {
   padding-left: 10px;
 }
 
-.raw-event {
-  width: 100%;
-  min-width: 0;
-  max-height: 72vh;
-  margin: 8px 0 0;
-  padding: 14px;
-  overflow: auto;
-  border: 1px solid #cbd5d0;
-  border-radius: 4px;
-  background: #17201c;
-  color: #dce8e2;
-  font: .74rem/1.55 ui-monospace, Consolas, monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .empty-state {
   margin: 0;
   padding: 28px 18px;
@@ -1297,16 +1277,14 @@ details[open] > :not(summary) {
   border: 0 !important;
 }
 
-.event-group,
-.raw-report-details {
+.event-group {
   margin-top: 10px;
   border: 1px solid #c4d0ca;
   border-radius: 4px;
   background: #eef2ef;
 }
 
-.event-group > summary,
-.raw-report-details > summary {
+.event-group > summary {
   padding: 8px 10px;
   color: var(--muted);
   cursor: pointer;
@@ -1316,16 +1294,6 @@ details[open] > :not(summary) {
 
 .event-group > .event-list {
   padding: 0 10px 9px;
-}
-
-.raw-report-details {
-  margin: 14px 0 0;
-  background: var(--paper);
-}
-
-.raw-report-details > .raw-event {
-  width: calc(100% - 20px);
-  margin: 0 10px 10px;
 }
 
 @keyframes page-reveal {
@@ -1419,15 +1387,6 @@ details[open] > :not(summary) {
     scrollbar-gutter: auto;
   }
 
-  .raw-report-details {
-    max-height: none;
-    overflow: visible;
-  }
-
-  .raw-event {
-    max-height: none;
-    overflow: visible;
-  }
 }
 
 @media (max-width: 860px) {
@@ -1772,10 +1731,6 @@ details[open] > :not(summary) {
     flex: 1 1 calc(50% - 3px);
   }
 
-  .raw-event {
-    padding: 10px;
-    font-size: .68rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

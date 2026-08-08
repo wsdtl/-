@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from launch.config import config
 from launch.log import C, logger
@@ -209,7 +210,7 @@ class QqEventHandler(BaseMessageHandler):
 
         data = payload.get("d")
         if not isinstance(data, dict):
-            raise ValueError("QQ 回调验证缺少 d")
+            raise TypeError("QQ 回调验证缺少 d 对象")
         plain_token = str(data.get("plain_token") or "").strip()
         event_ts = str(data.get("event_ts") or "").strip()
         if not plain_token or not event_ts:

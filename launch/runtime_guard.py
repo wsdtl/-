@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, ClassVar
 
 from .config import config
 from .log import C, logger
@@ -13,7 +13,7 @@ from .log import C, logger
 class RuntimeGuard:
     """保护一个项目实例同一时间只进入一个服务进程。"""
 
-    _held_paths: set[Path] = set()
+    _held_paths: ClassVar[set[Path]] = set()
 
     def __init__(self, lock_file: Path | None = None) -> None:
         self.lock_file = lock_file or config.base_dir / "launch" / "runtime" / "server.lock"

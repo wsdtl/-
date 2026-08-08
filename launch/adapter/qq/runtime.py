@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Awaitable, Callable
 
 from launch.log import C, logger
 from launch.message_events import emit_message_event, event_from_incoming
@@ -206,7 +206,7 @@ class QqDriverRuntime:
                 event = await queue.get()
                 try:
                     await self._run_event_task(event)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - 单个事件不能终止 worker
                     logger.opt(colors=True, exception=exc).error(
                         C.join(
                             C.fail("QQ 事件 worker 异常"),
@@ -228,7 +228,7 @@ class QqDriverRuntime:
                 interaction_id = await queue.get()
                 try:
                     await self._ack_interaction(interaction_id)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - 单个 ACK 不能终止 worker
                     logger.opt(colors=True, exception=exc).warning(
                         C.join(
                             C.warn("QQ 按钮 ACK worker 异常"),
@@ -272,7 +272,7 @@ class QqDriverRuntime:
                 raise RuntimeError("QQ 按钮 ACK 线程池未启动")
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(executor, client.ack_interaction, interaction_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - ACK 是独立的尽力而为边界
             logger.opt(colors=True, exception=exc).warning(
                 C.join(
                     C.warn("QQ 按钮回调确认失败"),

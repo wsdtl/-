@@ -283,7 +283,7 @@ class QqReplyManager:
                 item = await queue.get()
                 try:
                     await self._send_direct(item)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - 单条发送失败不能终止 worker
                     logger.opt(colors=True, exception=exc).warning(
                         C.join(
                             C.warn("QQ 回复 worker 异常"),
@@ -303,7 +303,7 @@ class QqReplyManager:
             logger.opt(colors=True).debug(f"{C.ok('QQ access token 已预热')}")
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - 预热失败不能阻止服务启动
             logger.opt(colors=True, exception=exc).warning(f"{C.warn('QQ access token 预热失败')}")
 
     async def _send_direct(self, item: QqQueuedReply) -> bool:
@@ -316,7 +316,7 @@ class QqReplyManager:
                 item.target,
                 item.options,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - QQ 客户端错误统一转换为发送失败
             logger.opt(colors=True, exception=exc).warning(
                 C.join(
                     C.warn("QQ 回复发送失败"),

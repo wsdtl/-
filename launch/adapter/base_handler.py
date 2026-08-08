@@ -1,7 +1,7 @@
 """通信适配器的最小生命周期和命令注册契约。"""
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 
 class BaseAdapter(ABC):
@@ -44,7 +44,7 @@ class BaseMessageHandler(BaseAdapter):
     - adapter_capabilities: 当前驱动器公开能力。
     - match: regex 模式的完整消息命中对象，其余模式为 None。
 
-    驱动器回复器必须兼容：
+    驱动器回复器统一实现：
         async def send(message, is_log=True, request_id=None) -> bool
     """
 

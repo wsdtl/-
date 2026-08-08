@@ -43,32 +43,22 @@ def test_standard_reply_has_stable_sections_and_no_italics() -> None:
     assert ">" not in plain
 
 
-@pytest.mark.parametrize("value", ["> 手写引用", "---"])
-def test_message_text_rejects_raw_markdown_structure(value: str) -> None:
-    with pytest.raises(ValueError):
-        M.document().section("测试").line(value)
-
-
-def test_body_content_requires_a_section() -> None:
+def test_document_schema_rejects_raw_structure_and_unknown_icons() -> None:
+    for value in ("> 手写引用", "---"):
+        with pytest.raises(ValueError):
+            M.document().section("测试").line(value)
     with pytest.raises(ValueError, match="必须属于 section"):
         M.document().line("无归属正文")
-
-
-def test_unknown_icon_fails_during_rendering() -> None:
     message = M.document().section("测试", icon="unknown").build()
-
     with pytest.raises(ValueError, match="未知消息图标分类"):
         render_markdown(message.document)
 
 
-def test_action_ids_must_be_unique_within_a_message() -> None:
+def test_message_builders_freeze_and_reject_duplicate_actions() -> None:
     action = Action("confirm", "确认", "确认操作")
 
     with pytest.raises(ValueError, match="action_id 不能重复"):
         M.document().action(action).action(action).build()
-
-
-def test_local_renderer_freezes_builders_and_preserves_other_values() -> None:
     rendered = render_local_message(M.document().section("状态").line("正常"))
 
     assert isinstance(rendered, RenderedMessage)

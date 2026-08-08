@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Pattern, Set, Tuple, Union
+from re import Pattern
+from typing import Any, ClassVar
 
 from launch.log import C, logger
 from launch.message_events import emit_message_event, event_from_incoming
@@ -23,8 +25,8 @@ from ..depends import call_with_dependencies
 from .event import LocalCommandEvent, local_command_event
 from .manager import LocalDispatchResult, current_event, manager
 
-TextCommands = Union[str, List[str], Tuple[str, ...]]
-RegexCommands = Union[Pattern, List[Pattern], Tuple[Pattern, ...]]
+TextCommands = str | list[str] | tuple[str, ...]
+RegexCommands = Pattern | list[Pattern] | tuple[Pattern, ...]
 
 
 @dataclass(frozen=True)
@@ -35,7 +37,7 @@ class LocalCommandRule:
     priority: int
     block: bool
     order: int
-    pattern: Optional[Pattern] = None
+    pattern: Pattern | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -46,7 +48,7 @@ class LocalCommandMatch:
     rule: LocalCommandRule
     command: str
     message: str
-    match: Optional[re.Match] = None
+    match: re.Match | None = None
 
 
 class LocalEventHandler(BaseMessageHandler):
@@ -63,11 +65,11 @@ class LocalEventHandler(BaseMessageHandler):
         active_push=False,
     )
 
-    command_rules: dict[str, list[LocalCommandRule]] = {}
-    fullmatch_rules: dict[str, list[LocalCommandRule]] = {}
-    regex_rules: dict[str, list[LocalCommandRule]] = {}
-    regex_fallback: list[LocalCommandRule] = []
-    regex_prefix_lengths: Set[int] = set()
+    command_rules: ClassVar[dict[str, list[LocalCommandRule]]] = {}
+    fullmatch_rules: ClassVar[dict[str, list[LocalCommandRule]]] = {}
+    regex_rules: ClassVar[dict[str, list[LocalCommandRule]]] = {}
+    regex_fallback: ClassVar[list[LocalCommandRule]] = []
+    regex_prefix_lengths: ClassVar[set[int]] = set()
     _register_order: int = 0
 
     @staticmethod
@@ -362,7 +364,7 @@ class LocalEventHandler(BaseMessageHandler):
         )
 
     @staticmethod
-    def _split_command(raw_message: str) -> Tuple[str, str]:
+    def _split_command(raw_message: str) -> tuple[str, str]:
         """按第一个空格拆出命令片段和业务参数文本。"""
 
         parts = raw_message.split(maxsplit=1)
@@ -434,7 +436,7 @@ class LocalEventHandler(BaseMessageHandler):
         func: Callable,
         priority: int,
         block: bool,
-        pattern: Optional[Pattern] = None,
+        pattern: Pattern | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> LocalCommandRule:
         """创建命令规则，并记录注册顺序。"""
@@ -456,7 +458,7 @@ class LocalEventHandler(BaseMessageHandler):
 
         matched = []
         key = cmd.casefold()
-        seen_rules: Set[int] = set()
+        seen_rules: set[int] = set()
 
         for length in LocalEventHandler.regex_prefix_lengths:
             for rule in LocalEventHandler.regex_rules.get(key[:length], []):

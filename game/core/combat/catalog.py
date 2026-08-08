@@ -10,6 +10,36 @@ from typing import Any
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+_UI_TEXT_FIELDS = {
+    "brand_suffix": "品牌后缀",
+    "settlement_label": "结算标题",
+    "archive_kicker": "归档眉题",
+    "archive_title": "归档标题",
+    "more_summary": "更多结算",
+    "segment_label": "片段标题",
+    "segment_select_label": "选择片段",
+    "previous_segment_label": "上一片段",
+    "next_segment_label": "下一片段",
+    "participant_panel_title": "参战者面板",
+    "comparison_title": "状态对比",
+    "comparison_empty": "状态无变化",
+    "empty_timeline": "空时间线",
+    "empty_filter": "空筛选",
+    "empty_participants": "空参战者",
+    "loading_events": "读取全部事件",
+    "loading_participants": "读取参战者",
+    "loading_comparison": "读取状态对比",
+    "switching_segment": "切换片段中",
+    "switched_segment": "切换片段完成",
+    "segment_load_failed": "片段读取失败",
+    "events_loading": "全部事件读取中",
+    "participants_loading": "参战者读取中",
+    "unsupported_detail": "明细协议不支持",
+    "participant_fallback": "参战者默认名称",
+    "versus_label": "对阵分隔",
+    "additional_team_template": "多方参战",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class BattleReportCatalog:
@@ -58,7 +88,8 @@ class BattleReportCatalog:
 
     @property
     def system(self) -> Mapping[str, Any]:
-        return _mapping(self.visual, "系统")
+        value = _mapping(self.visual, "系统")
+        return {"name": value["名称"], "color": value["颜色"]}
 
     @property
     def foreground(self) -> str:
@@ -70,15 +101,51 @@ class BattleReportCatalog:
 
     @property
     def resources(self) -> Mapping[str, Mapping[str, Any]]:
-        return _mapping(self.visual, "资源")
+        return {
+            str(resource_id): {
+                "label": definition["名称"],
+                "color": definition["颜色"],
+                "tone": definition["色调"],
+                "presentation": definition["呈现"],
+            }
+            for resource_id, definition in _mapping(self.visual, "资源").items()
+        }
 
     @property
     def category_definitions(self) -> tuple[Mapping[str, Any], ...]:
-        return tuple(_mapping_value(value, "标准化.分类") for value in _sequence(self.normalization, "分类"))
+        return tuple(
+            {
+                "id": definition["标识"],
+                "label": definition["名称"],
+                "color": definition["颜色"],
+                "tone": definition["色调"],
+                "priority": int(definition["优先级"]),
+            }
+            for value in _sequence(self.normalization, "分类")
+            for definition in (_mapping_value(value, "标准化.分类"),)
+        )
 
     @property
     def ui(self) -> dict[str, Any]:
-        return deepcopy(dict(_mapping(self.presentation, "界面")))
+        interface = _mapping(self.presentation, "界面")
+        text = _mapping(interface, "文案")
+        return {
+            "text": {
+                field: str(text[source])
+                for field, source in _UI_TEXT_FIELDS.items()
+            },
+            "modes": _options(interface, "模式"),
+            "filters": [
+                {"id": value["id"], "label": value["label"]}
+                for value in self.category_definitions
+            ],
+            "snapshots": _options(interface, "快照"),
+            "defaults": {
+                "mode": str(interface["默认模式"]),
+                "filter": str(interface["默认筛选"]),
+                "snapshot": str(interface["默认快照"]),
+            },
+        }
 
     @property
     def compact_hidden_kinds(self) -> frozenset[str]:
@@ -120,11 +187,22 @@ class BattleReportCatalog:
 
     @property
     def view_modes(self) -> list[dict[str, Any]]:
-        return [deepcopy(dict(value)) for value in _sequence(self.normalization, "查看模式")]
+        return _options(self.normalization, "查看模式")
 
     @property
     def participant_presentation(self) -> Mapping[str, Any]:
-        return _mapping(self.presentation, "参战者")
+        value = _mapping(self.presentation, "参战者")
+        status = _mapping(value, "状态组")
+        return {
+            "状态组": {
+                "id": status["标识"],
+                "label": status["名称"],
+                "presentation": status["呈现"],
+                "empty_text": status["空内容"],
+            },
+            "详情标题": value["详情标题"],
+            "详情分组": deepcopy(dict(_mapping(value, "详情分组"))),
+        }
 
     def normalized_category(self, kind: str) -> str:
         mapping = _mapping(self.normalization, "类型分类")
@@ -141,28 +219,27 @@ class BattleReportCatalog:
 
     def public_category(self, kind: str, normalized_category: str) -> str:
         direct = _mapping(self.presentation, "类型分类")
-        normalized = _mapping(self.presentation, "战报分类")
-        return str(
-            direct.get(kind)
-            or normalized.get(normalized_category)
-            or self.presentation["默认分类"]
-        )
+        return str(direct.get(kind) or normalized_category)
 
     def event_tone(self, category: str, kind: str) -> str:
         direct = _mapping(self.presentation, "类型色调")
-        categories = _mapping(self.presentation, "分类色调")
         return str(
             direct.get(kind)
-            or categories.get(category)
+            or self.normalized_category_definition(category)["tone"]
             or self.presentation["默认色调"]
         )
 
     def dominant_tone(self, categories: Sequence[str]) -> str:
         present = set(categories)
-        for category in _strings_in_order(self.presentation, "分类优先级"):
-            if category in present:
-                return category
-        return str(self.presentation["默认分类"])
+        definitions = sorted(
+            self.category_definitions,
+            key=lambda value: int(value["priority"]),
+            reverse=True,
+        )
+        for definition in definitions:
+            if definition["id"] in present:
+                return str(definition["tone"])
+        return str(self.presentation["默认色调"])
 
     def resource_key(self, label: str) -> str | None:
         value = _mapping(self.presentation, "资源键").get(label)
@@ -221,9 +298,20 @@ class BattleReportCatalog:
             if not _COLOR.fullmatch(str(definition.get("color") or "")):
                 raise ValueError(f"战报资源颜色不合法：{resource_id}")
         ui = _mapping(self.presentation, "界面")
-        for key in ("text", "modes", "filters", "snapshots"):
+        for key in ("文案", "模式", "快照", "默认模式", "默认筛选", "默认快照"):
             if key not in ui:
                 raise ValueError(f"战报界面配置缺少：{key}")
+        missing_text = set(_UI_TEXT_FIELDS.values()) - set(_mapping(ui, "文案"))
+        if missing_text:
+            raise ValueError("战报界面文案不完整：" + "、".join(sorted(missing_text)))
+        mode_ids = {value["id"] for value in _options(ui, "模式")}
+        snapshot_ids = {value["id"] for value in _options(ui, "快照")}
+        if str(ui["默认模式"]) not in mode_ids:
+            raise ValueError("战报默认模式没有对应定义")
+        if str(ui["默认筛选"]) not in category_ids:
+            raise ValueError("战报默认筛选没有对应定义")
+        if str(ui["默认快照"]) not in snapshot_ids:
+            raise ValueError("战报默认快照没有对应定义")
 
     def validate_event_kinds(self, event_kinds: Sequence[str]) -> None:
         declared = {str(value) for value in event_kinds}
@@ -283,4 +371,18 @@ def _strings_in_order(value: Mapping[str, Any], key: str) -> tuple[str, ...]:
     result = tuple(str(item) for item in _sequence(value, key))
     if any(not item.strip() for item in result):
         raise ValueError(f"战报配置不能包含空值：{key}")
+    return result
+
+
+def _options(value: Mapping[str, Any], key: str) -> list[dict[str, str]]:
+    result = []
+    for raw in _sequence(value, key):
+        option = _mapping_value(raw, key)
+        option_id = str(option.get("标识") or "").strip()
+        label = str(option.get("名称") or "").strip()
+        if not option_id or not label:
+            raise ValueError(f"战报选项缺少标识或名称：{key}")
+        result.append({"id": option_id, "label": label})
+    if len({value["id"] for value in result}) != len(result):
+        raise ValueError(f"战报选项标识重复：{key}")
     return result

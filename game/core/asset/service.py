@@ -1,0 +1,473 @@
+"""从数据库状态和正式 JSON 生成玩家资产只读视图。"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+
+from game.core.data import JsonDataError, JsonDataService
+from game.core.database import DatabaseService, StateSnapshot
+
+from .contracts import (
+    AssetCategory,
+    AssetEntry,
+    AssetSnapshot,
+    AssetSortRules,
+    AssetStateError,
+    AssetStatus,
+    AssetSubcategory,
+)
+
+_STATE_TYPES = frozenset(
+    {
+        "inventory",
+        "cultivation_library",
+        "law_reserve",
+        "formation_reserve",
+        "knowledge",
+    }
+)
+_CULTIVATION_CATEGORIES = frozenset({"功法", "真意", "气机"})
+
+
+class AssetService:
+    """只读取玩家拥有权，不执行任何资产变更。"""
+
+    def __init__(self, data: JsonDataService, database: DatabaseService) -> None:
+        self._data = data
+        self._database = database
+        self._initialized = False
+        self._categories: tuple[AssetCategory, ...] = ()
+        self._category_by_state: dict[str, str] = {}
+        self._subcategory_rules: dict[tuple[str, str], Mapping[str, object]] = {}
+        self._prefixes: dict[str, tuple[str, str]] = {}
+        self._grades: dict[str, str] = {}
+        self._page_limit = 0
+        self._sort_rules = AssetSortRules(False, False, False, False)
+
+    def initialize(self) -> AssetStatus:
+        if self._initialized:
+            raise RuntimeError("玩家资产核心微服务已经初始化")
+        if not self._data.status().loaded:
+            raise RuntimeError("JSON 数据微服务必须先于玩家资产服务启动")
+        if not self._database.status().initialized:
+            raise RuntimeError("核心数据库必须先于玩家资产服务启动")
+
+        layout = _mapping(
+            self._data.dataset("纳戒展示").get("分类"),
+            "展示/纳戒/分类.json",
+        )
+        self._page_limit = _positive_int(layout.get("每页上限"), "纳戒.每页上限")
+        if self._page_limit > 50:
+            raise JsonDataError("纳戒每页上限不能超过 50")
+        self._load_prefixes()
+        self._load_grades()
+        self._load_categories(layout.get("大类"))
+        self._sort_rules = _sort_rules(layout.get("排序"))
+        self._initialized = True
+        return self.status()
+
+    def status(self) -> AssetStatus:
+        return AssetStatus(
+            initialized=self._initialized,
+            category_count=len(self._categories),
+            subcategory_count=sum(
+                len(category.subcategories) for category in self._categories
+            ),
+            page_limit=self._page_limit,
+        )
+
+    async def snapshot(self, user_id: str) -> AssetSnapshot:
+        self._require_initialized()
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            raise ValueError("user_id 不能为空")
+        snapshots = await self._database.list_for_user(normalized_user_id)
+        equipped = _equipped_content(snapshots)
+        entries = tuple(
+            self._entry(snapshot, equipped)
+            for snapshot in snapshots
+            if snapshot.address.state_type in _STATE_TYPES
+        )
+        return AssetSnapshot(
+            user_id=normalized_user_id,
+            categories=self._categories,
+            entries=entries,
+            page_limit=self._page_limit,
+            sort_rules=self._sort_rules,
+        )
+
+    def _entry(
+        self,
+        snapshot: StateSnapshot,
+        equipped: Mapping[tuple[str, str], tuple[str, ...]],
+    ) -> AssetEntry:
+        state_type = snapshot.address.state_type
+        category = self._category_by_state.get(state_type)
+        if category is None:
+            raise AssetStateError(f"纳戒未登记状态类型：{state_type}")
+        value = _mapping(snapshot.value, f"{state_type}/{snapshot.address.state_key}")
+        content_id = _text(value.get("编号") or value.get("阵法编号"), "资产编号")
+        if state_type == "inventory":
+            return self._inventory_entry(snapshot, category, content_id, value)
+        if state_type == "cultivation_library":
+            return self._cultivation_entry(
+                snapshot, category, content_id, value, equipped
+            )
+        if state_type == "law_reserve":
+            return self._law_entry(snapshot, category, content_id, value)
+        if state_type == "formation_reserve":
+            return self._formation_entry(snapshot, category, content_id, value)
+        return self._knowledge_entry(snapshot, category, content_id)
+
+    def _inventory_entry(
+        self,
+        snapshot: StateSnapshot,
+        category: str,
+        content_id: str,
+        value: Mapping[str, object],
+    ) -> AssetEntry:
+        number_category, _ = self._number_identity(content_id)
+        grade_id, grade_name = self._grade(value.get("品级"))
+        quantity = _positive_int(value.get("数量"), "普通物品.数量")
+        _expect_key(snapshot, f"{content_id}:{grade_id}")
+        name = _entity_name(self._data, "物品", content_id)
+        subcategory = self._match_subcategory(category, "编号类别", number_category)
+        return AssetEntry(
+            category,
+            subcategory,
+            content_id,
+            snapshot.address.state_key,
+            name,
+            grade_id,
+            grade_name,
+            quantity,
+            updated_at=snapshot.updated_at,
+        )
+
+    def _cultivation_entry(
+        self,
+        snapshot: StateSnapshot,
+        category: str,
+        content_id: str,
+        value: Mapping[str, object],
+        equipped: Mapping[tuple[str, str], tuple[str, ...]],
+    ) -> AssetEntry:
+        number_category, _ = self._number_identity(content_id)
+        if number_category not in _CULTIVATION_CATEGORIES:
+            raise AssetStateError(f"道藏包含非法编号：{content_id}")
+        grade_id, grade_name = self._grade(value.get("品级"))
+        _expect_key(snapshot, f"{content_id}:{grade_id}")
+        name = _entity_name(self._data, number_category, content_id)
+        subcategory = self._match_subcategory(category, "编号类别", number_category)
+        return AssetEntry(
+            category,
+            subcategory,
+            content_id,
+            snapshot.address.state_key,
+            name,
+            grade_id,
+            grade_name,
+            equipped_slots=equipped.get((content_id, grade_id), ()),
+            updated_at=snapshot.updated_at,
+        )
+
+    def _law_entry(
+        self,
+        snapshot: StateSnapshot,
+        category: str,
+        content_id: str,
+        value: Mapping[str, object],
+    ) -> AssetEntry:
+        _expect_key(snapshot, content_id)
+        law = self._data.entity("器律", content_id)
+        name = _required_entity_text(law, "名称", f"器律 {content_id}")
+        stage = _required_entity_text(law, "器阶", f"器律 {content_id}")
+        quantity = _positive_int(value.get("数量"), "器藏.数量")
+        subcategory = self._match_subcategory(category, "器阶", stage)
+        return AssetEntry(
+            category,
+            subcategory,
+            content_id,
+            snapshot.address.state_key,
+            name,
+            quantity=quantity,
+            updated_at=snapshot.updated_at,
+        )
+
+    def _formation_entry(
+        self,
+        snapshot: StateSnapshot,
+        category: str,
+        content_id: str,
+        value: Mapping[str, object],
+    ) -> AssetEntry:
+        name = _entity_name(self._data, "阵法", content_id)
+        grade_id, grade_name = self._grade(value.get("品级"))
+        subcategory = self._match_subcategory(category, "品级", grade_id)
+        material_total: int | None = None
+        if grade_id == "05":
+            materials = _mapping(value.get("投入"), "圣品阵法.投入")
+            material_total = sum(
+                _nonnegative_decimal(raw, f"圣品阵法.投入.{material}")
+                for material, raw in materials.items()
+            )
+            quantity = 1
+        else:
+            _expect_key(snapshot, f"{content_id}:{grade_id}")
+            quantity = _positive_int(value.get("数量"), "阵藏.数量")
+        return AssetEntry(
+            category,
+            subcategory,
+            content_id,
+            snapshot.address.state_key,
+            name,
+            grade_id,
+            grade_name,
+            quantity,
+            material_total=material_total,
+            updated_at=snapshot.updated_at,
+        )
+
+    def _knowledge_entry(
+        self, snapshot: StateSnapshot, category: str, content_id: str
+    ) -> AssetEntry:
+        number_category, _ = self._number_identity(content_id)
+        if not number_category.endswith("丹方"):
+            raise AssetStateError(f"所学包含非丹方编号：{content_id}")
+        _expect_key(snapshot, content_id)
+        name = _entity_name(self._data, "丹方", content_id)
+        subcategory = self._match_subcategory(category, "编号类别", number_category)
+        return AssetEntry(
+            category,
+            subcategory,
+            content_id,
+            snapshot.address.state_key,
+            name,
+            updated_at=snapshot.updated_at,
+        )
+
+    def _load_prefixes(self) -> None:
+        numbering = _mapping(
+            self._data.dataset("基础定义").get("编号"), "定义/编号.json"
+        )
+        rows = _sequence(numbering.get("编号前缀"), "编号.编号前缀")
+        prefixes: dict[str, tuple[str, str]] = {}
+        for raw in rows:
+            row = _mapping(raw, "编号.编号前缀[]")
+            prefix = _text(row.get("前缀"), "编号前缀")
+            identity = (
+                _text(row.get("主体"), f"编号前缀 {prefix}.主体"),
+                _text(row.get("类别"), f"编号前缀 {prefix}.类别"),
+            )
+            if prefix in prefixes:
+                raise JsonDataError(f"编号前缀重复：{prefix}")
+            prefixes[prefix] = identity
+        self._prefixes = prefixes
+
+    def _load_grades(self) -> None:
+        rows = _sequence(self._data.dataset("基础定义").get("品级"), "定义/品级.json")
+        self._grades = {
+            _text(_mapping(raw, "品级[]").get("编号"), "品级.编号"): _text(
+                _mapping(raw, "品级[]").get("名称"), "品级.名称"
+            )
+            for raw in rows
+        }
+
+    def _load_categories(self, value: object) -> None:
+        rows = _sequence(value, "纳戒.大类")
+        categories: list[AssetCategory] = []
+        states: dict[str, str] = {}
+        rules: dict[tuple[str, str], Mapping[str, object]] = {}
+        names: set[str] = set()
+        for raw in rows:
+            row = _mapping(raw, "纳戒.大类[]")
+            name = _text(row.get("名称"), "纳戒.大类.名称")
+            if name in names:
+                raise JsonDataError(f"纳戒大类重复：{name}")
+            names.add(name)
+            state_type = _text(row.get("状态类型"), f"纳戒.{name}.状态类型")
+            if state_type not in _STATE_TYPES or state_type in states:
+                raise JsonDataError(f"纳戒状态类型非法或重复：{state_type}")
+            states[state_type] = name
+            subcategories: list[AssetSubcategory] = []
+            subcategory_names: set[str] = set()
+            for sub_raw in _sequence(row.get("小类"), f"纳戒.{name}.小类"):
+                sub = _mapping(sub_raw, f"纳戒.{name}.小类[]")
+                sub_name = _text(sub.get("名称"), f"纳戒.{name}.小类.名称")
+                if sub_name in subcategory_names:
+                    raise JsonDataError(f"纳戒小类重复：{name}/{sub_name}")
+                subcategory_names.add(sub_name)
+                match_fields = {
+                    str(key): raw_value
+                    for key, raw_value in sub.items()
+                    if key != "名称"
+                }
+                if len(match_fields) != 1:
+                    raise JsonDataError(f"纳戒小类必须只有一个归类条件：{sub_name}")
+                subcategories.append(AssetSubcategory(sub_name))
+                rules[(name, sub_name)] = match_fields
+            categories.append(
+                AssetCategory(
+                    name,
+                    _text(row.get("图标"), f"纳戒.{name}.图标"),
+                    tuple(subcategories),
+                )
+            )
+        if set(states) != _STATE_TYPES:
+            raise JsonDataError("纳戒展示没有完整覆盖玩家资产状态类型")
+        self._categories = tuple(categories)
+        self._category_by_state = states
+        self._subcategory_rules = rules
+
+    def _number_identity(self, content_id: str) -> tuple[str, str]:
+        identity = self._prefixes.get(content_id[:2])
+        if identity is None:
+            raise AssetStateError(f"资产编号前缀未定义：{content_id}")
+        subject, category = identity
+        return (subject if category in {"丹药", "丹方"} else category, category)
+
+    def _grade(self, value: object) -> tuple[str, str]:
+        grade_id = _text(value, "资产品级")
+        grade_name = self._grades.get(grade_id)
+        if grade_name is None:
+            raise AssetStateError(f"资产使用未知品级：{grade_id}")
+        return grade_id, grade_name
+
+    def _match_subcategory(self, category: str, field: str, value: str) -> str:
+        matches = [
+            subcategory
+            for (large, subcategory), rule in self._subcategory_rules.items()
+            if large == category and rule.get(field) == value
+        ]
+        if len(matches) != 1:
+            raise AssetStateError(
+                f"纳戒资产必须且只能命中一个小类：{category}/{field}={value}"
+            )
+        return matches[0]
+
+    def _require_initialized(self) -> None:
+        if not self._initialized:
+            raise RuntimeError("玩家资产核心微服务尚未初始化")
+
+
+def _equipped_content(
+    snapshots: Sequence[StateSnapshot],
+) -> Mapping[tuple[str, str], tuple[str, ...]]:
+    cultivation = next(
+        (
+            snapshot.value
+            for snapshot in snapshots
+            if snapshot.address.state_type == "cultivation"
+            and snapshot.address.state_key == "main"
+        ),
+        None,
+    )
+    if cultivation is None:
+        return {}
+    result: dict[tuple[str, str], list[str]] = {}
+    for category in ("功法", "真意", "气机"):
+        slots = _sequence(
+            cultivation.get(category), f"修行槽.{category}", allow_empty=True
+        )
+        for index, raw in enumerate(slots, start=1):
+            if raw is None:
+                continue
+            entry = _mapping(raw, f"修行槽.{category}[{index}]")
+            key = (
+                _text(entry.get("编号"), "装配编号"),
+                _text(entry.get("品级"), "装配品级"),
+            )
+            result.setdefault(key, []).append(f"{category}{index}")
+    return {key: tuple(values) for key, values in result.items()}
+
+
+def _sort_rules(value: object) -> AssetSortRules:
+    rules = _mapping(value, "纳戒.排序")
+    equipped_first = rules.get("已装配优先")
+    if not isinstance(equipped_first, bool):
+        raise JsonDataError("纳戒.排序.已装配优先必须是布尔值")
+    grade_direction = _direction(rules.get("品级"), "纳戒.排序.品级")
+    content_id_direction = _direction(rules.get("编号"), "纳戒.排序.编号")
+    holy_formation_direction = _text(
+        rules.get("圣品阵法"), "纳戒.排序.圣品阵法"
+    )
+    if holy_formation_direction not in {"炼制时间升序", "炼制时间降序"}:
+        raise JsonDataError(
+            "纳戒.排序.圣品阵法只能是炼制时间升序或炼制时间降序"
+        )
+    return AssetSortRules(
+        equipped_first=equipped_first,
+        grade_descending=grade_direction == "降序",
+        content_id_descending=content_id_direction == "降序",
+        holy_formation_newest_first=holy_formation_direction == "炼制时间降序",
+    )
+
+
+def _direction(value: object, label: str) -> str:
+    direction = _text(value, label)
+    if direction not in {"升序", "降序"}:
+        raise JsonDataError(f"{label}只能是升序或降序")
+    return direction
+
+
+def _entity_name(data: JsonDataService, section: str, content_id: str) -> str:
+    try:
+        value = data.entity(section, content_id)
+    except JsonDataError as exc:
+        raise AssetStateError(f"资产引用不存在：{section} {content_id}") from exc
+    return _required_entity_text(value, "名称", f"{section} {content_id}")
+
+
+def _required_entity_text(value: Mapping[str, object], field: str, label: str) -> str:
+    try:
+        return _text(value.get(field), f"{label}.{field}")
+    except AssetStateError as exc:
+        raise AssetStateError(str(exc)) from exc
+
+
+def _expect_key(snapshot: StateSnapshot, expected: str) -> None:
+    if snapshot.address.state_key != expected:
+        raise AssetStateError(
+            f"资产状态键与正文不符：{snapshot.address.state_type}/"
+            f"{snapshot.address.state_key} != {expected}"
+        )
+
+
+def _mapping(value: object, label: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise AssetStateError(f"{label}必须是对象")
+    return value
+
+
+def _sequence(
+    value: object, label: str, *, allow_empty: bool = False
+) -> tuple[object, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise AssetStateError(f"{label}必须是数组")
+    result = tuple(value)
+    if not result and not allow_empty:
+        raise AssetStateError(f"{label}不能为空")
+    return result
+
+
+def _text(value: object, label: str) -> str:
+    result = str(value or "").strip()
+    if not result:
+        raise AssetStateError(f"{label}不能为空")
+    return result
+
+
+def _positive_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise AssetStateError(f"{label}必须是正整数")
+    return value
+
+
+def _nonnegative_decimal(value: object, label: str) -> int:
+    text = _text(value, label)
+    if not text.isdecimal():
+        raise AssetStateError(f"{label}必须是非负十进制字符串")
+    return int(text)
+
+
+__all__ = ["AssetService"]

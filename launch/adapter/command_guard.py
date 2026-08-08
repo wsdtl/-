@@ -11,6 +11,8 @@ from inspect import isawaitable
 from itertools import count
 from typing import Any
 
+from message import M, Message
+
 from .context import MessageContext
 
 
@@ -63,7 +65,7 @@ class CommandGuardDecision:
     """守卫检查结果。"""
 
     blocked: bool = False
-    reply: object | None = None
+    reply: Message | None = None
     reason: str = ""
 
     @staticmethod
@@ -73,7 +75,7 @@ class CommandGuardDecision:
         return CommandGuardDecision()
 
     @staticmethod
-    def block(reply: object | None = None, reason: str = "") -> CommandGuardDecision:
+    def block(reply: Message | None = None, reason: str = "") -> CommandGuardDecision:
         """构造拦截决定，可携带一次统一回复。"""
 
         return CommandGuardDecision(blocked=True, reply=reply, reason=reason)
@@ -145,7 +147,7 @@ async def run_command_guards(context: CommandGuardContext) -> CommandGuardDecisi
                 decision = await decision
         except Exception:  # noqa: BLE001 - a broken guard must fail closed
             return CommandGuardDecision.block(
-                "命令暂时无法执行，请稍后重试。",
+                _guard_error_message(),
                 reason=f"命令守卫执行失败：{entry.name}",
             )
 
@@ -162,6 +164,15 @@ def _normalize_decision(decision: object) -> CommandGuardDecision:
     if isinstance(decision, CommandGuardDecision):
         return decision
     return CommandGuardDecision.block(
-        "命令暂时无法执行，请稍后重试。",
+        _guard_error_message(),
         reason="命令守卫返回了无效结果",
+    )
+
+
+def _guard_error_message() -> Message:
+    return (
+        M.document()
+        .section("当前状态")
+        .line("命令暂时无法执行，请稍后重试。")
+        .build()
     )

@@ -8,11 +8,14 @@ from pathlib import Path
 from launch import C, OnEvent, config, logger
 
 from .config import game_config
+from .core.asset import AssetService
 from .core.character import CharacterService
 from .core.combat import CombatService
+from .core.companion import CompanionService
 from .core.data import JsonDataService
 from .core.database import DatabaseService
 from .core.item_catalog import ItemCatalogService
+from .core.location import LocationService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
 from .core.world import WorldService
@@ -20,6 +23,9 @@ from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
 from .features.ditu import WorldMapFeature
+from .features.najie import NajieFeature
+from .features.weizhi import PositionFeature
+from .features.xinglu import TravelFeature
 
 
 @dataclass(frozen=True)
@@ -31,9 +37,12 @@ class CoreServices:
     combat: CombatService
     pool: PoolService
     world: WorldService
+    companion: CompanionService
     database: DatabaseService
+    location: LocationService
     player_state: PlayerStateService
     character: CharacterService
+    asset: AssetService
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,9 @@ class FeatureServices:
     chakan_juese: CharacterOverviewFeature
     chakan_wupin: ItemInspectionFeature
     ditu: WorldMapFeature
+    najie: NajieFeature
+    weizhi: PositionFeature
+    xinglu: TravelFeature
 
 
 @dataclass(frozen=True)
@@ -115,6 +127,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         C.join(
             C.ok("核心数据库微服务已启动"),
             C.kv("states", database_status.state_count),
+            C.kv("locations", database_status.location_count),
             C.kv("transactions", database_status.transaction_count),
         )
     )
@@ -127,7 +140,26 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("guard_rules", player_state_status.guard_rule_count),
         )
     )
-    character = CharacterService(data, database, player_state)
+    location = LocationService(data, database, world)
+    location_status = location.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("玩家位置核心微服务已启动"),
+            C.kv("players", location_status.player_count),
+            C.kv("radius", location_status.nearby_radius_meters),
+            C.kv("page_size", location_status.nearby_page_size),
+        )
+    )
+    companion = CompanionService(data)
+    companion_status = companion.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("世界道侣核心微服务已启动"),
+            C.kv("companions", companion_status.companion_count),
+            C.kv("locations", companion_status.location_count),
+        )
+    )
+    character = CharacterService(data, database, player_state, location)
     character_service_status = character.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -137,15 +169,28 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
+    asset = AssetService(data, database)
+    asset_status = asset.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("玩家资产核心微服务已启动"),
+            C.kv("categories", asset_status.category_count),
+            C.kv("subcategories", asset_status.subcategory_count),
+            C.kv("page_limit", asset_status.page_limit),
+        )
+    )
     core = CoreServices(
         data=data,
         item_catalog=item_catalog,
         combat=combat,
         pool=pool,
         world=world,
+        companion=companion,
         database=database,
+        location=location,
         player_state=player_state,
         character=character,
+        asset=asset,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -157,7 +202,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     )
     chakan_wupin = ItemInspectionFeature(item_catalog)
     chakan_wupin.initialize()
-    chakan_juese = CharacterOverviewFeature(character, player_state, world)
+    chakan_juese = CharacterOverviewFeature(character, player_state, world, location)
     chakan_juese.initialize()
     ditu = WorldMapFeature(world)
     map_overview = ditu.initialize()
@@ -169,11 +214,27 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("roads", map_overview.road_count),
         )
     )
+    najie = NajieFeature(asset)
+    najie.initialize()
+    weizhi = PositionFeature(
+        data,
+        world,
+        location,
+        character,
+        player_state,
+        companion,
+    )
+    weizhi.initialize()
+    xinglu = TravelFeature(world, character, location)
+    xinglu.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
         chakan_wupin=chakan_wupin,
         ditu=ditu,
+        najie=najie,
+        weizhi=weizhi,
+        xinglu=xinglu,
     )
     return GameServices(core=core, features=features)
 

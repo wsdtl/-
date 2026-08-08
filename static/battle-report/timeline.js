@@ -1,10 +1,9 @@
 import {
   node,
-  rawBlock,
   renderFacts,
   renderSnapshotParticipant,
   safeToken,
-} from "./ui.js?v=19";
+} from "./ui.js?v=20";
 
 export function renderCompactTimeline(segment, ui, loadComparison) {
   const mode = ui.modes[0];
@@ -64,35 +63,13 @@ export function renderDetailedTimelineEntries(detail, filter, ui, loadComparison
   return timeline;
 }
 
-export function renderRawDataAccess(ui, loadRaw) {
-  const details = node("details", "raw-report-details");
-  details.append(node("summary", "", ui.text.raw_data_label));
-  details.addEventListener("toggle", async () => {
-    if (!details.open || details.dataset.loaded === "true") {
-      return;
-    }
-    details.dataset.loaded = "loading";
-    const status = loadingStatus("原始数据读取中");
-    details.append(status);
-    try {
-      const value = await loadRaw();
-      status.replaceWith(rawBlock(value));
-      details.dataset.loaded = "true";
-    } catch (error) {
-      status.replaceWith(loadError(error));
-      details.dataset.loaded = "error";
-    }
-  });
-  return details;
-}
-
 function renderCompactEntry(entry, ui, loadComparison) {
   const article = node("article", `action-card tone-${safeToken(entry.tone)}`);
   applyVisual(article, entry.visual);
   article.append(node("div", "action-head", [node("div", "action-title", entry.title)]));
   if (entry.summary_events.length) {
     const events = node("ol", "event-list compact-event-list");
-    entry.summary_events.forEach((event) => events.append(renderEvent(event, false)));
+    entry.summary_events.forEach((event) => events.append(renderEvent(event, false, ui)));
     article.append(events);
   }
   if (entry.comparison_available) {
@@ -116,7 +93,7 @@ function renderDetailedEntry(entry, filter, ui, loadComparison) {
   const eventList = node("ol", "event-list");
   entry.events
     .filter((event) => matchesFilter(event, filter, ui))
-    .forEach((event) => eventList.append(renderEvent(event, true)));
+    .forEach((event) => eventList.append(renderEvent(event, true, ui)));
   article.append(eventList);
   if (entry.comparison?.available) {
     article.append(renderComparisonAccess(entry.sequence, ui, loadComparison));
@@ -124,13 +101,13 @@ function renderDetailedEntry(entry, filter, ui, loadComparison) {
   return article;
 }
 
-function renderEvent(event, includeFacts) {
+function renderEvent(event, includeFacts, ui) {
   const item = node("li", "event");
   item.dataset.tone = event.tone || "neutral";
   item.dataset.category = event.category || "";
   item.append(
     node("div", "event-heading", [
-      renderEventMarker(event),
+      renderEventMarker(event, ui),
       includeFacts ? node("span", "event-label", event.label) : null,
       node("span", "event-text", event.text),
     ]),
@@ -147,14 +124,14 @@ function renderEvent(event, includeFacts) {
   return item;
 }
 
-function renderEventMarker(event) {
+function renderEventMarker(event, ui) {
   const marker = node("span", "event-marker", "");
   applyVisual(marker, event.visual);
   marker.dataset.actorKey = event.visual?.key || "system";
   marker.dataset.eventCategory = event.category || "";
   marker.title = event.visual?.key === "system"
     ? event.label
-    : `${event.source?.label || "参战者"} · ${event.label}`;
+    : `${event.source?.label || ui.text.participant_fallback} · ${event.label}`;
   marker.setAttribute("aria-hidden", "true");
   return marker;
 }
@@ -168,7 +145,7 @@ function renderComparisonAccess(sequence, ui, loadComparison) {
       return;
     }
     details.dataset.loaded = "loading";
-    const status = loadingStatus("状态对比读取中");
+    const status = loadingStatus(ui.text.loading_comparison);
     details.append(status);
     try {
       const value = await loadComparison(sequence);

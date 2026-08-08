@@ -118,7 +118,7 @@ async def show_character(*, user_id: str, manager, **_) -> None:
         .section("所在之地", icon="map")
         .field("地点", result.location_name or "野外")
         .row(("区域", result.region), ("地形", result.terrain))
-        .row(("坐标", f"{character.xy[0]}, {character.xy[1]}"), ("海拔", f"{result.altitude}米"))
+        .row(("坐标", f"{result.xy[0]}, {result.xy[1]}"), ("海拔", f"{result.altitude}米"))
         .section("当前资源", icon="status")
     )
     _append_pairs(reply, character.resources)

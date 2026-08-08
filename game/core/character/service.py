@@ -13,6 +13,7 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 
 from .contracts import (
@@ -22,6 +23,7 @@ from .contracts import (
     CharacterInputError,
     CharacterNotFoundError,
     CharacterProfile,
+    CharacterPublicProfile,
     CharacterStateError,
     CharacterStatus,
     EquippedContent,
@@ -38,10 +40,12 @@ class CharacterService:
         data: JsonDataService,
         database: DatabaseService,
         player_state: PlayerStateService,
+        location: LocationService,
     ) -> None:
         self._data = data
         self._database = database
         self._player_state = player_state
+        self._location = location
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -59,6 +63,8 @@ class CharacterService:
             raise RuntimeError("核心数据库必须先于角色服务启动")
         if not self._player_state.status().initialized:
             raise RuntimeError("人物状态服务必须先于角色服务启动")
+        if not self._location.status().initialized:
+            raise RuntimeError("玩家位置服务必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
         role_rule = role_rules.get("人物")
@@ -106,7 +112,9 @@ class CharacterService:
         initial_items = _initial_items(self._role_rule) if self._initialized else ()
         return CharacterStatus(
             initialized=self._initialized,
-            role_name=str(self._role_rule.get("角色类型") or "") if self._initialized else "",
+            role_name=str(self._role_rule.get("角色类型") or "")
+            if self._initialized
+            else "",
             gender_count=len(self._gender_values),
             initial_item_count=len(initial_items),
         )
@@ -149,10 +157,7 @@ class CharacterService:
             level=_state_positive_int(character.get("等级"), "人物.等级"),
             experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
             spirit_stones=_state_nonnegative_int(character.get("灵石"), "人物.灵石"),
-            automatic_medicine=_state_bool(
-                character.get("自动用药"), "人物.自动用药"
-            ),
-            xy=_state_xy(_state_mapping(character.get("位置"), "人物.位置").get("xy")),
+            automatic_medicine=_state_bool(character.get("自动用药"), "人物.自动用药"),
             attributes=_state_numbers(character.get("属性"), "人物.属性"),
             resources=_state_numbers(character.get("资源"), "人物.资源"),
             cultivation_slots=cultivation_slots,
@@ -160,6 +165,39 @@ class CharacterService:
             weapon=weapon_profile,
             inventory=inventory,
         )
+
+    async def public_profiles(
+        self, user_ids: tuple[str, ...]
+    ) -> tuple[CharacterPublicProfile, ...]:
+        """批量读取附近展示所需的人物公开摘要。"""
+
+        self._require_initialized()
+        normalized = _user_ids(user_ids)
+        snapshots = await self._database.get_many(
+            tuple(StateAddress(user_id, "character", "main") for user_id in normalized)
+        )
+        by_user = {snapshot.address.user_id: snapshot.value for snapshot in snapshots}
+        result: list[CharacterPublicProfile] = []
+        for user_id in normalized:
+            value = by_user.get(user_id)
+            if value is None:
+                continue
+            realm_id = _state_text(value.get("境界"), "人物.境界")
+            realm_name = _state_text(
+                self._data.entity("境界", realm_id).get("名称"),
+                f"境界 {realm_id}.名称",
+            )
+            result.append(
+                CharacterPublicProfile(
+                    user_id=user_id,
+                    name=_state_text(value.get("姓名"), "人物.姓名"),
+                    gender=_state_text(value.get("性别"), "人物.性别"),
+                    realm_id=realm_id,
+                    realm_name=realm_name,
+                    level=_state_positive_int(value.get("等级"), "人物.等级"),
+                )
+            )
+        return tuple(result)
 
     async def create(self, command: CharacterCreateCommand) -> CharacterCreationResult:
         self._require_initialized()
@@ -178,17 +216,19 @@ class CharacterService:
         cultivation_state = self._cultivation_state()
         weapon_state = self._weapon_state(creation)
         item_rows = _initial_items(self._role_rule)
-        mutations = [
-            StateMutation("character", "main", character_state, 0),
-            StateMutation("cultivation", "main", cultivation_state, 0),
-            StateMutation("weapon", "main", weapon_state, 0),
-            self._player_state.initial_mutation(),
+        operations = [
+            StateMutation(command.user_id, "character", "main", character_state, 0),
+            StateMutation(command.user_id, "cultivation", "main", cultivation_state, 0),
+            StateMutation(command.user_id, "weapon", "main", weapon_state, 0),
+            self._player_state.initial_mutation(command.user_id),
+            self._location.initial_mutation(command.user_id, command.birth_xy),
         ]
         for item_id, grade, quantity in item_rows:
-            mutations.append(
+            operations.append(
                 StateMutation(
+                    command.user_id,
                     "inventory",
-                    f"丹药:{item_id}:{grade}",
+                    f"{item_id}:{grade}",
                     {"编号": item_id, "品级": grade, "数量": quantity},
                     0,
                 )
@@ -199,7 +239,7 @@ class CharacterService:
                     user_id=command.user_id,
                     request_id=command.request_id,
                     business_type="创建人物",
-                    mutations=tuple(mutations),
+                    operations=tuple(operations),
                     payload={
                         "姓名": command.name,
                         "性别": command.gender,
@@ -308,9 +348,7 @@ class CharacterService:
                 self._data.entity("器律", content_id).get("名称"),
                 f"器律 {content_id}.名称",
             )
-            equipped_laws.append(
-                EquippedContent("器律", slot, content_id, name)
-            )
+            equipped_laws.append(EquippedContent("器律", slot, content_id, name))
         return WeaponProfile(
             name=_state_text(weapon.get("名称"), "本命武器.名称"),
             level=level,
@@ -338,7 +376,9 @@ class CharacterService:
         minimum = int(name_rule["最短长度"])
         maximum = int(name_rule["最长长度"])
         if not minimum <= len(name) <= maximum:
-            raise CharacterInputError(f"姓名长度必须在 {minimum} 到 {maximum} 个字符之间")
+            raise CharacterInputError(
+                f"姓名长度必须在 {minimum} 到 {maximum} 个字符之间"
+            )
         pattern = str(name_rule["匹配"])
         if re.fullmatch(pattern, name) is None:
             raise CharacterInputError("姓名只能使用中文、字母或数字")
@@ -368,7 +408,6 @@ class CharacterService:
             "属性加成": {},
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},
             "自动用药": bool(self._role_rule.get("自动用药")),
-            "位置": {"xy": list(command.birth_xy)},
         }
 
     def _cultivation_state(self) -> dict[str, object]:
@@ -379,7 +418,9 @@ class CharacterService:
         }
 
     def _weapon_state(self, creation: Mapping[str, object]) -> dict[str, object]:
-        weapon_creation = _mapping(creation.get("初始本命武器"), "人物.json.创建.初始本命武器")
+        weapon_creation = _mapping(
+            creation.get("初始本命武器"), "人物.json.创建.初始本命武器"
+        )
         level = _positive_int(self._weapon_rule.get("初始等级"), "本命武器初始等级")
         stage = _stage_for_level(self._weapon_stage_rule, level)
         return {
@@ -431,20 +472,18 @@ def _state_bool(value: object, label: str) -> bool:
     return value
 
 
-def _state_xy(value: object) -> tuple[int, int]:
-    if (
-        not isinstance(value, Sequence)
-        or isinstance(value, (str, bytes))
-        or len(value) != 2
-        or any(isinstance(item, bool) or not isinstance(item, int) for item in value)
-    ):
-        raise CharacterStateError("人物.位置.xy必须是两个整数")
-    return (value[0], value[1])
+def _user_ids(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(str(value or "").strip() for value in values)
+    if any(not value for value in normalized):
+        raise ValueError("user_id不能为空")
+    if normalized != values:
+        raise ValueError("user_id不能带首尾空白")
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("user_id不能重复")
+    return normalized
 
 
-def _state_numbers(
-    value: object, label: str
-) -> tuple[tuple[str, int | float], ...]:
+def _state_numbers(value: object, label: str) -> tuple[tuple[str, int | float], ...]:
     fields = _state_mapping(value, label)
     result: list[tuple[str, int | float]] = []
     for name, raw in fields.items():
@@ -493,7 +532,13 @@ def _initial_items(role_rule: Mapping[str, object]) -> tuple[tuple[str, str, int
         item_id = str(entry.get("编号") or "").strip()
         grade = str(entry.get("品级") or "").strip()
         quantity = entry.get("数量")
-        if not item_id or not grade or isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+        if (
+            not item_id
+            or not grade
+            or isinstance(quantity, bool)
+            or not isinstance(quantity, int)
+            or quantity < 1
+        ):
             raise JsonDataError(f"人物.json.物品[{index}]字段无效")
         result.append((item_id, grade, quantity))
     if len({(item_id, grade) for item_id, grade, _ in result}) != len(result):
@@ -508,7 +553,11 @@ def _stage_for_level(rule: Mapping[str, object], level: int) -> Mapping[str, obj
     for raw in stages:
         stage = _mapping(raw, "本命武器.json.器阶")
         bounds = stage.get("等级范围")
-        if isinstance(bounds, Sequence) and len(bounds) == 2 and bounds[0] <= level <= bounds[1]:
+        if (
+            isinstance(bounds, Sequence)
+            and len(bounds) == 2
+            and bounds[0] <= level <= bounds[1]
+        ):
             return stage
     raise JsonDataError(f"本命武器等级没有对应器阶：{level}")
 

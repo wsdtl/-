@@ -8,7 +8,7 @@ import json
 import time
 from base64 import b64encode
 from threading import Lock
-from typing import Any, Dict
+from typing import Any
 
 import urllib3
 from urllib3.exceptions import (
@@ -126,10 +126,10 @@ class QqOpenApiClient:
         event_id: str = "",
         *,
         is_wakeup: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """补齐回复消息必须携带的 msg_id 和可选 event_id。"""
 
-        result: Dict[str, Any] = dict(payload)
+        result: dict[str, Any] = dict(payload)
         if message_id:
             result["msg_id"] = message_id
         if event_id:

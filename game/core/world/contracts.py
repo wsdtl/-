@@ -12,6 +12,7 @@ class WorldStatus:
     region_count: int
     road_count: int
     terrain_cell_count: int
+    journey_realm_count: int
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,53 @@ class LocationView:
     companion_pool: tuple[str, ...]
     enemy_pool: tuple[str, ...]
     enemy_count: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class JourneyQuery:
+    origin_xy: tuple[int, int]
+    destination: LocationQuery
+    realm_id: str
+
+
+@dataclass(frozen=True)
+class JourneyMetrics:
+    horizontal_distance_m: int
+    road_segment_count: int
+    terrain_segment_count: int
+    minimum_altitude_m: int
+    maximum_altitude_m: int
+    total_ascent_m: int
+    total_descent_m: int
+    maximum_step_ascent_m: int
+    maximum_step_descent_m: int
+    maximum_uphill_permille: int
+    maximum_downhill_permille: int
+    weighted_distance_m: int
+
+
+@dataclass(frozen=True)
+class JourneyPassageSegment:
+    kind: str
+    name: str
+    start_xy: tuple[int, int]
+    end_xy: tuple[int, int]
+    direction: tuple[int, int]
+    horizontal_distance_m: int
+
+
+@dataclass(frozen=True)
+class JourneyPlan:
+    origin: LocationView
+    destination: LocationView
+    realm_id: str
+    realm_name: str
+    travel_method: str
+    route: tuple[tuple[int, int], ...]
+    passages: tuple[JourneyPassageSegment, ...]
+    via_locations: tuple[str, ...]
+    metrics: JourneyMetrics
+    narrative: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -105,6 +153,10 @@ class WorldMapView:
 
 
 __all__ = [
+    "JourneyMetrics",
+    "JourneyPassageSegment",
+    "JourneyPlan",
+    "JourneyQuery",
     "LocationQuery",
     "LocationView",
     "MapCoordinateBand",

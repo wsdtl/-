@@ -4,9 +4,10 @@
 注册顺序保证同优先级结果稳定。
 """
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from itertools import count
-from typing import Callable, Iterable, List
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -21,8 +22,8 @@ class EventCallback:
 class OnEvent:
     """启动和关闭回调注册器。"""
 
-    connect_list: List[EventCallback] = []
-    disconnect_list: List[EventCallback] = []
+    connect_list: ClassVar[list[EventCallback]] = []
+    disconnect_list: ClassVar[list[EventCallback]] = []
     _order_counter = count()
 
     @staticmethod
@@ -58,7 +59,7 @@ class OnEvent:
         return wrapper
 
     @staticmethod
-    def ordered_callbacks(callbacks: Iterable[EventCallback]) -> List[Callable]:
+    def ordered_callbacks(callbacks: Iterable[EventCallback]) -> list[Callable]:
         """按优先级整理回调；同优先级保持注册顺序。"""
 
         return [

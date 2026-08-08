@@ -12,7 +12,6 @@ from urllib.parse import unquote
 
 from .config import DEFAULT_PUBLIC_HOST, config
 
-
 PROJECT_DIR: Path = config.base_dir
 STATIC_DIR: Path = PROJECT_DIR / "static"
 STATIC_URL_PREFIX = "/static"

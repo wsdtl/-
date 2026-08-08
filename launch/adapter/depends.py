@@ -7,15 +7,16 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Tuple
+from typing import Any
 
 from .context import current_message_context, current_reply_target
 
-_current_message_context: ContextVar[dict[str, Any]] = ContextVar(
+_current_message_context: ContextVar[dict[str, Any] | None] = ContextVar(
     "adapter_current_message_context",
-    default={},
+    default=None,
 )
 
 
@@ -32,7 +33,7 @@ class DependencyContext:
 
     def __init__(self, values: Mapping[str, Any]) -> None:
         self.values = dict(values)
-        self.cache: Dict[Callable, Any] = {}
+        self.cache: dict[Callable, Any] = {}
 
 
 async def call_with_dependencies(func: Callable, context: Mapping[str, Any]) -> Any:
@@ -54,7 +55,8 @@ async def call_with_dependencies(func: Callable, context: Mapping[str, Any]) -> 
 def current_context_value(name: str, default: Any = None) -> Any:
     """读取当前消息上下文中的字段。"""
 
-    return _current_message_context.get().get(name, default)
+    context = _current_message_context.get()
+    return default if context is None else context.get(name, default)
 
 
 def _expanded_context(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -109,7 +111,7 @@ async def resolve_kwargs(func: Callable, dependency_context: DependencyContext) 
 async def resolve_dependency(
     depends: Depends,
     dependency_context: DependencyContext,
-    stack: Tuple[Callable, ...] = (),
+    stack: tuple[Callable, ...] = (),
 ) -> Any:
     """递归解析一个 Depends，并执行循环与协议边界检查。"""
 
@@ -137,7 +139,7 @@ async def resolve_dependency(
 async def resolve_dependency_kwargs(
     dependency: Callable,
     dependency_context: DependencyContext,
-    stack: Tuple[Callable, ...] = (),
+    stack: tuple[Callable, ...] = (),
 ) -> dict[str, Any]:
     """为依赖函数解析参数；规则与命令回调保持一致。"""
 
@@ -170,7 +172,7 @@ async def resolve_dependency_kwargs(
     return kwargs
 
 
-def _assert_dependency_boundary(dependency: Callable, stack: Tuple[Callable, ...]) -> None:
+def _assert_dependency_boundary(dependency: Callable, stack: tuple[Callable, ...]) -> None:
     """禁止组件依赖函数把驱动器私有依赖藏进内部。"""
 
     if not stack or not _is_adapter_private_dependency(dependency):

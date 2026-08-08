@@ -4,9 +4,10 @@ MessageHandler 把同一业务回调注册到所有启用驱动器；AdapterRepl
 当前 ContextVar 或显式 ReplyTarget 选择真实 manager。业务层无需判断协议。
 """
 
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -42,7 +43,7 @@ class AdapterSpec:
     http_mount: AdapterHttpMount | None = None
 
 
-def available_adapter_specs() -> Dict[str, AdapterSpec]:
+def available_adapter_specs() -> dict[str, AdapterSpec]:
     """返回项目已接入的适配器清单。
 
     这里使用函数内导入，避免业务模块导入公共注册器时提前形成循环依赖。
@@ -69,13 +70,13 @@ def available_adapter_specs() -> Dict[str, AdapterSpec]:
     }
 
 
-def enabled_adapter_names() -> List[str]:
+def enabled_adapter_names() -> list[str]:
     """返回当前运行时启用的适配器名称。"""
 
     return ["qq", "local"]
 
 
-def enabled_adapter_specs() -> List[AdapterSpec]:
+def enabled_adapter_specs() -> list[AdapterSpec]:
     """返回当前启用的适配器描述。"""
 
     available = available_adapter_specs()

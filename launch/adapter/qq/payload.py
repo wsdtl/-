@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-
 QqReplyKind = Literal["text", "markdown", "ark", "embed", "media", "image", "raw"]
 
 

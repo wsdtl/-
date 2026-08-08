@@ -1,6 +1,10 @@
 """世界地点与只读地图功能。"""
 
 from .contracts import (
+    JourneyMetrics,
+    JourneyPassageSegment,
+    JourneyPlan,
+    JourneyQuery,
     LocationQuery,
     LocationView,
     MapCoordinateBand,
@@ -14,6 +18,10 @@ from .contracts import (
 from .service import WorldService
 
 __all__ = [
+    "JourneyMetrics",
+    "JourneyPassageSegment",
+    "JourneyPlan",
+    "JourneyQuery",
     "LocationQuery",
     "LocationView",
     "MapCoordinateBand",

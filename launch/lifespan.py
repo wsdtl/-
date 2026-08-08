@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import AsyncGenerator, Callable, Iterable
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterable, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -90,7 +91,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         raise LifecycleCleanupError("服务关闭阶段存在清理失败", cleanup_errors)
 
 
-async def _mount_app(app: FastAPI) -> List[type]:
+async def _mount_app(app: FastAPI) -> list[type]:
     """挂载静态文件和 Adapter，并返回需要启动/关闭的 Adapter 列表。"""
 
     await FastAPIMount(app)
@@ -179,7 +180,7 @@ async def _capture_cleanup(
         result = callback()
         if inspect.isawaitable(result):
             await result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 必须继续执行后续清理
         cleanup_errors.append(exc)
         logger.opt(colors=True, exception=exc).error(
             C.join(C.fail("服务清理失败"), C.kv("target", label))
@@ -195,7 +196,7 @@ def _capture_sync_cleanup(
 
     try:
         callback()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 必须继续执行后续清理
         cleanup_errors.append(exc)
         logger.opt(colors=True, exception=exc).error(
             C.join(C.fail("服务清理失败"), C.kv("target", label))
@@ -213,7 +214,7 @@ async def _shutdown_schedulers() -> None:
         try:
             if scheduler.running:
                 scheduler.shutdown(wait=False)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - 两类调度器必须分别关闭
             errors.append(exc)
             logger.opt(colors=True, exception=exc).error(
                 C.join(C.fail("调度器关闭失败"), C.kv("target", name))

@@ -4,7 +4,8 @@
 id，以便重复创建应用或热重载时去重。
 """
 
-from typing import Callable, List
+from collections.abc import Callable
+from typing import ClassVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -29,9 +30,9 @@ class Scheduler:
     """定时任务注册器。"""
 
     syncinstance = BackgroundScheduler(timezone=SCHEDULER_TIMEZONE)
-    sync_list: List[dict] = []
+    sync_list: ClassVar[list[dict]] = []
     asyncinstance = AsyncIOScheduler(timezone=SCHEDULER_TIMEZONE)
-    async_list: List[dict] = []
+    async_list: ClassVar[list[dict]] = []
 
     @staticmethod
     def _sync(*args, **kwargs) -> Callable:

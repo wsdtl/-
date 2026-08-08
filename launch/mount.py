@@ -13,8 +13,8 @@ from fastapi.staticfiles import StaticFiles
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-from .log import C, logger
 from .adapter import BaseAdapter, enabled_adapter_specs
+from .log import C, logger
 from .paths import STATIC_DIR
 
 

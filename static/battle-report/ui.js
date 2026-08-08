@@ -46,16 +46,12 @@ export function renderFacts(facts, className) {
   return node(
     "div",
     className,
-    facts.map((fact) => node("span", "", `${fact.label}: ${fact.display ?? displayValue(fact.value)}`)),
+    facts.map((fact) => node("span", "", `${fact.label}: ${fact.display}`)),
   );
 }
 
 export function detailLine(label, value) {
   return node("p", "", [node("strong", "", label), document.createTextNode(value)]);
-}
-
-export function rawBlock(value) {
-  return node("pre", "raw-event", JSON.stringify(value, null, 2));
 }
 
 export function renderGauge(gauge, reverse = false) {
@@ -70,7 +66,7 @@ export function renderGauge(gauge, reverse = false) {
   }
   const bar = node("div", `vital-bar tone-${safeToken(gauge.tone)}`);
   const fill = node("span", "vital-fill");
-  fill.style.setProperty("--fill", `${percentage(gauge.current, gauge.maximum)}%`);
+  fill.style.setProperty("--fill", `${gauge.fill_percent}%`);
   bar.append(fill);
   return node(
     "div",
@@ -133,52 +129,6 @@ export function renderSnapshotParticipant(participant) {
   body.append(renderDetailGroups(participant.detail_groups || []));
   details.append(body);
   return details;
-}
-
-export function displayValue(value) {
-  if (Array.isArray(value)) {
-    return value.map(displayValue).join("、");
-  }
-  if (value && typeof value === "object") {
-    return Object.entries(value)
-      .map(([key, item]) => `${key}=${displayValue(item)}`)
-      .join("、");
-  }
-  if (typeof value === "number") {
-    return formatNumber(value);
-  }
-  return value == null ? "" : String(value);
-}
-
-export function percentage(current, maximum) {
-  const max = Number(maximum || 0);
-  if (max <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, Number(current || 0) / max * 100));
-}
-
-export function formatNumber(value) {
-  const number = Number(value || 0);
-  return Number.isInteger(number)
-    ? String(number)
-    : number.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-export function formatTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date);
 }
 
 export function safeToken(value) {

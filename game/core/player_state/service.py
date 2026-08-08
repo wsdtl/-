@@ -20,6 +20,7 @@ from .contracts import (
     PlayerStateRuleError,
     PlayerStateServiceStatus,
     PlayerStateSnapshot,
+    PublicPlayerState,
     StateGuardResult,
     StateSlot,
     StateTransitionCommand,
@@ -110,7 +111,7 @@ class PlayerStateService:
             guard_rule_count=len(self._guard_rules),
         )
 
-    def initial_mutation(self) -> StateMutation:
+    def initial_mutation(self, user_id: str) -> StateMutation:
         """返回创建人物总事务所需的三槽初始快照。"""
 
         self._require_initialized()
@@ -118,7 +119,7 @@ class PlayerStateService:
             state_type: {"状态编号": state_id, "上下文": {}}
             for state_type, state_id in self._initial_states.items()
         }
-        return StateMutation(STATE_TYPE, STATE_KEY, value, 0)
+        return StateMutation(user_id, STATE_TYPE, STATE_KEY, value, 0)
 
     def validate_guard_rule(self, rule_name: str) -> None:
         """供组合根在启动时校验全部命令引用。"""
@@ -142,6 +143,35 @@ class PlayerStateService:
             version=snapshot.version,
             updated_at=snapshot.updated_at,
         )
+
+    async def public_many(
+        self, user_ids: tuple[str, ...]
+    ) -> tuple[PublicPlayerState, ...]:
+        """批量返回附近展示所需的公开状态，不执行逐人物读取。"""
+
+        self._require_initialized()
+        normalized = _user_ids(user_ids)
+        snapshots = await self._database.get_many(
+            tuple(
+                StateAddress(user_id, STATE_TYPE, STATE_KEY) for user_id in normalized
+            )
+        )
+        by_user = {snapshot.address.user_id: snapshot for snapshot in snapshots}
+        result: list[PublicPlayerState] = []
+        for user_id in normalized:
+            snapshot = by_user.get(user_id)
+            if snapshot is None:
+                continue
+            slots = self._parse_snapshot(snapshot.value)
+            behavior = slots["行为"]
+            appears = bool(self._states["行为"][behavior.state_id]["附近出现"])
+            names = tuple(
+                slot.name
+                for state_type, slot in slots.items()
+                if bool(self._states[state_type][slot.state_id]["附近公开"])
+            )
+            result.append(PublicPlayerState(user_id, appears, names))
+        return tuple(result)
 
     async def authorize(self, user_id: str, rule_name: str) -> StateGuardResult:
         """按人物是否存在及三个状态槽的组合规则判断命令准入。"""
@@ -233,7 +263,15 @@ class PlayerStateService:
                 user_id=command.user_id,
                 request_id=command.request_id,
                 business_type=f"玩家状态:{state_type}变更",
-                mutations=(StateMutation(STATE_TYPE, STATE_KEY, value, expected),),
+                operations=(
+                    StateMutation(
+                        command.user_id,
+                        STATE_TYPE,
+                        STATE_KEY,
+                        value,
+                        expected,
+                    ),
+                ),
                 payload={
                     "状态类型": state_type,
                     "前状态": current_slot.state_id,
@@ -338,6 +376,10 @@ class PlayerStateService:
                         raise PlayerStateRuleError(f"{name}.结束后不是行为状态")
                     if not isinstance(state.get("可中断"), bool):
                         raise PlayerStateRuleError(f"{name}.可中断必须是布尔值")
+                    if not isinstance(state.get("附近出现"), bool):
+                        raise PlayerStateRuleError(f"{name}.附近出现必须是布尔值")
+                if not isinstance(state.get("附近公开"), bool):
+                    raise PlayerStateRuleError(f"{name}.附近公开必须是布尔值")
 
             initial = str(initial_states[state_type])
             if initial not in entries:
@@ -462,6 +504,13 @@ def _state_type(value: object) -> str:
     normalized = _text(value, "状态类型")
     if normalized not in STATE_TYPES:
         raise PlayerStateRuleError(f"未知状态类型：{normalized}")
+    return normalized
+
+
+def _user_ids(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(_text(value, "user_id") for value in values)
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("user_id不能重复")
     return normalized
 
 

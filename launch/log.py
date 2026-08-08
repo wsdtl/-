@@ -15,15 +15,15 @@
     文件日志始终写入纯文本。
 """
 
-import re
-import sys
-import loguru
 import inspect
 import logging
+import re
+import sys
 from typing import Any
 
-from .config import config
+import loguru
 
+from .config import config
 
 # Loguru 用类似 <red> 的标签表示颜色；动态文本需要先转义。
 COLOR_TAG_RE = re.compile(r"(\\*)(</?(?:[fb]g\s)?[^<>\s]*>)")

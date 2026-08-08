@@ -11,9 +11,9 @@ import asyncio
 import inspect
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
 from message import (
@@ -104,7 +104,7 @@ def emit_message_event(event: MessageEvent) -> None:
     for listener in tuple(_LISTENERS):
         try:
             result = listener(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - 订阅者异常不能影响消息收发
             logger.opt(colors=True, exception=exc).warning(C.warn("消息事件订阅者异常"))
             continue
         if inspect.isawaitable(result):
@@ -222,7 +222,10 @@ def snapshot_from_message(message: object) -> MessageSnapshot:
         kind = str(message.get("kind") or "").strip().lower()
         content = _message_text(message.get("content"))
         content, inline_interactions = _extract_native_command_links(content)
-        interactions = tuple((*_native_keyboard_interactions(message.get("keyboard")), *inline_interactions))
+        interactions = (
+            *_native_keyboard_interactions(message.get("keyboard")),
+            *inline_interactions,
+        )
         if kind == "markdown":
             return MessageSnapshot("markdown", content, interactions=interactions)
         if kind == "image":
@@ -344,7 +347,7 @@ def _consume_listener_result(task: asyncio.Task) -> None:
         task.result()
     except asyncio.CancelledError:
         return
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 异步订阅者异常在任务边界消费
         logger.opt(colors=True, exception=exc).warning(C.warn("消息事件异步订阅者异常"))
 
 
@@ -377,7 +380,7 @@ def _image_reference(message: object) -> object:
     if callable(getter):
         try:
             value = getter()
-        except Exception:
+        except Exception:  # noqa: BLE001 - 外部图片容器 getter 不可信
             value = None
         if isinstance(value, (bytes, bytearray, memoryview)):
             return bytes(value)

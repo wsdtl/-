@@ -7,6 +7,7 @@ from game.core.character import (
     CharacterService,
     CharacterStateError,
 )
+from game.core.location import LocationMissingError, LocationService
 from game.core.player_state import PlayerStateService
 from game.core.world import LocationQuery, WorldService
 
@@ -25,10 +26,12 @@ class CharacterOverviewFeature:
         character: CharacterService,
         player_state: PlayerStateService,
         world: WorldService,
+        location: LocationService,
     ) -> None:
         self._character = character
         self._player_state = player_state
         self._world = world
+        self._location = location
         self._initialized = False
 
     def initialize(self) -> None:
@@ -40,6 +43,8 @@ class CharacterOverviewFeature:
             raise RuntimeError("玩家状态微服务必须先于查看角色玩法启动")
         if not self._world.status().initialized:
             raise RuntimeError("世界地点微服务必须先于查看角色玩法启动")
+        if not self._location.status().initialized:
+            raise RuntimeError("玩家位置微服务必须先于查看角色玩法启动")
         self._initialized = True
 
     async def inspect(self, user_id: str) -> CharacterOverviewResult:
@@ -54,16 +59,20 @@ class CharacterOverviewFeature:
         state = await self._player_state.current(user_id)
         if state is None:
             raise CharacterOverviewError("人物缺少玩家状态")
-        location = self._world.locate(LocationQuery(xy=character.xy))
+        try:
+            player_location = await self._location.current(user_id)
+        except LocationMissingError as exc:
+            raise CharacterOverviewError(str(exc)) from exc
+        location = self._world.locate(LocationQuery(xy=player_location.xy))
         return CharacterOverviewResult(
             character=character,
+            xy=player_location.xy,
             location_name=location.location_name,
             region=location.region,
             terrain=location.terrain,
             altitude=location.altitude,
             states=tuple(
-                (state_type, slot.name)
-                for state_type, slot in state.states.items()
+                (state_type, slot.name) for state_type, slot in state.states.items()
             ),
         )
 

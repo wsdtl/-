@@ -155,6 +155,15 @@ def _assert_report(result) -> None:
     assert all(str(value["source"]["id"]).startswith("阵法:") for value in formation_events)
 
     main, bundle = presentation
+    assert main["version"] == 4
+    assert main["document_title"].startswith("晓楠修仙 · ")
+    assert main["time_label"] == "2026年08月06日 12:00:00"
+    assert main["ui"]["defaults"] == {
+        "mode": "compact",
+        "filter": "all",
+        "snapshot": "after",
+    }
+    assert "raw" not in bundle
     assert len(main["formations"]) == 2
     assert any("左阵:" in value for value in main["summary"]["lines"])
     assert any("右阵:" in value for value in main["summary"]["lines"])

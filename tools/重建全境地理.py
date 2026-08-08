@@ -671,7 +671,7 @@ def astar(
     end: tuple[int, int],
     road_type: str,
     surface: list[list[int]],
-    used_edges: set[tuple[tuple[int, int], tuple[int, int]]],
+    claimed_edges: dict[tuple[tuple[int, int], tuple[int, int]], str],
     blocked_locations: set[tuple[int, int]],
 ) -> list[tuple[int, int]]:
     queue: list[tuple[float, float, int, tuple[int, int]]] = []
@@ -693,6 +693,10 @@ def astar(
                 continue
             if neighbor in blocked_locations:
                 continue
+            edge = canonical_edge(current, neighbor)
+            owner = claimed_edges.get(edge)
+            if owner is not None and owner != road_type:
+                continue
             altitude = surface[ny][nx]
             if altitude < 0 and not (road_type == "堤道" and altitude >= -180):
                 continue
@@ -713,8 +717,7 @@ def astar(
             if road_type == "军道":
                 ridge = abs(ny - (64 + 2.6 * math.sin((nx - 7) / 13)))
                 step *= 0.88 + min(0.7, ridge / 18)
-            edge = canonical_edge(current, neighbor)
-            if edge in used_edges:
+            if owner == road_type:
                 step *= 0.42
             candidate = current_cost + step
             if candidate >= cost.get(neighbor, math.inf):
@@ -742,9 +745,7 @@ def canonical_edge(
 def build_roads(surface: list[list[int]]) -> dict[str, list[dict[str, Any]]]:
     locations = {item.name: item.xy for item in PLACES}
     output: dict[str, list[dict[str, Any]]] = {name: [] for name in ROAD_LINKS}
-    used_by_type: dict[str, set[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(
-        set
-    )
+    claimed_edges: dict[tuple[tuple[int, int], tuple[int, int]], str] = {}
     all_pairs: set[frozenset[str]] = set()
     for road_type, links in ROAD_LINKS.items():
         for start_name, end_name in links:
@@ -757,11 +758,14 @@ def build_roads(surface: list[list[int]]) -> dict[str, list[dict[str, Any]]]:
                 locations[end_name],
                 road_type,
                 surface,
-                used_by_type[road_type],
+                claimed_edges,
                 set(locations.values()) - {locations[start_name], locations[end_name]},
             )
             for left, right in pairwise(path):
-                used_by_type[road_type].add(canonical_edge(left, right))
+                edge = canonical_edge(left, right)
+                owner = claimed_edges.setdefault(edge, road_type)
+                if owner != road_type:
+                    raise ValueError(f"道路边类型冲突：{edge} -> {owner}/{road_type}")
             output[road_type].append(
                 {
                     "起点": start_name,

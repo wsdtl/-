@@ -81,6 +81,16 @@ class InventorySummary:
 
 
 @dataclass(frozen=True)
+class CharacterPublicProfile:
+    user_id: str
+    name: str
+    gender: str
+    realm_id: str
+    realm_name: str
+    level: int
+
+
+@dataclass(frozen=True)
 class CharacterProfile:
     user_id: str
     name: str
@@ -92,7 +102,6 @@ class CharacterProfile:
     experience: int
     spirit_stones: int
     automatic_medicine: bool
-    xy: tuple[int, int]
     attributes: tuple[tuple[str, int | float], ...]
     resources: tuple[tuple[str, int | float], ...]
     cultivation_slots: tuple[tuple[str, int], ...]
@@ -109,6 +118,7 @@ __all__ = [
     "CharacterInputError",
     "CharacterNotFoundError",
     "CharacterProfile",
+    "CharacterPublicProfile",
     "CharacterStateError",
     "CharacterStatus",
     "EquippedContent",

@@ -34,22 +34,23 @@ def _content(result) -> str:
     return result.replies[0].message.content
 
 
-def test_help_registry_is_built_from_loaded_commands() -> None:
+def test_loaded_commands_have_one_valid_help_declaration() -> None:
     create_app()
 
-    assert help_registry.categories() == ("角色", "世界", "资源")
+    assert help_registry.categories() == ("角色", "行动", "世界", "资源")
     assert [entry.command for entry in help_registry.entries()] == [
         "帮助",
         "创建人物",
         "人物",
+        "去",
         "地图",
+        "位置",
+        "附近",
+        "纳戒",
         "查看物品",
     ]
     assert help_registry.find("web") is None
     assert help_registry.find("天道后台") is None
-
-
-def test_game_command_requires_help_or_hidden() -> None:
     with pytest.raises(TypeError):
         GameCommand.fullmatch("缺少说明")
     with pytest.raises(ValueError, match="不能同时"):

@@ -9,6 +9,8 @@ from itertools import pairwise
 from game.core.data import JsonDataError, JsonDataService
 
 from .contracts import (
+    JourneyPlan,
+    JourneyQuery,
     LocationQuery,
     LocationView,
     MapCoordinateBand,
@@ -19,6 +21,7 @@ from .contracts import (
     WorldMapView,
     WorldStatus,
 )
+from .journey import JourneyPlanner
 
 _LOCATION_FIELDS = frozenset({"坐标", "说明", "可用功能", "单次遭遇敌人数"})
 _REGION_FIELDS = frozenset({"类别", "坐标带", "说明"})
@@ -49,6 +52,7 @@ class WorldService:
         self._bounds: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._roads: tuple[MapRoad, ...] = ()
         self._map_view: WorldMapView | None = None
+        self._journey: JourneyPlanner | None = None
 
     def initialize(self) -> WorldStatus:
         if self._initialized:
@@ -149,6 +153,18 @@ class WorldService:
             locations=self._map_locations(),
             roads=self._roads,
         )
+        self._journey = JourneyPlanner(
+            self._data,
+            bounds=self._bounds,
+            cell_size_meters=cell_size_meters,
+            surface=self._surface,
+            region_by_xy=self._region_by_xy,
+            terrain_by_xy=self._terrain_by_xy,
+            location_name_by_xy={
+                xy: value[0] for xy, value in self._locations_by_xy.items()
+            },
+            roads=self._roads,
+        )
         self._initialized = True
         return self.status()
 
@@ -159,6 +175,7 @@ class WorldService:
             region_count=len(self._regions),
             road_count=len(self._roads),
             terrain_cell_count=sum(len(row) for row in self._surface),
+            journey_realm_count=(self._journey.realm_count if self._journey else 0),
         )
 
     def map_view(self) -> WorldMapView:
@@ -222,6 +239,20 @@ class WorldService:
             companion_pool=companion_pool,
             enemy_pool=enemy_pool,
             enemy_count=_numbers(raw.get("单次遭遇敌人数")),
+        )
+
+    def plan_journey(self, query: JourneyQuery) -> JourneyPlan:
+        """按正式路网、地形、高度和境界叙事规划一次即时行程。"""
+
+        self._require_initialized()
+        if self._journey is None:
+            raise RuntimeError("世界行路规划器尚未构建")
+        origin = self.locate(LocationQuery(xy=query.origin_xy))
+        destination = self.locate(query.destination)
+        return self._journey.plan(
+            origin=origin,
+            destination=destination,
+            realm_id=query.realm_id,
         )
 
     def _map_regions(self) -> tuple[MapRegion, ...]:

@@ -48,6 +48,13 @@ class PlayerStateSnapshot:
 
 
 @dataclass(frozen=True)
+class PublicPlayerState:
+    user_id: str
+    appears_nearby: bool
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StateTransitionCommand:
     user_id: str
     request_id: str
@@ -81,6 +88,7 @@ __all__ = [
     "PlayerStateRuleError",
     "PlayerStateServiceStatus",
     "PlayerStateSnapshot",
+    "PublicPlayerState",
     "StateGuardResult",
     "StateSlot",
     "StateTransitionCommand",

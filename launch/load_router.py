@@ -4,21 +4,23 @@
 注册；路由模块还必须公开 router。launch 不硬编码任何业务包名。
 """
 
-from fastapi import APIRouter
 from abc import abstractmethod
-from pathlib import Path
+from collections.abc import Callable, Iterator
 from importlib import import_module
-from typing import Callable, Iterator, List, Tuple
+from pathlib import Path
+from typing import ClassVar
 
-from .log import C, logger
+from fastapi import APIRouter
+
 from .config import config
+from .log import C, logger
 
 
 class Routers:
     """保存待导入模块和待注册路由模块。"""
 
-    router_list: List[str] = []
-    module_list: List[str] = []
+    router_list: ClassVar[list[str]] = []
+    module_list: ClassVar[list[str]] = []
 
     @staticmethod
     def clear() -> None:
@@ -144,7 +146,7 @@ def FastAPILoadRouter() -> None:
 
     Routers.clear()
 
-    load_plan: Tuple[Tuple[Callable[[str], None], List[str]], ...] = (
+    load_plan: tuple[tuple[Callable[[str], None], list[str]], ...] = (
         (LoadRouter.load_module_group, config.router.module_groups),
         (LoadRouter.load_router_folder, config.router.router_folders),
         (LoadRouter.load_module, config.router.modules),

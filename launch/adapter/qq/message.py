@@ -5,16 +5,15 @@
 """
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from launch.log import C, logger
 from launch.config import config
+from launch.log import C, logger
 
 from .handler import QqEventHandler
 from .signature import SIGNATURE_HEADER, TIMESTAMP_HEADER, verify_event_signature
-
 
 QQ_EVENT_BASE_ROUTE = config.get("QQ_EVENT_PATH", "/qq/events") or "/qq/events"
 QQ_EVENT_ROUTE = QQ_EVENT_BASE_ROUTE.rstrip("/") or "/qq/events"
@@ -23,13 +22,13 @@ router = APIRouter()
 
 
 @router.post(QQ_EVENT_ROUTE)
-async def qq_event_endpoint(request: Request) -> Dict[str, Any]:
+async def qq_event_endpoint(request: Request) -> dict[str, Any]:
     """接收唯一 QQ 机器人的开放平台事件回调。"""
 
     return await _handle_qq_event(request)
 
 
-async def _handle_qq_event(request: Request) -> Dict[str, Any]:
+async def _handle_qq_event(request: Request) -> dict[str, Any]:
     """接收 QQ 开放平台事件回调。
 
     op=13 是开放平台的回调地址验证，必须同步返回签名结果。
@@ -131,7 +130,7 @@ def _qq_event_signature_required() -> bool:
     raise ValueError(f"QQ_EVENT_SIGNATURE_REQUIRED 只能是 true/false，当前值是：{raw}")
 
 
-def _read_payload(body: bytes) -> Dict[str, Any]:
+def _read_payload(body: bytes) -> dict[str, Any]:
     """读取并校验 QQ webhook JSON。
 
     QQ 正常回调一定是 JSON object。非 object 直接返回 400，方便定位配置

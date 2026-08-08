@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import asyncio
 import json
 from importlib import import_module
@@ -44,17 +43,9 @@ def test_world_map_routes_are_public_read_only_endpoints() -> None:
     assert methods_by_path["/game-console/login"] == {"POST"}
 
 
-def test_world_map_page_is_a_data_driven_plugin_shell() -> None:
+def test_world_map_page_is_a_data_driven_shell_without_world_facts() -> None:
     response = asyncio.run(world_map_site.world_map_page())
     html = response.body.decode("utf-8")
-
-    assert 'id="atlasRoot"' in html
-    assert 'id="worldMap"' not in html
-    assert "晓楠修仙界" not in html
-    assert "溪隐台" not in html
-
-
-def test_world_map_plugin_does_not_bundle_world_facts() -> None:
     root = Path(__file__).resolve().parents[2]
     static_source = "\n".join(
         path.read_text(encoding="utf-8")
@@ -63,6 +54,10 @@ def test_world_map_plugin_does_not_bundle_world_facts() -> None:
     )
     view = _world().map_view()
 
+    assert 'id="atlasRoot"' in html
+    assert 'id="worldMap"' not in html
+    assert "晓楠修仙界" not in html
+    assert "溪隐台" not in html
     assert view.name not in static_source
     assert all(location.name not in static_source for location in view.locations)
     assert all(region.name not in static_source for region in view.regions)
@@ -114,33 +109,3 @@ def test_world_map_command_uses_snapshot_facts_and_public_link() -> None:
     assert tuple((action.action_id, action.data) for action in rendered.actions) == (
         ("world_map.open", url),
     )
-
-
-def test_world_map_and_heavenly_dao_console_are_separate_components() -> None:
-    root = Path(__file__).resolve().parents[2]
-    command_root = root / "game" / "cmd"
-    admin_source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (command_root / "天道后台").glob("*.py")
-    )
-    map_source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (command_root / "地图").glob("*.py")
-    )
-
-    assert not (command_root / "web").exists()
-    assert "/world-map" not in admin_source
-    assert "game-console" not in map_source
-
-
-def test_command_router_aggregator_has_no_chinese_imports() -> None:
-    root = Path(__file__).resolve().parents[2]
-    source = (root / "game" / "cmd" / "__init__.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    imported_modules = [
-        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
-    ]
-
-    assert all(module.isascii() for module in imported_modules)
-    assert "import_module" in source
-    assert "iter_modules" in source

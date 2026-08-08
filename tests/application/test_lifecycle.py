@@ -6,6 +6,7 @@ import pytest
 
 import game.app as game_app
 from game.cmd import access_guard, command
+from game.config import GameConfig, GameDatabaseConfig
 
 
 class _FakeDatabase:
@@ -39,3 +40,26 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
 
     assert database.closed is True
     assert game_app._services is None
+
+
+def test_real_composition_root_builds_location_and_position_services(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        game_app,
+        "game_config",
+        GameConfig(
+            GameDatabaseConfig(
+                tmp_path / "game.db",
+                tmp_path / "runtime.db",
+                5000,
+            )
+        ),
+    )
+
+    services = game_app.build_game_services()
+
+    assert services.core.location.status().initialized is True
+    assert services.core.companion.status().companion_count == 264
+    assert services.features.weizhi is not None
+    services.core.database.close()

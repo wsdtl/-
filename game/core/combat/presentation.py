@@ -1,10 +1,11 @@
-"""把后端战斗记录整理为万象行纪战报前端使用的展示协议。"""
+"""把后端战斗记录整理为晓楠修仙战报前端使用的展示协议。"""
 
 from __future__ import annotations
 
 from collections import Counter, OrderedDict
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
 from .catalog import BattleReportCatalog
@@ -188,6 +189,7 @@ def build_battle_report_presentation(
         "schema": schema,
         "version": version,
         "ui": ui,
+        "document_title": f"{catalog.game_name} · {report['headline']}",
         "summary": {
             "title": report["headline"],
             "outcome": report["result"]["title"],
@@ -203,6 +205,7 @@ def build_battle_report_presentation(
         },
         "started_at": report["generated_at"],
         "finished_at": report["generated_at"],
+        "time_label": _time_label(str(report["generated_at"])),
         "detail": {
             "available": True,
             "retention_notice": "",
@@ -242,14 +245,6 @@ def build_battle_report_presentation(
             },
         },
         "transitions": transitions,
-        "raw": {
-            "0": {
-                "schema": schema,
-                "version": version,
-                "segment_index": 0,
-                "record": deepcopy(dict(report)),
-            }
-        },
     }
     return main, bundle
 
@@ -322,6 +317,12 @@ def _participant_record(
                     if definition["presentation"] == "value"
                     else f"{_number(resource['current'])} / {_number(resource['maximum'])}"
                 ),
+                "fill_percent": round(
+                    resource["current"] / resource["maximum"] * 100,
+                    2,
+                )
+                if resource["maximum"] > 0
+                else 0,
                 "tone": definition["tone"],
                 "presentation": definition["presentation"],
             }
@@ -700,3 +701,11 @@ def _status_display(value: Mapping[str, Any]) -> str:
 def _number(value: Any) -> str:
     number = round(float(value or 0), 2)
     return str(int(number)) if number.is_integer() else f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _time_label(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return parsed.strftime("%Y年%m月%d日 %H:%M:%S")

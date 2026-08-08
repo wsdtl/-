@@ -1656,10 +1656,13 @@ class Audit:
             )
 
     def _audit_presentations(self) -> None:
-        for name in ("战报", "行程"):
-            value = self._json(f"展示/{name}.json")
+        for name, relative_path in (
+            ("战报", "展示/战斗/战报.json"),
+            ("行程", "展示/行路/行程.json"),
+        ):
+            value = self._json(relative_path)
             if not isinstance(value, dict) or not value:
-                self.add("展示", f"展示/{name}.json", "展示定义必须是非空对象")
+                self.add("展示", relative_path, f"{name}展示定义必须是非空对象")
 
     def _json(self, relative: str) -> Any:
         path = (DATA / relative).resolve()
