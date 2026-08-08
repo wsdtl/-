@@ -12,22 +12,25 @@ game/core/data/             正式 JSON 只读快照、实体元数据与资源�
 game/core/item_catalog/     物品编号、名称和类别只读查询索引
 game/core/combat/           行动条、CD、事件、环境执行与战报
 game/core/pool/             资源池展开与逆权重抽取
-game/core/world/            地点、区域、地形与海拔查询
+game/core/world/            地点、区域、地形、海拔与只读地图快照
 game/core/database/         两表状态快照与幂等事务持久化
 game/config.py              从框架自定义项中解释游戏配置
 game/app.py                 游戏微服务的唯一组合根
 game/features/              不依赖命令协议的具体玩法微服务
+game/features/ditu/         地图快照与地图文字概况的只读玩法边界
 game/cmd/                   具体玩法命令总入口
-game/cmd/web/               天道控制台与 web 命令入口
+game/cmd/天道后台/          天道后台命令、登录、消息观察与管理台接口
+game/cmd/地图/              公开地图命令、页面与只读数据接口
 launch/                     Local、QQ、HTTP 与生命周期适配
 launch/adapter/qq/          QQ 自有匹配、队列、去重与回复运行时
 message/                    通用消息协议
 static/game-console/        控制台前端
 static/battle-report/       战报前端
+static/world-map/           全境地势、南北地界、道路与地点地图
 tools/                      游戏外校核、评分、平衡与维护脚本
 ```
 
-控制台和战报属于公共入口，当前放在 `game/cmd/web`。`game/core` 放跨玩法公共微服务，`game/features` 放具体玩法微服务，`game/cmd` 只负责命令、按钮和 HTTP 触发，`game/app.py` 是唯一组合根。当前已有数据、物品查询、战斗、资源池、世界、数据库、玩家状态和角色公共微服务；构筑、行路、炼药和炼器等业务仍需按 JSON 契约逐个重建。
+天道后台和公开地图是两个独立二级组件：前者只服务开发者管理台，后者通过 `game/features/ditu` 取得 `game/core/world` 提供的只读地图快照与文字概况。`game/core` 放跨玩法公共微服务，`game/features` 放具体玩法微服务，`game/cmd` 只负责命令、按钮和 HTTP 触发，`game/app.py` 是唯一组合根。当前已有数据、物品查询、战斗、资源池、世界、数据库、玩家状态和角色公共微服务；构筑、行路、炼药和炼器等业务仍需按 JSON 契约逐个重建。
 
 `launch/config.py` 只解释框架自身的项目、监听、日志和路由配置。数据库、控制台凭据及其他业务环境变量必须进入 `config.custom`；游戏侧需要类型转换或校验时统一在 `game/config.py` 完成，不得向框架 `Config` 增加业务字段。
 
@@ -64,6 +67,6 @@ Linux 或 Docker：
 bash start.sh
 ```
 
-默认服务地址为 `http://127.0.0.1:8845`，天道控制台为 `http://127.0.0.1:8845/game-console`。当前开放 `帮助`、`创建人物`、`人物` 和 `查看物品` 四个玩家命令；状态守卫会根据人物是否创建及当前行为、队伍、控制状态统一决定命令能否执行。
+默认服务地址为 `http://127.0.0.1:8845`，公开全境舆图为 `http://127.0.0.1:8845/world-map`，天道后台为 `http://127.0.0.1:8845/game-console`。地图只展示世界 JSON 解析结果，不触发 QQ 命令或游戏行为；`地图` 命令只返回同一份世界快照的文字概况与公开链接。当前开放 `帮助`、`创建人物`、`人物`、`地图` 和 `查看物品` 五个玩家命令；状态守卫会根据人物是否创建及当前行为、队伍、控制状态统一决定命令能否执行。天道后台命令保持隐藏，HTTP 登录密码由 `.env` 中的 `WEB_CONSOLE_PASSWORD` 单独提供。
 
 旧测试与旧组件契约已经全部删除。当前地基通过编译、真实 JSON 初始化、数据库原子事务和最小战斗调用验收；新领域服务只有在主体 JSON、读取规则、公共引用和实体差异四层审查完成后才允许建立自己的新测试。游戏进程不加载 `tools`，也不执行游戏外评分、校核和平衡脚本。

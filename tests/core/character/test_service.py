@@ -43,16 +43,16 @@ def test_create_character_commits_all_initial_states(tmp_path: Path) -> None:
     feature, database = _feature(tmp_path)
 
     result = _run(
-        feature.create(
-            CreateCharacterRequest("qq-1", "event-1", "林远", "男")
-        )
+        feature.create(CreateCharacterRequest("qq-1", "event-1", "林远", "男"))
     )
 
     assert result.realm_id == "510001"
-    assert result.location_name == "青溪村"
+    assert result.location_name == "溪隐台"
     assert result.initial_items == (("小还丹", "01", 3), ("养神丹", "01", 2))
     snapshots = _run(database.list_for_user("qq-1"))
-    assert {(item.address.state_type, item.address.state_key) for item in snapshots} == {
+    assert {
+        (item.address.state_type, item.address.state_key) for item in snapshots
+    } == {
         ("character", "main"),
         ("cultivation", "main"),
         ("weapon", "main"),
@@ -62,7 +62,7 @@ def test_create_character_commits_all_initial_states(tmp_path: Path) -> None:
     }
     character = _run(database.get(StateAddress("qq-1", "character", "main")))
     assert character is not None
-    assert character.value["位置"] == {"xy": (8, 8)}
+    assert character.value["位置"] == {"xy": (15, 17)}
     assert "状态" not in character.value
 
 

@@ -19,6 +19,7 @@ from .core.world import WorldService
 from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
+from .features.ditu import WorldMapFeature
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class FeatureServices:
     chuangjian_renwu: CreateCharacterFeature
     chakan_juese: CharacterOverviewFeature
     chakan_wupin: ItemInspectionFeature
+    ditu: WorldMapFeature
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.ok("世界地点服务已启动"),
             C.kv("locations", world_status.location_count),
             C.kv("regions", world_status.region_count),
+            C.kv("roads", world_status.road_count),
             C.kv("terrain_cells", world_status.terrain_cell_count),
         )
     )
@@ -156,10 +159,21 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     chakan_wupin.initialize()
     chakan_juese = CharacterOverviewFeature(character, player_state, world)
     chakan_juese.initialize()
+    ditu = WorldMapFeature(world)
+    map_overview = ditu.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("公开地图玩法微服务已启动"),
+            C.kv("regions", map_overview.region_count),
+            C.kv("locations", map_overview.location_count),
+            C.kv("roads", map_overview.road_count),
+        )
+    )
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
         chakan_wupin=chakan_wupin,
+        ditu=ditu,
     )
     return GameServices(core=core, features=features)
 

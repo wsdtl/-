@@ -1,13 +1,32 @@
-"""命令与公共 HTTP 路由聚合。"""
+"""命令与 HTTP 展示入口聚合。"""
 
 from __future__ import annotations
 
+from importlib import import_module
+from pathlib import Path
+from pkgutil import iter_modules
+
 from fastapi import APIRouter
 
-from .web import router as web_router
 
-router = APIRouter()
-router.include_router(web_router)
+def _load_component_routers() -> APIRouter:
+    router = APIRouter()
+    package_path = [str(Path(__file__).parent)]
+    components = sorted(iter_modules(package_path), key=lambda item: item.name)
+    for component in components:
+        if not component.ispkg:
+            continue
+        module = import_module(f"{__name__}.{component.name}")
+        component_router = getattr(module, "router", None)
+        if component_router is None:
+            continue
+        if not isinstance(component_router, APIRouter):
+            raise TypeError(f"命令组件 router 必须是 APIRouter：{module.__name__}")
+        router.include_router(component_router)
+    return router
+
+
+router = _load_component_routers()
 
 
 __all__ = ["router"]

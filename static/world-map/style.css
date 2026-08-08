@@ -1,0 +1,1122 @@
+:root {
+  color-scheme: light;
+  --page: #e2e9e5;
+  --map-paper: #aec0b6;
+  --surface: rgba(248, 250, 247, 0.9);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+  --ink: #202923;
+  --muted: #68736c;
+  --line: rgba(69, 81, 73, 0.32);
+  --line-strong: rgba(49, 64, 55, 0.58);
+  --category-0: #39745e;
+  --category-1: #95573d;
+  --category-2: #41697a;
+  --category-3: #75643f;
+  --category-4: #5f557c;
+  --category-5: #447276;
+  --accent: #95573d;
+  --gold: #a77b31;
+  --focus: #1f6650;
+  --danger: #963c35;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  color: var(--ink);
+  background: var(--page);
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+select {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.atlas-shell,
+.map-stage,
+.map-frame {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+.atlas-shell {
+  overflow: hidden;
+}
+
+.map-stage {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--page);
+}
+
+.map-frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--map-paper);
+  touch-action: none;
+}
+
+.map-frame::after {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  content: "";
+  pointer-events: none;
+  background:
+    linear-gradient(128deg, rgba(255, 255, 255, 0.1), transparent 34%),
+    linear-gradient(0deg, rgba(29, 52, 41, 0.065), transparent 24%);
+}
+
+.map-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  opacity: 1;
+}
+
+.map-atmosphere > span {
+  position: absolute;
+  inset: -24%;
+  display: block;
+  will-change: transform;
+}
+
+.mist-layer-a {
+  background: repeating-linear-gradient(
+    166deg,
+    transparent 0 14%,
+    rgba(247, 251, 248, 0.1) 18%,
+    rgba(233, 243, 238, 0.045) 22%,
+    transparent 29%
+  );
+  opacity: 0.72;
+  animation: mist-drift-a 34s ease-in-out infinite alternate;
+}
+
+.mist-layer-b {
+  background: repeating-linear-gradient(
+    18deg,
+    transparent 0 19%,
+    rgba(228, 239, 235, 0.07) 24%,
+    transparent 31%
+  );
+  opacity: 0.5;
+  animation: mist-drift-b 46s ease-in-out infinite alternate;
+}
+
+.celestial-sheen {
+  background: linear-gradient(
+    112deg,
+    transparent 22%,
+    rgba(255, 247, 218, 0.08) 39%,
+    transparent 55%
+  );
+  opacity: 0.64;
+  animation: celestial-drift 24s ease-in-out infinite alternate;
+}
+
+.map-camera {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  contain: strict;
+  transform: translate3d(0, 0, 0);
+  transform-origin: 0 0;
+  transform-style: flat;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.world-map {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  cursor: grab;
+  shape-rendering: auto;
+  text-rendering: auto;
+  user-select: none;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.terrain-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  pointer-events: none;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.road-map,
+.presentation-canvas {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+
+.road-map {
+  z-index: 2;
+  overflow: hidden;
+  shape-rendering: auto;
+}
+
+.presentation-canvas {
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+}
+
+.world-map.is-dragging {
+  cursor: grabbing;
+}
+
+/* Geography is one complete SVG scene. It never enters a per-viewport paint
+   pipeline, and fixed layers never animate into a second visual state. */
+#mapContent,
+#mapContent *,
+.road-map,
+.road-map * {
+  animation: none !important;
+  transition: none !important;
+}
+
+#roads,
+#terrainLabels,
+#regionLabels {
+  pointer-events: none;
+}
+
+.terrain-label,
+.region-label,
+.location-label,
+.marker-ring,
+.marker-core {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.road {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.roads {
+  opacity: 0.98;
+  visibility: visible;
+}
+
+.roads.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.road-casing-layer {
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.road-casing-layer .road {
+  stroke: rgba(239, 241, 225, 0.82);
+  stroke-width: 4.8;
+}
+
+.road-casing-layer[data-road-style="0"] .road,
+.road-casing-layer[data-road-style="4"] .road {
+  stroke-width: 5.8;
+}
+
+.road-casing-layer[data-road-style="3"] .road {
+  stroke: rgba(222, 242, 239, 0.86);
+  stroke-width: 5.2;
+}
+
+.road-casing-layer[data-road-style="1"] .road,
+.road-casing-layer[data-road-style="5"] .road {
+  stroke-width: 4.2;
+}
+
+.road-base-layer[data-road-style="0"] .road {
+  stroke: rgba(82, 48, 24, 0.94);
+  stroke-width: 3.15;
+}
+
+.road-base-layer[data-road-style="1"] .road {
+  stroke: rgba(73, 83, 43, 0.86);
+  stroke-width: 2.2;
+}
+
+.road-base-layer[data-road-style="2"] .road {
+  stroke: rgba(68, 63, 58, 0.9);
+  stroke-width: 2.4;
+  stroke-dasharray: 5 2.5;
+}
+
+.road-base-layer[data-road-style="3"] .road {
+  stroke: rgba(25, 95, 116, 0.94);
+  stroke-width: 2.8;
+}
+
+.road-base-layer[data-road-style="4"] .road {
+  stroke: rgba(130, 45, 31, 0.96);
+  stroke-width: 3.3;
+}
+
+.road-base-layer[data-road-style="5"] .road {
+  stroke: rgba(65, 58, 44, 0.76);
+  stroke-width: 2;
+  stroke-dasharray: 2 4.5;
+}
+
+.road-base-layer[data-road-style="6"] .road {
+  stroke: rgba(101, 61, 32, 0.92);
+  stroke-width: 2.4;
+  stroke-dasharray: 5.5 3;
+}
+
+.road-effect-layer {
+  opacity: 0.72;
+}
+
+.road-effect-layer .road {
+  stroke-width: 1.4;
+}
+
+.road-effect-layer[data-road-style="0"] .road {
+  stroke: rgba(255, 222, 144, 0.98);
+  stroke-width: 1.65;
+  stroke-dasharray: 2 11;
+}
+
+.road-effect-layer[data-road-style="1"] .road {
+  stroke: rgba(235, 232, 137, 0.94);
+  stroke-width: 1.35;
+  stroke-dasharray: 1 14;
+}
+
+.road-effect-layer[data-road-style="2"] .road {
+  stroke: rgba(236, 241, 232, 0.96);
+  stroke-width: 1.45;
+  stroke-dasharray: 5 9;
+}
+
+.road-effect-layer[data-road-style="3"] .road {
+  stroke: rgba(112, 231, 239, 0.98);
+  stroke-width: 1.75;
+  stroke-dasharray: 8 6;
+}
+
+.road-effect-layer[data-road-style="4"] .road {
+  stroke: rgba(255, 135, 94, 1);
+  stroke-width: 1.8;
+  stroke-dasharray: 1 7;
+}
+
+.road-effect-layer[data-road-style="5"] {
+  opacity: 0.54;
+}
+
+.road-effect-layer[data-road-style="5"] .road {
+  stroke: rgba(240, 235, 193, 0.9);
+  stroke-width: 1.3;
+  stroke-dasharray: 1 15;
+}
+
+.road-effect-layer[data-road-style="6"] .road {
+  stroke: rgba(255, 188, 91, 0.98);
+  stroke-width: 1.7;
+  stroke-dasharray: 2 6;
+}
+
+.road-map.zoom-overview .road-effect-layer {
+  opacity: 0.64;
+}
+
+.road-map.zoom-region .road-effect-layer {
+  opacity: 0.82;
+}
+
+.road-map.zoom-local .road-effect-layer,
+.road-map.zoom-detail .road-effect-layer {
+  opacity: 1;
+}
+
+.road-map.zoom-overview .road-effect-layer[data-road-style="5"] {
+  opacity: 0.42;
+}
+
+.road-map.zoom-region .road-effect-layer[data-road-style="5"] {
+  opacity: 0.62;
+}
+
+.road-map.zoom-local .road-effect-layer[data-road-style="5"],
+.road-map.zoom-detail .road-effect-layer[data-road-style="5"] {
+  opacity: 0.8;
+}
+
+.terrain-label,
+.region-label,
+.location-label {
+  display: none;
+  visibility: hidden;
+  stroke: rgba(240, 245, 241, 0.78);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.terrain-labels {
+  display: inline;
+}
+
+.terrain-labels.is-hidden {
+  display: none;
+}
+
+.terrain-label[data-collision-hidden="true"],
+.region-label[data-collision-hidden="true"],
+.location-label[data-collision-hidden="true"] {
+  display: none !important;
+}
+
+.terrain-label {
+  fill: #46524b;
+  font-weight: 500;
+}
+
+.world-map.zoom-region .terrain-label[data-prominence="major"] {
+  display: inline;
+}
+
+.world-map.zoom-local .terrain-label {
+  display: inline;
+}
+
+.region-label {
+  fill: #2d3932;
+  font-family: "STKaiti", "KaiTi", serif;
+  font-weight: 700;
+}
+
+.world-map.zoom-overview .region-label,
+.world-map.zoom-region .region-label {
+  display: inline;
+}
+
+.location {
+  display: none;
+  outline: none;
+  pointer-events: none;
+}
+
+.world-map.zoom-region .location,
+.world-map.zoom-local .location,
+.world-map.zoom-detail .location,
+.location.is-selected {
+  display: inline;
+}
+
+.location .marker-ring {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: #25332c;
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+  visibility: hidden;
+}
+
+.location .marker-core {
+  fill: var(--category-0);
+  stroke: rgba(255, 255, 255, 0.94);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  visibility: hidden;
+}
+
+.location-hit {
+  fill: transparent;
+  stroke: none;
+  visibility: visible;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.location[data-category-style="1"] .marker-core {
+  fill: var(--category-1);
+}
+
+.location[data-category-style="2"] .marker-core {
+  fill: var(--category-2);
+}
+
+.location[data-category-style="3"] .marker-core {
+  fill: var(--category-3);
+}
+
+.location[data-category-style="4"] .marker-core {
+  fill: var(--category-4);
+}
+
+.location[data-category-style="5"] .marker-core {
+  fill: var(--category-5);
+}
+
+.location[data-birthplace="true"] .marker-ring {
+  fill: #fff1c7;
+  stroke: #9b6a1e;
+  stroke-width: 2.4;
+}
+
+.location.is-selected .marker-ring,
+.location:focus-visible .marker-ring {
+  fill: #fff4d8;
+  stroke: #a56e18;
+  stroke-width: 3;
+}
+
+.location-label {
+  fill: #202923;
+  font-weight: 700;
+}
+
+.world-map.zoom-region .location-label,
+.world-map.zoom-local .location-label,
+.world-map.zoom-detail .location-label,
+.location.is-selected .location-label {
+  display: inline;
+}
+
+@keyframes mist-drift-a {
+  from {
+    transform: translate3d(-2.5%, -1%, 0) scale(1.02);
+  }
+
+  to {
+    transform: translate3d(3%, 1.5%, 0) scale(1.02);
+  }
+}
+
+@keyframes mist-drift-b {
+  from {
+    transform: translate3d(2%, -1.5%, 0) scale(1.015);
+  }
+
+  to {
+    transform: translate3d(-3%, 1%, 0) scale(1.015);
+  }
+}
+
+@keyframes celestial-drift {
+  from {
+    transform: translate3d(-4%, 0, 0);
+  }
+
+  to {
+    transform: translate3d(4%, 0, 0);
+  }
+}
+
+.map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: #33413a;
+  background: rgba(231, 236, 232, 0.9);
+  font-size: 14px;
+  text-align: center;
+}
+
+.map-loading.is-error {
+  color: var(--danger);
+}
+
+.atlas-header {
+  position: absolute;
+  top: 15px;
+  left: 19px;
+  z-index: 10;
+  max-width: min(380px, calc(100% - 40px));
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(245, 248, 242, 0.94);
+}
+
+.atlas-title {
+  min-width: 0;
+}
+
+.atlas-title > span {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.atlas-title h1 {
+  margin: 0;
+  overflow: hidden;
+  font-family: "STKaiti", "KaiTi", "Microsoft YaHei", serif;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 11px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-facts span + span::before {
+  content: "·";
+  margin-right: 11px;
+  color: var(--line-strong);
+}
+
+.atlas-controls {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: minmax(150px, 185px) minmax(105px, 125px) auto;
+  align-items: end;
+  gap: 6px;
+  width: min(500px, calc(100% - 440px));
+  padding: 5px 6px;
+  border: 1px solid rgba(69, 81, 73, 0.36);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(31, 39, 34, 0.12);
+  transform: translateX(-50%);
+}
+
+.search-control,
+.select-control {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.search-control input,
+.select-control select {
+  width: 100%;
+  min-height: 27px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--surface-strong);
+}
+
+.search-control input:focus,
+.select-control select:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px rgba(31, 102, 80, 0.13);
+  outline: none;
+}
+
+.layer-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 27px;
+}
+
+.switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.switch-control input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--focus);
+}
+
+.zoom-controls {
+  position: absolute;
+  top: 72px;
+  right: 19px;
+  z-index: 12;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(69, 81, 73, 0.42);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 14px rgba(31, 39, 34, 0.12);
+}
+
+.atlas-shell.has-detail .zoom-controls {
+  right: 371px;
+}
+
+.zoom-controls button {
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(69, 81, 73, 0.2);
+  color: #27332d;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zoom-controls button:last-child {
+  border-bottom: 0;
+  font-size: 16px;
+}
+
+.zoom-controls button:hover,
+.zoom-controls button:focus-visible {
+  color: #fff;
+  background: var(--focus);
+}
+
+.compass {
+  position: absolute;
+  top: 100px;
+  left: 20px;
+  z-index: 8;
+  display: grid;
+  justify-items: center;
+  color: #25332c;
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+
+.compass i {
+  width: 0;
+  height: 0;
+  margin-top: 2px;
+  border-right: 6px solid transparent;
+  border-bottom: 19px solid #923f2c;
+  border-left: 6px solid transparent;
+}
+
+.map-key {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  left: 18px;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  color: #3f4b44;
+  font-size: 11px;
+  text-shadow: 0 1px 2px rgba(245, 248, 242, 0.95);
+  pointer-events: none;
+}
+
+.category-key,
+.altitude-key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.category-key i {
+  width: 17px;
+  height: 5px;
+  display: inline-block;
+  border-radius: 1px;
+}
+
+.category-key i[data-category-style="0"] {
+  background: var(--category-0);
+}
+
+.category-key i[data-category-style="1"] {
+  background: var(--category-1);
+}
+
+.category-key i[data-category-style="2"] {
+  background: var(--category-2);
+}
+
+.category-key i[data-category-style="3"] {
+  background: var(--category-3);
+}
+
+.category-key i[data-category-style="4"] {
+  background: var(--category-4);
+}
+
+.category-key i[data-category-style="5"] {
+  background: var(--category-5);
+}
+
+.altitude-key {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.altitude-key i {
+  width: 110px;
+  height: 6px;
+  display: block;
+  border: 1px solid rgba(75, 84, 78, 0.35);
+  background: linear-gradient(
+    90deg,
+    #2f7f91,
+    #5f966e,
+    #a79a63,
+    #8d7767,
+    #dce2df
+  );
+}
+
+.place-detail {
+  position: absolute;
+  top: 88px;
+  right: 19px;
+  z-index: 15;
+  width: min(340px, calc(100% - 38px));
+  max-height: calc(100% - 166px);
+  overflow: auto;
+  padding: 17px 19px 18px;
+  border: 1px solid rgba(69, 81, 73, 0.38);
+  border-left: 3px solid var(--focus);
+  border-radius: 5px;
+  background: rgba(248, 250, 247, 0.97);
+  box-shadow: 0 9px 28px rgba(31, 39, 34, 0.18);
+  scrollbar-width: thin;
+}
+
+.detail-close {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.detail-close:hover,
+.detail-close:focus-visible {
+  color: var(--ink);
+}
+
+.detail-heading > span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.detail-heading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: "STKaiti", "KaiTi", "Microsoft YaHei", serif;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.detail-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.detail-description {
+  margin: 15px 0;
+  color: #354039;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.detail-facts {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.detail-facts > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-facts dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.detail-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-functions {
+  margin-top: 15px;
+}
+
+.detail-functions h3 {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#detailFunctions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#detailFunctions span {
+  padding: 3px 7px;
+  border: 1px solid #a8b7ae;
+  border-radius: 3px;
+  color: #315b49;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+}
+
+#detailFunctions span[data-kind="boundary"] {
+  color: #74391f;
+  border-color: #c5a18f;
+}
+
+@media (max-width: 1080px) {
+  .atlas-controls {
+    width: min(480px, calc(100% - 340px));
+    grid-template-columns: minmax(140px, 1fr) minmax(100px, 120px) auto;
+  }
+
+  .atlas-facts {
+    max-width: 330px;
+  }
+}
+
+@media (max-width: 780px) {
+  .atlas-header {
+    top: 9px;
+    left: 12px;
+    max-width: calc(100% - 24px);
+  }
+
+  .atlas-title h1 {
+    font-size: 21px;
+  }
+
+  .atlas-facts {
+    max-width: 270px;
+    gap: 3px 7px;
+    font-size: 10px;
+  }
+
+  .atlas-facts span + span::before {
+    margin-right: 7px;
+  }
+
+  .atlas-controls {
+    top: 68px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    grid-template-columns: minmax(0, 1fr) 118px;
+    align-items: end;
+    padding: 6px;
+    transform: none;
+  }
+
+  .layer-controls {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    min-height: 24px;
+  }
+
+  .zoom-controls {
+    top: 160px;
+    right: 10px;
+  }
+
+  .atlas-shell.has-detail .zoom-controls {
+    right: 10px;
+  }
+
+  .compass {
+    top: 166px;
+    left: 13px;
+  }
+
+  .map-key {
+    right: 10px;
+    bottom: 9px;
+    left: 10px;
+    gap: 4px 11px;
+    font-size: 10px;
+  }
+
+  .altitude-key {
+    margin-left: 0;
+  }
+
+  .altitude-key i {
+    width: 75px;
+  }
+
+  .place-detail {
+    top: auto;
+    right: 9px;
+    bottom: 9px;
+    left: 9px;
+    width: auto;
+    max-height: 42dvh;
+    padding: 13px 15px 14px;
+    border-top: 3px solid var(--focus);
+    border-left: 1px solid rgba(69, 81, 73, 0.38);
+  }
+
+  .atlas-shell.has-detail .map-key {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .atlas-facts {
+    max-width: 235px;
+  }
+
+  .atlas-controls {
+    top: 84px;
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+
+  .search-control,
+  .select-control,
+  .switch-control {
+    font-size: 10px;
+  }
+
+  .search-control input,
+  .select-control select {
+    min-height: 29px;
+    padding: 4px 6px;
+  }
+
+  .zoom-controls {
+    top: 184px;
+  }
+
+  .compass {
+    top: 190px;
+  }
+
+  .category-key {
+    gap: 7px;
+  }
+
+  .detail-heading h2 {
+    font-size: 22px;
+  }
+
+  .detail-description {
+    margin: 10px 0;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

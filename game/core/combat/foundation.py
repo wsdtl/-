@@ -451,8 +451,12 @@ def _validate_environment_rules(
     }
     if set(value) != expected:
         raise ValueError("环境规则字段必须完整且不能包含额外字段")
-    if value.get("地表环境来源") != "区域地形分区":
-        raise ValueError("当前地表环境必须由区域地形分区确定")
+    if value.get("地表环境来源") != {
+        "数据集": "地形分区",
+        "坐标字段": "坐标带",
+        "环境字段": "地形",
+    }:
+        raise ValueError("当前地表环境必须由独立地形分区数据集按坐标确定")
     if value.get("承载基准") != ["血气上限"]:
         raise ValueError("战场环境承载基准只能使用正式参战者血气上限")
     event = str(value.get("承伤事件") or "")

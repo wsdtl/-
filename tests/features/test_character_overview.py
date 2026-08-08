@@ -60,7 +60,7 @@ def test_character_overview_combines_owned_service_results(
 
     assert (character.name, character.gender) == ("林远", "男")
     assert (character.realm_name, character.level) == ("灵动", 1)
-    assert character.xy == (8, 8)
+    assert character.xy == (15, 17)
     assert dict(character.attributes)["攻击"] == 5
     assert dict(character.resources) == {"血气": 100, "精神": 100, "护盾": 0}
     assert character.cultivation_slots == (("功法", 6), ("真意", 6), ("气机", 6))
@@ -70,7 +70,7 @@ def test_character_overview_combines_owned_service_results(
     assert character.weapon.open_law_slots == 0
     assert character.inventory.stack_count == 2
     assert character.inventory.total_quantity == 5
-    assert result.location_name == "青溪村"
+    assert result.location_name == "溪隐台"
     assert result.states == (("行为", "空闲"), ("队伍", "未组队"), ("控制", "自主"))
 
     class RecordingManager:
@@ -88,9 +88,7 @@ def test_character_overview_combines_owned_service_results(
     monkeypatch.setattr(
         command_module,
         "current_game_services",
-        lambda: SimpleNamespace(
-            features=SimpleNamespace(chakan_juese=OverviewStub())
-        ),
+        lambda: SimpleNamespace(features=SimpleNamespace(chakan_juese=OverviewStub())),
     )
     manager = RecordingManager()
     _run(command_module.show_character(user_id="qq-1", manager=manager))
@@ -99,7 +97,7 @@ def test_character_overview_combines_owned_service_results(
     content = render_plain_text(manager.message.document)
     assert "林远" in content
     assert "灵动" in content
-    assert "青溪村" in content
+    assert "溪隐台" in content
     assert "功法: 0/6" in content
     assert "无名器胚" in content
     assert "攻击: 10" in content

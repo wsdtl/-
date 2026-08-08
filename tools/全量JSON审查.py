@@ -38,7 +38,7 @@ GENDERS = frozenset({"男", "女"})
 WEAPON_KEYS = frozenset({"名称", "等级", "经验", "器律"})
 ENEMY_WEAPON_KEYS = frozenset({"名称", "攻击"})
 SOUTHERN_REGIONS = frozenset(
-    {"青岚州", "玄河州", "镜湖州", "丹霞州", "云岫州", "天衡州"}
+    {"青岚州", "玄河州", "镜湖州", "丹霞州", "云京州", "天衡州"}
 )
 NORTHERN_REGIONS = frozenset({"朔风荒原", "寒渊林海", "烬脊群山", "天裂禁地"})
 DEFENSE_REGION = "镇岳防线"
@@ -1246,6 +1246,11 @@ class Audit:
             identity: materialize(value)
             for identity, value in self.data.entities("区域").items()
         }
+        _, terrain_by_point = self._audit_terrain_domains(terrains)
+        region_domains = {
+            name: _coordinate_domain_points(row.get("坐标带"))
+            for name, row in regions.items()
+        }
         terrain_table = self._json("内容/世界/地势.json")
         self._audit_height_table(terrain_table)
         coordinates: dict[tuple[int, int], str] = {}
@@ -1267,26 +1272,23 @@ class Audit:
             if region is None:
                 self.add("世界", path, f"地点 {name} 无法从目录确定区域")
             else:
-                if not _in_range(point, region.get("坐标范围")):
+                if point not in region_domains.get(owner or "", set()):
                     self.add("世界", path, f"地点 {name} 坐标不在所属区域 {owner} 内")
-                matches = [
-                    part
-                    for part in region.get("地形分区", [])
-                    if _in_range(point, part.get("坐标范围"))
-                ]
-                if len(matches) != 1:
-                    self.add(
-                        "世界",
-                        path,
-                        f"地点 {name} 必须恰好命中一个地形分区，当前 {len(matches)} 个",
-                    )
+                if point not in terrain_by_point:
+                    self.add("世界", path, f"地点 {name} 没有命中地形分区")
             self._audit_location_functions(name, row, path)
         for name, row in regions.items():
             path = self.data.entity_record("区域", name).source_file
-            self._audit_region_terrain(name, row, path, terrains)
-        self._audit_world_partition(regions)
+            if set(row) != {"类别", "坐标带", "说明"}:
+                self.add("世界", path, f"区域 {name} 只能保存类别、坐标带和说明")
+            points = region_domains.get(name)
+            if not points:
+                self.add("世界", path, f"区域 {name} 坐标带非法或为空")
+            elif not _connected_points(points):
+                self.add("世界", path, f"区域 {name} 坐标域不连通")
+        self._audit_world_partition(region_domains)
         self._audit_world_definitions(terrains)
-        self._audit_world_role_distribution(locations, regions)
+        self._audit_world_role_distribution(locations, terrain_by_point)
         self._audit_roads(locations)
 
     def _audit_height_table(self, value: Any) -> None:
@@ -1365,45 +1367,71 @@ class Audit:
         elif row.get("单次遭遇敌人数"):
             self.add("世界", path, f"地点 {name} 不提供探险却保存了探险数据")
 
-    def _audit_region_terrain(
-        self, name: str, row: dict[str, Any], path: str, terrains: set[Any]
-    ) -> None:
-        region_range = row.get("坐标范围")
-        if not _range2d(region_range):
-            self.add("世界", path, f"区域 {name} 坐标范围非法")
-            return
-        covered: set[tuple[int, int]] = set()
-        for part in row.get("地形分区", []):
-            if not isinstance(part, dict) or not _range2d(part.get("坐标范围")):
-                self.add("世界", path, f"区域 {name} 存在非法地形分区")
+    def _audit_terrain_domains(
+        self, terrains: set[Any]
+    ) -> tuple[dict[str, set[tuple[int, int]]], dict[tuple[int, int], str]]:
+        rows = self._json("内容/世界/地形分区.json")
+        domains: dict[str, set[tuple[int, int]]] = {}
+        owners: dict[tuple[int, int], str] = {}
+        if not isinstance(rows, list):
+            self.add("世界", "内容/世界/地形分区.json", "地形分区必须是字典列表")
+            return domains, owners
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict) or set(row) != {"名称", "地形", "坐标带"}:
+                self.add(
+                    "世界", "内容/世界/地形分区.json", f"地形分区[{index}]结构非法"
+                )
                 continue
-            terrain = part.get("地形")
+            name = row.get("名称")
+            terrain = row.get("地形")
+            if not isinstance(name, str) or not name or name in domains:
+                self.add(
+                    "世界",
+                    "内容/世界/地形分区.json",
+                    f"地形分区[{index}]名称为空或重复",
+                )
+                continue
             if terrain not in terrains:
-                self.add("世界", path, f"区域 {name} 引用不存在的战场环境：{terrain}")
-            for point in _points(part["坐标范围"]):
-                if not _in_range(point, region_range):
-                    self.add("世界", path, f"区域 {name} 的地形分区越出区域边界")
-                    break
-                if point in covered:
-                    self.add("世界", path, f"区域 {name} 的地形分区发生重叠：{point}")
-                    break
-                covered.add(point)
-        expected = set(_points(region_range))
-        if covered != expected:
+                self.add(
+                    "世界",
+                    "内容/世界/地形分区.json",
+                    f"地形分区 {name} 引用不存在的战场环境：{terrain}",
+                )
+            points = _coordinate_domain_points(row.get("坐标带"))
+            domains[name] = points
+            if not points:
+                self.add(
+                    "世界",
+                    "内容/世界/地形分区.json",
+                    f"地形分区 {name} 坐标带非法或为空",
+                )
+            elif not _connected_points(points):
+                self.add(
+                    "世界", "内容/世界/地形分区.json", f"地形分区 {name} 坐标域不连通"
+                )
+            for point in points:
+                previous = owners.get(point)
+                if previous is not None:
+                    self.add(
+                        "世界",
+                        "内容/世界/地形分区.json",
+                        f"地形分区重叠：{point} -> {previous}、{name}",
+                    )
+                else:
+                    owners[point] = str(terrain or "")
+        if len(owners) != 10000:
             self.add(
                 "世界",
-                path,
-                f"区域 {name} 地形分区未完整且唯一覆盖区域，缺少 {len(expected - covered)} 格",
+                "内容/世界/地形分区.json",
+                f"地形分区必须覆盖100x100全境，当前{len(owners)}格",
             )
+        return domains, owners
 
-    def _audit_world_partition(self, regions: dict[str, dict[str, Any]]) -> None:
+    def _audit_world_partition(self, regions: dict[str, set[tuple[int, int]]]) -> None:
         owners: dict[tuple[int, int], str] = {}
         overlaps: set[tuple[int, int]] = set()
-        for name, region in regions.items():
-            coordinate_range = region.get("坐标范围")
-            if not _range2d(coordinate_range):
-                continue
-            for point in _points(coordinate_range):
+        for name, points in regions.items():
+            for point in points:
                 if point in owners:
                     overlaps.add(point)
                 else:
@@ -1470,7 +1498,7 @@ class Audit:
     def _audit_world_role_distribution(
         self,
         locations: dict[str, dict[str, Any]],
-        regions: dict[str, dict[str, Any]],
+        terrain_by_point: dict[tuple[int, int], str],
     ) -> None:
         assert self.data is not None
         defense_kinds: set[str] = set()
@@ -1499,7 +1527,7 @@ class Audit:
                 self.add("世界", record.source_file, f"北方地点 {name} 混入灵兽")
             if region == DEFENSE_REGION:
                 defense_kinds.update(kinds)
-            terrain = _terrain_at(tuple(row.get("坐标", ())), regions.get(region, {}))
+            terrain = terrain_by_point.get(tuple(row.get("坐标", ())), "")
             self._audit_location_drops(
                 name,
                 terrain,
@@ -1558,12 +1586,11 @@ class Audit:
         roads = self._dataset("道路")
         graph: dict[str, set[str]] = defaultdict(set)
         covered: set[str] = set()
-        count = 0
+        direct_pairs: set[frozenset[str]] = set()
         for path, rows in roads.items():
             if not isinstance(rows, list):
                 continue
             for index, row in enumerate(rows):
-                count += 1
                 if not isinstance(row, dict):
                     self.add("道路", path, f"道路[{index}] 不是字典")
                     continue
@@ -1572,6 +1599,10 @@ class Audit:
                 if start not in locations or end not in locations:
                     self.add("道路", path, f"道路端点不存在：{start} -> {end}")
                     continue
+                direct_pair = frozenset((start, end))
+                if direct_pair in direct_pairs:
+                    self.add("道路", path, f"道路端点重复：{start} <-> {end}")
+                direct_pairs.add(direct_pair)
                 coordinates = row.get("途经坐标")
                 if (
                     not isinstance(coordinates, list)
@@ -1600,8 +1631,6 @@ class Audit:
                 graph[start].add(end)
                 graph[end].add(start)
                 covered.update((start, end))
-        if count != 114:
-            self.add("道路", "内容/世界/道路", f"正式道路数量应为 114，当前 {count}")
         missing = set(locations) - covered
         if missing:
             self.add(
@@ -1720,38 +1749,55 @@ def _coordinate(value: Any) -> bool:
     )
 
 
-def _range2d(value: Any) -> bool:
-    return (
-        isinstance(value, dict)
-        and set(value) == {"x轴", "y轴"}
-        and _ordered_pair(value["x轴"], minimum=0, maximum=99)
-        and _ordered_pair(value["y轴"], minimum=0, maximum=99)
-    )
+def _coordinate_domain_points(value: Any) -> set[tuple[int, int]]:
+    if not isinstance(value, list) or not value:
+        return set()
+    result: set[tuple[int, int]] = set()
+    seen_y: set[int] = set()
+    for band in value:
+        if not isinstance(band, dict) or set(band) != {"y", "x轴"}:
+            return set()
+        y = band.get("y")
+        ranges = band.get("x轴")
+        if (
+            isinstance(y, bool)
+            or not isinstance(y, int)
+            or not 0 <= y <= 99
+            or y in seen_y
+            or not isinstance(ranges, list)
+            or not ranges
+        ):
+            return set()
+        seen_y.add(y)
+        previous_end = -1
+        for x_range in ranges:
+            if (
+                not _ordered_pair(x_range, minimum=0, maximum=99)
+                or x_range[0] <= previous_end
+            ):
+                return set()
+            result.update((x, y) for x in range(x_range[0], x_range[1] + 1))
+            previous_end = x_range[1]
+    return result
 
 
-def _in_range(point: tuple[int, int], value: Any) -> bool:
-    return (
-        _range2d(value)
-        and value["x轴"][0] <= point[0] <= value["x轴"][1]
-        and value["y轴"][0] <= point[1] <= value["y轴"][1]
-    )
-
-
-def _terrain_at(point: tuple[int, int], region: dict[str, Any]) -> str:
-    matches = [
-        part
-        for part in region.get("地形分区", ())
-        if isinstance(part, dict) and _in_range(point, part.get("坐标范围"))
-    ]
-    if len(matches) != 1:
-        return ""
-    return str(matches[0].get("地形") or "")
-
-
-def _points(value: dict[str, list[int]]):
-    for y in range(value["y轴"][0], value["y轴"][1] + 1):
-        for x in range(value["x轴"][0], value["x轴"][1] + 1):
-            yield (x, y)
+def _connected_points(points: set[tuple[int, int]]) -> bool:
+    if not points:
+        return False
+    reached: set[tuple[int, int]] = set()
+    queue = deque([next(iter(points))])
+    while queue:
+        point = queue.popleft()
+        if point in reached:
+            continue
+        reached.add(point)
+        x, y = point
+        queue.extend(
+            neighbor
+            for neighbor in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+            if neighbor in points and neighbor not in reached
+        )
+    return reached == points
 
 
 def _walk_dicts(value: Any):

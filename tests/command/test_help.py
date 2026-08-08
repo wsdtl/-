@@ -37,14 +37,16 @@ def _content(result) -> str:
 def test_help_registry_is_built_from_loaded_commands() -> None:
     create_app()
 
-    assert help_registry.categories() == ("角色", "资源")
+    assert help_registry.categories() == ("角色", "世界", "资源")
     assert [entry.command for entry in help_registry.entries()] == [
         "帮助",
         "创建人物",
         "人物",
+        "地图",
         "查看物品",
     ]
     assert help_registry.find("web") is None
+    assert help_registry.find("天道后台") is None
 
 
 def test_game_command_requires_help_or_hidden() -> None:

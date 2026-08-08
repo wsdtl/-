@@ -8,7 +8,13 @@ import sys
 import uvicorn
 from fastapi import FastAPI
 
-from launch import FastAPIAllowed, FastAPIIncludeRouter, LOGGING_CONFIG, config, lifespan
+from launch import (
+    LOGGING_CONFIG,
+    FastAPIAllowed,
+    FastAPIIncludeRouter,
+    config,
+    lifespan,
+)
 
 
 def configure_windows_event_loop() -> None:
