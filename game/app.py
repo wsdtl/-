@@ -22,6 +22,7 @@ from .core.world import WorldService
 from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
+from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.ditu import WorldMapFeature
 from .features.najie import NajieFeature
 from .features.weizhi import PositionFeature
@@ -56,6 +57,7 @@ class FeatureServices:
     najie: NajieFeature
     weizhi: PositionFeature
     xinglu: TravelFeature
+    daolv_jiejiao: CompanionInteractionFeature
 
 
 @dataclass(frozen=True)
@@ -150,7 +152,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_size", location_status.nearby_page_size),
         )
     )
-    companion = CompanionService(data)
+    companion = CompanionService(data, database)
     companion_status = companion.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -227,6 +229,17 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     weizhi.initialize()
     xinglu = TravelFeature(world, character, location)
     xinglu.initialize()
+    daolv_jiejiao = CompanionInteractionFeature(
+        data,
+        companion,
+        item_catalog,
+        asset,
+        character,
+        location,
+        world,
+        database,
+    )
+    daolv_jiejiao.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -235,6 +248,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         najie=najie,
         weizhi=weizhi,
         xinglu=xinglu,
+        daolv_jiejiao=daolv_jiejiao,
     )
     return GameServices(core=core, features=features)
 
@@ -262,9 +276,11 @@ def initialize_game_services() -> None:
         unregister_game_access_guard,
     )
     from .cmd.command import registered_guard_rules
+    from .cmd.registry_audit import audit_command_registry
 
     services = build_game_services()
     try:
+        audit_command_registry()
         for rule_name in registered_guard_rules():
             services.core.player_state.validate_guard_rule(rule_name)
         register_game_access_guard()

@@ -1,6 +1,45 @@
-"""世界道侣核心微服务。"""
+"""道侣核心微服务。"""
 
-from .contracts import CompanionStatus, LocalCultivator
+from .contracts import (
+    ActiveCompanion,
+    CompanionDefinition,
+    CompanionDialogue,
+    CompanionError,
+    CompanionFarewellError,
+    CompanionFarewellPlan,
+    CompanionGiftError,
+    CompanionGiftPlan,
+    CompanionInstance,
+    CompanionInvitationError,
+    CompanionInvitationPlan,
+    CompanionNotFoundError,
+    CompanionRelation,
+    CompanionReward,
+    CompanionRules,
+    CompanionStateError,
+    CompanionStatus,
+    LocalCultivator,
+)
 from .service import CompanionService
 
-__all__ = ["CompanionService", "CompanionStatus", "LocalCultivator"]
+__all__ = [
+    "ActiveCompanion",
+    "CompanionDefinition",
+    "CompanionDialogue",
+    "CompanionError",
+    "CompanionFarewellError",
+    "CompanionFarewellPlan",
+    "CompanionGiftError",
+    "CompanionGiftPlan",
+    "CompanionInstance",
+    "CompanionInvitationError",
+    "CompanionInvitationPlan",
+    "CompanionNotFoundError",
+    "CompanionRelation",
+    "CompanionReward",
+    "CompanionRules",
+    "CompanionService",
+    "CompanionStateError",
+    "CompanionStatus",
+    "LocalCultivator",
+]

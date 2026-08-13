@@ -76,7 +76,7 @@ def test_travel_command_renders_journey_destination_and_available_functions(
         async def send(self, message: DocumentMessage) -> None:
             self.message = message
 
-    command_module = import_module("game.cmd.行路")
+    command_module = import_module("game.cmd.通用.行路")
     monkeypatch.setattr(
         command_module,
         "current_game_services",

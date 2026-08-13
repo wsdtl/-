@@ -69,12 +69,8 @@ def load_position_presentation(
         raise JsonDataError("位置展示存在重复的页面按钮编号")
 
     return PositionPresentation(
-        meters_per_li=_positive_int(
-            distance["每里米数"], "距离与方向.距离.每里米数"
-        ),
-        rounding_step=_positive_int(
-            distance["约数步长"], "距离与方向.距离.约数步长"
-        ),
+        meters_per_li=_positive_int(distance["每里米数"], "距离与方向.距离.每里米数"),
+        rounding_step=_positive_int(distance["约数步长"], "距离与方向.距离.约数步长"),
         same_place=_text(distance_and_direction["同处措辞"], "距离与方向.同处措辞"),
         directions=MappingProxyType(_direction_map(distance_and_direction["方向"])),
         copy=_position_copy(dataset["文本"], dataset["图标"]),
@@ -112,12 +108,7 @@ def _direction_map(value: object) -> dict[tuple[int, int], str]:
         if key == (0, 0) or key in result:
             raise JsonDataError("位置方向不能包含原点或重复偏移")
         result[key] = _text(row.get("名称"), f"距离与方向.方向[{index}].名称")
-    expected = {
-        (x, y)
-        for x in (-1, 0, 1)
-        for y in (-1, 0, 1)
-        if (x, y) != (0, 0)
-    }
+    expected = {(x, y) for x in (-1, 0, 1) for y in (-1, 0, 1) if (x, y) != (0, 0)}
     if set(result) != expected:
         raise JsonDataError("位置方向必须完整定义八个方向")
     return result
@@ -166,6 +157,7 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
             "可用功能",
             "没有可用功能",
             "本地修士",
+            "同行道侣",
             "人数",
         },
         "位置文本.位置",
@@ -189,6 +181,7 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
         {
             "标题",
             "本地修士",
+            "同行道侣",
             "来往修士",
             "没有来往修士",
             "页次",
@@ -267,6 +260,9 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
         local_cultivators_section=_text(
             current.get("本地修士"), "位置文本.位置.本地修士"
         ),
+        active_companion_section=_text(
+            current.get("同行道侣"), "位置文本.位置.同行道侣"
+        ),
         count_label=_text(current.get("人数"), "位置文本.位置.人数"),
         overview_title=_template(
             overview.get("标题"), "位置文本.附近概览.标题", {"地点"}
@@ -293,6 +289,9 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
         cultivators_title=_text(cultivators.get("标题"), "位置文本.附近修士.标题"),
         cultivators_local_section=_text(
             cultivators.get("本地修士"), "位置文本.附近修士.本地修士"
+        ),
+        cultivators_active_section=_text(
+            cultivators.get("同行道侣"), "位置文本.附近修士.同行道侣"
         ),
         cultivators_visiting_section=_text(
             cultivators.get("来往修士"), "位置文本.附近修士.来往修士"

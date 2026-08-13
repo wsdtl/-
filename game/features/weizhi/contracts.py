@@ -44,6 +44,7 @@ class PositionCopy:
     available_functions_section: str
     no_available_functions: str
     local_cultivators_section: str
+    active_companion_section: str
     count_label: str
     overview_title: str
     overview_cultivators_section: str
@@ -55,6 +56,7 @@ class PositionCopy:
     overview_current_label: str
     cultivators_title: str
     cultivators_local_section: str
+    cultivators_active_section: str
     cultivators_visiting_section: str
     cultivators_empty: str
     cultivators_page_section: str
@@ -81,6 +83,7 @@ class PositionAction:
 class CurrentPositionView:
     location: LocationView
     local_cultivators: tuple[LocalCultivator, ...]
+    active_companion: LocalCultivator | None
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,7 @@ class NearbyCultivatorView:
 @dataclass(frozen=True)
 class NearbyCultivatorPage:
     local_cultivators: tuple[LocalCultivator, ...]
+    active_companion: LocalCultivator | None
     cultivators: tuple[NearbyCultivatorView, ...]
     page: int
     page_size: int

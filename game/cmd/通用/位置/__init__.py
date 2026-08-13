@@ -16,10 +16,11 @@ from game.features.weizhi import (
 )
 from message import Action, M
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 
 
 @GameCommand.fullmatch(
+    scope="通用",
     cmd="位置",
     guard_rule="已创建",
     help=HelpSpec(
@@ -37,6 +38,7 @@ async def show_position(*, user_id: str, manager, **_) -> None:
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="附近",
     guard_rule="自主空闲或休息",
     help=HelpSpec(
@@ -116,6 +118,11 @@ def _position_message(feature: PositionFeature, result: CurrentPositionView):
         reply.section(copy.local_cultivators_section, icon=copy.cultivator_icon).field(
             copy.count_label, len(result.local_cultivators)
         )
+    if result.active_companion is not None:
+        reply.section(copy.active_companion_section, icon=copy.cultivator_icon).field(
+            result.active_companion.name,
+            result.active_companion.title,
+        )
     return reply.actions(_message_actions(feature.position_actions())).build()
 
 
@@ -152,6 +159,16 @@ def _nearby_overview_message(feature: PositionFeature, result: NearbyOverview):
 def _nearby_cultivators_message(feature: PositionFeature, result: NearbyCultivatorPage):
     copy = feature.copy()
     reply = M.document().header(copy.cultivators_title)
+    if result.active_companion is not None:
+        reply.section(copy.cultivators_active_section, icon=copy.cultivator_icon).field(
+            result.active_companion.name,
+            copy.cultivator_summary.format(
+                境界=result.active_companion.realm_name,
+                等级=result.active_companion.level,
+                性别=result.active_companion.gender,
+                状态="",
+            ),
+        )
     if result.local_cultivators:
         reply.section(copy.cultivators_local_section, icon=copy.cultivator_icon)
         for local in result.local_cultivators:

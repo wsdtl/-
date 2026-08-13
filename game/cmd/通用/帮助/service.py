@@ -45,7 +45,9 @@ def _category_message(category: str) -> DocumentMessage:
     builder = M.document().header(GAME_NAME).section(category, icon="system")
     entries = help_registry.in_category(category)
     for entry in entries:
-        builder.line(M.command(entry.command, f"帮助 {entry.command}"), " - ", entry.spec.summary)
+        builder.line(
+            M.command(entry.command, f"帮助 {entry.command}"), " - ", entry.spec.summary
+        )
     if not entries:
         builder.line("当前分类还没有开放命令。")
     return builder.actions((_home_action(),)).build()
@@ -93,7 +95,9 @@ def _not_found_message(query: str) -> DocumentMessage:
 
 
 def _home_action() -> Action:
-    return Action("help.home", "帮助首页", "帮助", behavior="callback", style="secondary")
+    return Action(
+        "help.home", "帮助首页", "帮助", behavior="callback", style="secondary"
+    )
 
 
 __all__ = [

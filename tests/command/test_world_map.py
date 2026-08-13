@@ -12,8 +12,8 @@ from game.features.ditu import WorldMapFeature
 from main import create_app
 from message import RenderedMessage, render_local_message
 
-world_map_entry = import_module("game.cmd.地图.entry")
-world_map_site = import_module("game.cmd.地图.site")
+world_map_entry = import_module("game.cmd.通用.地图.entry")
+world_map_site = import_module("game.cmd.通用.地图.site")
 
 
 def _world() -> WorldService:

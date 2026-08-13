@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 from . import entry
 from .site import router
 
 
 @GameCommand.fullmatch(
+    scope="通用",
     cmd="地图",
     guard_rule="始终可用",
     help=HelpSpec(

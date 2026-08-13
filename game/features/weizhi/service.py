@@ -7,7 +7,7 @@ import math
 from collections.abc import Mapping, Sequence
 
 from game.core.character import CharacterService
-from game.core.companion import CompanionService
+from game.core.companion import CompanionService, LocalCultivator
 from game.core.data import JsonDataError, JsonDataService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
@@ -132,14 +132,25 @@ class PositionFeature:
 
     async def current(self, user_id: str) -> CurrentPositionView:
         self._require_initialized()
-        current = await self._location.current(user_id)
+        current, active = await asyncio.gather(
+            self._location.current(user_id),
+            self._companion.active(user_id),
+        )
         location = self._world.locate(LocationQuery(xy=current.xy))
+        excluded = (active.companion_id,) if active is not None else ()
         local = (
-            self._companion.local_cultivators(location.location_name)
+            self._companion.local_cultivators(
+                location.location_name,
+                exclude_companion_ids=excluded,
+            )
             if location.companion_pool
             else ()
         )
-        return CurrentPositionView(location, local)
+        return CurrentPositionView(
+            location,
+            local,
+            self._active_summary(active.companion_id) if active is not None else None,
+        )
 
     async def nearby_overview(self, user_id: str) -> NearbyOverview:
         self._require_initialized()
@@ -160,7 +171,10 @@ class PositionFeature:
         self._require_initialized()
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise NearbyPageError(self.copy().invalid_page)
-        candidates = await self._location.nearby_players(user_id)
+        candidates, active = await asyncio.gather(
+            self._location.nearby_players(user_id),
+            self._companion.active(user_id),
+        )
         user_ids = tuple(value.user_id for value in candidates.values)
         profiles, states = await asyncio.gather(
             self._character.public_profiles(user_ids),
@@ -196,18 +210,40 @@ class PositionFeature:
         stop = start + candidates.page_size
         current = self._world.locate(LocationQuery(xy=candidates.origin.xy))
         local = (
-            self._companion.local_cultivators(current.location_name)
+            self._companion.local_cultivators(
+                current.location_name,
+                exclude_companion_ids=(active.companion_id,) if active else (),
+            )
             if page == 1 and current.companion_pool
             else ()
         )
         return NearbyCultivatorPage(
             local_cultivators=local,
+            active_companion=(
+                self._active_summary(active.companion_id)
+                if active is not None and page == 1
+                else None
+            ),
             cultivators=tuple(visible[start:stop]),
             page=page,
             page_size=candidates.page_size,
             has_next=stop < len(visible),
             truncated=truncated,
             visible_count=len(visible),
+        )
+
+    def _active_summary(self, companion_id: str) -> LocalCultivator:
+        definition = self._companion.definition(companion_id)
+        return LocalCultivator(
+            definition.companion_id,
+            definition.name,
+            definition.gender,
+            definition.title,
+            definition.description,
+            definition.realm_id,
+            definition.realm_name,
+            definition.level,
+            definition.interactable,
         )
 
     async def nearby_locations(self, user_id: str) -> NearbyWorldLocations:

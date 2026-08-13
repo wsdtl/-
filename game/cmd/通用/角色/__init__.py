@@ -11,10 +11,11 @@ from game.features.chuangjian_renwu import (
 )
 from message import M
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="创建人物",
     guard_rule="仅未创建",
     help=HelpSpec(
@@ -59,7 +60,10 @@ async def create_character(
         return
     except CharacterExistsError:
         await manager.send(
-            M.document().section("创建人物").line("你已经创建过人物，不能重复创建。").build(),
+            M.document()
+            .section("创建人物")
+            .line("你已经创建过人物，不能重复创建。")
+            .build(),
         )
         return
 
@@ -72,7 +76,10 @@ async def create_character(
         .section("出生地")
         .field("地点", result.location_name)
         .row(("区域", result.region), ("地形", result.terrain))
-        .row(("坐标", f"{result.xy[0]}, {result.xy[1]}"), ("海拔", f"{result.altitude}米"))
+        .row(
+            ("坐标", f"{result.xy[0]}, {result.xy[1]}"),
+            ("海拔", f"{result.altitude}米"),
+        )
         .section("初始物资")
     )
     for index, (item_name, grade, quantity) in enumerate(result.initial_items, start=1):
@@ -81,6 +88,7 @@ async def create_character(
 
 
 @GameCommand.fullmatch(
+    scope="通用",
     cmd="人物",
     guard_rule="已创建",
     help=HelpSpec(
@@ -118,7 +126,10 @@ async def show_character(*, user_id: str, manager, **_) -> None:
         .section("所在之地", icon="map")
         .field("地点", result.location_name or "野外")
         .row(("区域", result.region), ("地形", result.terrain))
-        .row(("坐标", f"{result.xy[0]}, {result.xy[1]}"), ("海拔", f"{result.altitude}米"))
+        .row(
+            ("坐标", f"{result.xy[0]}, {result.xy[1]}"),
+            ("海拔", f"{result.altitude}米"),
+        )
         .section("当前资源", icon="status")
     )
     _append_pairs(reply, character.resources)
@@ -163,7 +174,10 @@ async def show_character(*, user_id: str, manager, **_) -> None:
 def _append_pairs(builder, values: tuple[tuple[str, int | float], ...]) -> None:
     for index in range(0, len(values), 2):
         builder.row(
-            *((name, _display_number(value)) for name, value in values[index : index + 2])
+            *(
+                (name, _display_number(value))
+                for name, value in values[index : index + 2]
+            )
         )
 
 

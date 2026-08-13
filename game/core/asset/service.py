@@ -3,18 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from decimal import Decimal, InvalidOperation
 
 from game.core.data import JsonDataError, JsonDataService
-from game.core.database import DatabaseService, StateSnapshot
+from game.core.database import (
+    DatabaseService,
+    StateAddress,
+    StateMutation,
+    StateSnapshot,
+)
 
 from .contracts import (
     AssetCategory,
     AssetEntry,
+    AssetGrade,
     AssetSnapshot,
     AssetSortRules,
     AssetStateError,
     AssetStatus,
     AssetSubcategory,
+    InventoryAdjustment,
+    InventoryChange,
+    InventoryChangeError,
+    InventoryMutationPlan,
+    InventoryStack,
 )
 
 _STATE_TYPES = frozenset(
@@ -30,7 +42,7 @@ _CULTIVATION_CATEGORIES = frozenset({"功法", "真意", "气机"})
 
 
 class AssetService:
-    """只读取玩家拥有权，不执行任何资产变更。"""
+    """解释玩家资产，并为跨领域事务生成普通物品变更计划。"""
 
     def __init__(self, data: JsonDataService, database: DatabaseService) -> None:
         self._data = data
@@ -40,7 +52,8 @@ class AssetService:
         self._category_by_state: dict[str, str] = {}
         self._subcategory_rules: dict[tuple[str, str], Mapping[str, object]] = {}
         self._prefixes: dict[str, tuple[str, str]] = {}
-        self._grades: dict[str, str] = {}
+        self._grades: dict[str, AssetGrade] = {}
+        self._grade_names: dict[str, str] = {}
         self._page_limit = 0
         self._sort_rules = AssetSortRules(False, False, False, False)
 
@@ -95,6 +108,127 @@ class AssetService:
             page_limit=self._page_limit,
             sort_rules=self._sort_rules,
         )
+
+    def grade(self, grade_id: str) -> AssetGrade:
+        self._require_initialized()
+        normalized = str(grade_id or "").strip()
+        grade = self._grades.get(normalized)
+        if grade is None:
+            resolved_id = self._grade_names.get(_normalize(normalized))
+            grade = self._grades.get(resolved_id or "")
+        if grade is None:
+            raise InventoryChangeError(f"未知物品品级：{normalized or '<空>'}")
+        return grade
+
+    async def inventory_stacks(
+        self, user_id: str, item_id: str
+    ) -> tuple[InventoryStack, ...]:
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_item_id = _required_text(item_id, "物品编号")
+        item_name = _entity_name(self._data, "物品", normalized_item_id)
+        addresses = tuple(
+            StateAddress(
+                normalized_user_id,
+                "inventory",
+                f"{normalized_item_id}:{grade_id}",
+            )
+            for grade_id in self._grades
+        )
+        snapshots = await self._database.get_many(addresses)
+        result: list[InventoryStack] = []
+        for snapshot in snapshots:
+            value = _mapping(snapshot.value, "普通物品")
+            grade_id, _ = snapshot.address.state_key.rsplit(":", 1)
+            if grade_id != normalized_item_id:
+                raise AssetStateError("普通物品状态键与查询编号不一致")
+            grade = self.grade(_text(value.get("品级"), "普通物品.品级"))
+            _expect_key(snapshot, f"{normalized_item_id}:{grade.grade_id}")
+            result.append(
+                InventoryStack(
+                    normalized_item_id,
+                    item_name,
+                    grade,
+                    _positive_int(value.get("数量"), "普通物品.数量"),
+                    snapshot.version,
+                )
+            )
+        return tuple(sorted(result, key=lambda stack: stack.grade.order))
+
+    async def plan_inventory_changes(
+        self,
+        user_id: str,
+        adjustments: Sequence[InventoryAdjustment],
+    ) -> InventoryMutationPlan:
+        """合并同一库存地址的变化，生成可与其他领域一起提交的操作。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        totals: dict[tuple[str, str], int] = {}
+        for adjustment in adjustments:
+            item_id = _required_text(adjustment.item_id, "库存变化.物品编号")
+            grade_id = self.grade(adjustment.grade_id).grade_id
+            delta = adjustment.quantity_delta
+            if isinstance(delta, bool) or not isinstance(delta, int) or delta == 0:
+                raise InventoryChangeError("库存变化数量必须是非零整数")
+            _entity_name(self._data, "物品", item_id)
+            key = (item_id, grade_id)
+            totals[key] = totals.get(key, 0) + delta
+        totals = {key: delta for key, delta in totals.items() if delta}
+        if not totals:
+            return InventoryMutationPlan((), ())
+
+        addresses = tuple(
+            StateAddress(normalized_user_id, "inventory", f"{item_id}:{grade_id}")
+            for item_id, grade_id in totals
+        )
+        snapshots = await self._database.get_many(addresses)
+        snapshot_by_key = {
+            snapshot.address.state_key: snapshot for snapshot in snapshots
+        }
+        changes: list[InventoryChange] = []
+        operations: list[StateMutation] = []
+        for item_id, grade_id in sorted(
+            totals,
+            key=lambda key: (key[0], self._grades[key[1]].order),
+        ):
+            state_key = f"{item_id}:{grade_id}"
+            snapshot = snapshot_by_key.get(state_key)
+            before = 0
+            version = 0
+            if snapshot is not None:
+                value = _mapping(snapshot.value, f"inventory/{state_key}")
+                before = _positive_int(value.get("数量"), f"inventory/{state_key}.数量")
+                version = snapshot.version
+            after = before + totals[(item_id, grade_id)]
+            if after < 0:
+                item_name = _entity_name(self._data, "物品", item_id)
+                grade_name = self._grades[grade_id].name
+                raise InventoryChangeError(
+                    f"{grade_name}{item_name}数量不足：现有{before}，需要{-totals[(item_id, grade_id)]}"
+                )
+            value = (
+                {"编号": item_id, "品级": grade_id, "数量": after} if after else None
+            )
+            operations.append(
+                StateMutation(
+                    normalized_user_id,
+                    "inventory",
+                    state_key,
+                    value,
+                    version,
+                )
+            )
+            changes.append(
+                InventoryChange(
+                    item_id,
+                    _entity_name(self._data, "物品", item_id),
+                    self._grades[grade_id],
+                    before,
+                    after,
+                )
+            )
+        return InventoryMutationPlan(tuple(changes), tuple(operations))
 
     def _entry(
         self,
@@ -267,10 +401,17 @@ class AssetService:
     def _load_grades(self) -> None:
         rows = _sequence(self._data.dataset("基础定义").get("品级"), "定义/品级.json")
         self._grades = {
-            _text(_mapping(raw, "品级[]").get("编号"), "品级.编号"): _text(
-                _mapping(raw, "品级[]").get("名称"), "品级.名称"
+            _text(_mapping(raw, "品级[]").get("编号"), "品级.编号"): AssetGrade(
+                _text(_mapping(raw, "品级[]").get("编号"), "品级.编号"),
+                _text(_mapping(raw, "品级[]").get("名称"), "品级.名称"),
+                _positive_int(_mapping(raw, "品级[]").get("阶序"), "品级.阶序"),
+                _decimal(_mapping(raw, "品级[]").get("能力倍率"), "品级.能力倍率"),
+                _decimal(_mapping(raw, "品级[]").get("价格系数"), "品级.价格系数"),
             )
             for raw in rows
+        }
+        self._grade_names = {
+            _normalize(grade.name): grade_id for grade_id, grade in self._grades.items()
         }
 
     def _load_categories(self, value: object) -> None:
@@ -328,10 +469,10 @@ class AssetService:
 
     def _grade(self, value: object) -> tuple[str, str]:
         grade_id = _text(value, "资产品级")
-        grade_name = self._grades.get(grade_id)
-        if grade_name is None:
+        grade = self._grades.get(grade_id)
+        if grade is None:
             raise AssetStateError(f"资产使用未知品级：{grade_id}")
-        return grade_id, grade_name
+        return grade_id, grade.name
 
     def _match_subcategory(self, category: str, field: str, value: str) -> str:
         matches = [
@@ -388,13 +529,9 @@ def _sort_rules(value: object) -> AssetSortRules:
         raise JsonDataError("纳戒.排序.已装配优先必须是布尔值")
     grade_direction = _direction(rules.get("品级"), "纳戒.排序.品级")
     content_id_direction = _direction(rules.get("编号"), "纳戒.排序.编号")
-    holy_formation_direction = _text(
-        rules.get("圣品阵法"), "纳戒.排序.圣品阵法"
-    )
+    holy_formation_direction = _text(rules.get("圣品阵法"), "纳戒.排序.圣品阵法")
     if holy_formation_direction not in {"炼制时间升序", "炼制时间降序"}:
-        raise JsonDataError(
-            "纳戒.排序.圣品阵法只能是炼制时间升序或炼制时间降序"
-        )
+        raise JsonDataError("纳戒.排序.圣品阵法只能是炼制时间升序或炼制时间降序")
     return AssetSortRules(
         equipped_first=equipped_first,
         grade_descending=grade_direction == "降序",
@@ -454,6 +591,27 @@ def _text(value: object, label: str) -> str:
     result = str(value or "").strip()
     if not result:
         raise AssetStateError(f"{label}不能为空")
+    return result
+
+
+def _required_text(value: object, label: str) -> str:
+    result = str(value or "").strip()
+    if not result:
+        raise InventoryChangeError(f"{label}不能为空")
+    return result
+
+
+def _normalize(value: object) -> str:
+    return "".join(str(value or "").split()).casefold()
+
+
+def _decimal(value: object, label: str) -> Decimal:
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise JsonDataError(f"{label}必须是十进制数") from exc
+    if not result.is_finite() or result <= 0:
+        raise JsonDataError(f"{label}必须大于0")
     return result
 
 

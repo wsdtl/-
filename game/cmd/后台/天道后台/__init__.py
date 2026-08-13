@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from ..command import GameCommand
+from ...command import GameCommand
 from . import entry
 from . import runtime as runtime
 from .site import router
 
 
 @GameCommand.fullmatch(
+    scope="后台",
     cmd="天道后台",
     guard_rule="始终可用",
     hidden=True,

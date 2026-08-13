@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 from . import service
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="帮助",
     guard_rule="始终可用",
     help=HelpSpec(

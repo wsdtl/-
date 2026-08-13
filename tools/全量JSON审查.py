@@ -276,13 +276,15 @@ class Audit:
                     f"{name}性别规则必须引用性别定义并使用来源：{source}",
                 )
         companion_rule = role_rules["道侣"]
-        if not isinstance(companion_rule, dict) or companion_rule.get("结契") != {
-            "性别关系": "不同"
+        if not isinstance(companion_rule, dict) or companion_rule.get("邀约") != {
+            "好感要求": 100,
+            "首次邀约性别关系": "不同",
+            "再次邀约检查性别": False,
         }:
             self.add(
                 "角色",
                 "规则/角色/主体/道侣.json",
-                "道侣结契必须要求双方性别不同",
+                "道侣首次邀约必须要求双方性别不同，再次邀约不得重复检查",
             )
         beast_rule = role_rules["灵兽"]
         if isinstance(beast_rule, dict) and "性别" in beast_rule:
@@ -606,13 +608,12 @@ class Audit:
             "类型": "转变性别",
             "执行器": "转变性别",
             "目标": "玩家自身",
-            "已有道侣": "禁止",
             "必填字段": [],
         }:
             self.add(
                 "物品效果",
                 "定义/物品/使用效果.json",
-                "转变性别必须只作用于无道侣的玩家自身",
+                "转变性别必须只作用于玩家自身",
             )
         for identity, raw in self.data.entities("物品").items():
             row = materialize(raw)

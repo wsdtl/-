@@ -34,7 +34,7 @@ def _services(tmp_path: Path):
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data)
+    companion = CompanionService(data, database)
     companion.initialize()
     character = CharacterService(data, database, player_state, location)
     character.initialize()
@@ -114,13 +114,15 @@ def test_nearby_cultivators_use_surface_altitude_for_distance(
     assert result.cultivators == ()
 
 
-def test_all_companions_resolve_to_exact_world_locations() -> None:
+def test_all_companions_resolve_to_exact_world_locations(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
     world = WorldService(data)
     world.initialize()
-    companion = CompanionService(data)
+    database = DatabaseService(tmp_path / "companions.db")
+    database.initialize()
+    companion = CompanionService(data, database)
     status = companion.initialize()
 
     resolved = []

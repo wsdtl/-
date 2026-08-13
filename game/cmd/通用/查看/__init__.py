@@ -7,10 +7,11 @@ from collections.abc import Mapping
 from game.app import current_game_services
 from message import M
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="查看物品",
     guard_rule="始终可用",
     help=HelpSpec(
@@ -49,7 +50,9 @@ async def inspect_item(
             .section("候选")
         )
         for index, candidate in enumerate(result.candidates, start=1):
-            reply.item(index, f"{candidate.name} · {candidate.category} · {candidate.item_id}")
+            reply.item(
+                index, f"{candidate.name} · {candidate.category} · {candidate.item_id}"
+            )
         await manager.send(reply.build())
         return
 

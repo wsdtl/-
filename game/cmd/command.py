@@ -10,7 +10,9 @@ from launch.adapter import MessageHandler
 from .help_registry import HelpSpec, help_registry
 
 GAME_METADATA_KEY = "game"
+COMMAND_SCOPES = frozenset({"通用", "专属", "后台"})
 _registered_guard_rules: set[str] = set()
+_registered_commands: list[tuple[str, str, str]] = []
 
 
 class GameCommand:
@@ -20,6 +22,7 @@ class GameCommand:
     def fullmatch(
         cmd,
         *,
+        scope: str,
         guard_rule: str,
         help: HelpSpec | None = None,
         hidden: bool = False,
@@ -30,6 +33,7 @@ class GameCommand:
         return _register(
             MessageHandler.fullmatch,
             cmd,
+            scope=scope,
             guard_rule=guard_rule,
             help=help,
             hidden=hidden,
@@ -42,6 +46,7 @@ class GameCommand:
     def command(
         cmd,
         *,
+        scope: str,
         guard_rule: str,
         help: HelpSpec | None = None,
         hidden: bool = False,
@@ -52,6 +57,7 @@ class GameCommand:
         return _register(
             MessageHandler.command,
             cmd,
+            scope=scope,
             guard_rule=guard_rule,
             help=help,
             hidden=hidden,
@@ -64,6 +70,7 @@ class GameCommand:
     def regex(
         cmd,
         *,
+        scope: str,
         guard_rule: str,
         help: HelpSpec | None = None,
         hidden: bool = False,
@@ -74,6 +81,7 @@ class GameCommand:
         return _register(
             MessageHandler.regex,
             cmd,
+            scope=scope,
             guard_rule=guard_rule,
             help=help,
             hidden=hidden,
@@ -87,6 +95,7 @@ def _register(
     registrar: Callable[..., Callable],
     cmd,
     *,
+    scope: str,
     guard_rule: str,
     help: HelpSpec | None,
     hidden: bool,
@@ -94,6 +103,9 @@ def _register(
     priority: int,
     block: bool,
 ) -> Callable:
+    normalized_scope = str(scope or "").strip()
+    if normalized_scope not in COMMAND_SCOPES:
+        raise ValueError(f"游戏命令 scope 必须是：{'、'.join(sorted(COMMAND_SCOPES))}")
     normalized_guard_rule = str(guard_rule or "").strip()
     if not normalized_guard_rule:
         raise ValueError("游戏命令必须显式声明状态守卫规则")
@@ -104,11 +116,19 @@ def _register(
     merged = dict(metadata or {})
     game_metadata = dict(merged.get(GAME_METADATA_KEY) or {})
     game_metadata["guard_rule"] = normalized_guard_rule
+    game_metadata["scope"] = normalized_scope
     merged[GAME_METADATA_KEY] = game_metadata
     _registered_guard_rules.add(normalized_guard_rule)
     if help is not None:
         help_registry.register(cmd, help)
-    return registrar(cmd=cmd, priority=priority, block=block, metadata=merged)
+    register = registrar(cmd=cmd, priority=priority, block=block, metadata=merged)
+
+    def decorate(func: Callable) -> Callable:
+        decorated = register(func)
+        _registered_commands.append((str(cmd), normalized_scope, func.__module__))
+        return decorated
+
+    return decorate
 
 
 def registered_guard_rules() -> tuple[str, ...]:
@@ -117,9 +137,17 @@ def registered_guard_rules() -> tuple[str, ...]:
     return tuple(sorted(_registered_guard_rules))
 
 
+def registered_commands() -> tuple[tuple[str, str, str], ...]:
+    """返回命令、声明范围和来源模块，供启动审查器使用。"""
+
+    return tuple(_registered_commands)
+
+
 __all__ = [
+    "COMMAND_SCOPES",
     "GAME_METADATA_KEY",
     "GameCommand",
     "HelpSpec",
+    "registered_commands",
     "registered_guard_rules",
 ]

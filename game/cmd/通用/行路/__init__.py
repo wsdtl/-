@@ -10,10 +10,11 @@ from game.features.xinglu import (
 )
 from message import M
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="去",
     guard_rule="自主空闲",
     help=HelpSpec(

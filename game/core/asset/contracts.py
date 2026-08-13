@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
+
+from game.core.database import StateMutation
 
 
 class AssetStateError(RuntimeError):
     """数据库中的玩家资产不符合当前 JSON 契约。"""
+
+
+class InventoryChangeError(AssetStateError):
+    """普通物品库存无法完成指定增减。"""
 
 
 @dataclass(frozen=True)
@@ -61,12 +68,58 @@ class AssetStatus:
     page_limit: int
 
 
+@dataclass(frozen=True)
+class AssetGrade:
+    grade_id: str
+    name: str
+    order: int
+    ability_multiplier: Decimal
+    price_multiplier: Decimal
+
+
+@dataclass(frozen=True)
+class InventoryStack:
+    item_id: str
+    item_name: str
+    grade: AssetGrade
+    quantity: int
+    version: int
+
+
+@dataclass(frozen=True)
+class InventoryAdjustment:
+    item_id: str
+    grade_id: str
+    quantity_delta: int
+
+
+@dataclass(frozen=True)
+class InventoryChange:
+    item_id: str
+    item_name: str
+    grade: AssetGrade
+    before_quantity: int
+    after_quantity: int
+
+
+@dataclass(frozen=True)
+class InventoryMutationPlan:
+    changes: tuple[InventoryChange, ...]
+    operations: tuple[StateMutation, ...]
+
+
 __all__ = [
     "AssetCategory",
     "AssetEntry",
+    "AssetGrade",
     "AssetSnapshot",
     "AssetSortRules",
     "AssetStateError",
     "AssetStatus",
     "AssetSubcategory",
+    "InventoryAdjustment",
+    "InventoryChange",
+    "InventoryChangeError",
+    "InventoryMutationPlan",
+    "InventoryStack",
 ]

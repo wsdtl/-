@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 HELP_CATEGORY_ORDER = (
     "角色",
+    "道侣",
     "修行",
     "行动",
     "世界",
@@ -92,19 +93,27 @@ class HelpRegistry:
 
     def categories(self) -> tuple[str, ...]:
         populated = {entry.spec.category for entry in self._entries.values()}
-        return tuple(category for category in HELP_CATEGORY_ORDER if category in populated)
+        return tuple(
+            category for category in HELP_CATEGORY_ORDER if category in populated
+        )
 
     def in_category(self, category: object) -> tuple[CommandHelpEntry, ...]:
         normalized = _text(category)
         return tuple(
             sorted(
-                (entry for entry in self._entries.values() if entry.spec.category == normalized),
+                (
+                    entry
+                    for entry in self._entries.values()
+                    if entry.spec.category == normalized
+                ),
                 key=lambda entry: (entry.spec.order, entry.command),
             )
         )
 
     def entries(self) -> tuple[CommandHelpEntry, ...]:
-        category_order = {category: index for index, category in enumerate(HELP_CATEGORY_ORDER)}
+        category_order = {
+            category: index for index, category in enumerate(HELP_CATEGORY_ORDER)
+        }
         return tuple(
             sorted(
                 self._entries.values(),

@@ -10,6 +10,7 @@ import pytest
 from game.cmd import access_guard
 from game.cmd.command import GameCommand, HelpSpec
 from game.cmd.help_registry import help_registry
+from game.cmd.registry_audit import CommandRegistryError, audit_command_registry
 from game.core.data import JsonDataService
 from game.core.item_catalog import ItemCatalogService
 from game.core.player_state import StateGuardResult
@@ -37,11 +38,16 @@ def _content(result) -> str:
 def test_loaded_commands_have_one_valid_help_declaration() -> None:
     create_app()
 
-    assert help_registry.categories() == ("角色", "行动", "世界", "资源")
+    assert help_registry.categories() == ("角色", "道侣", "行动", "世界", "资源")
     assert [entry.command for entry in help_registry.entries()] == [
         "帮助",
         "创建人物",
         "人物",
+        "查看道侣",
+        "交谈",
+        "赠予",
+        "邀约",
+        "暂别",
         "去",
         "地图",
         "位置",
@@ -52,14 +58,26 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
     assert help_registry.find("web") is None
     assert help_registry.find("天道后台") is None
     with pytest.raises(TypeError):
-        GameCommand.fullmatch("缺少说明")
+        GameCommand.fullmatch("缺少说明", scope="通用")
     with pytest.raises(ValueError, match="不能同时"):
         GameCommand.fullmatch(
             "重复声明",
+            scope="通用",
             guard_rule="始终可用",
             help=HelpSpec("角色", "测试命令", ("重复声明",)),
             hidden=True,
         )
+
+
+def test_command_scope_matches_managed_directory() -> None:
+    create_app()
+
+    entries = audit_command_registry()
+    assert {scope for _, scope, _ in entries} == {"通用", "专属", "后台"}
+    with pytest.raises(CommandRegistryError, match="命令范围不一致"):
+        audit_command_registry((("错放命令", "专属", "game.cmd.通用.测试"),))
+    with pytest.raises(CommandRegistryError, match="不在受管目录"):
+        audit_command_registry((("游离命令", "通用", "game.cmd.测试"),))
 
 
 def test_help_home_and_detail_use_real_registered_commands(monkeypatch) -> None:
@@ -99,7 +117,7 @@ def test_help_home_and_detail_use_real_registered_commands(monkeypatch) -> None:
     catalog.initialize()
     feature = ItemInspectionFeature(catalog)
     feature.initialize()
-    inspect_module = import_module("game.cmd.查看")
+    inspect_module = import_module("game.cmd.通用.查看")
     monkeypatch.setattr(
         inspect_module,
         "current_game_services",

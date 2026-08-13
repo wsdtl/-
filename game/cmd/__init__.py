@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
-from pkgutil import iter_modules
+from pkgutil import walk_packages
 
 from fastapi import APIRouter
 
@@ -12,11 +12,14 @@ from fastapi import APIRouter
 def _load_component_routers() -> APIRouter:
     router = APIRouter()
     package_path = [str(Path(__file__).parent)]
-    components = sorted(iter_modules(package_path), key=lambda item: item.name)
+    components = sorted(
+        walk_packages(package_path, prefix=f"{__name__}."),
+        key=lambda item: item.name,
+    )
     for component in components:
         if not component.ispkg:
             continue
-        module = import_module(f"{__name__}.{component.name}")
+        module = import_module(component.name)
         component_router = getattr(module, "router", None)
         if component_router is None:
             continue

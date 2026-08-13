@@ -18,7 +18,7 @@ from game.features.chuangjian_renwu import (
 from game.features.najie import NajieFeature
 from message import RenderedMessage, render_local_message
 
-najie_command = import_module("game.cmd.纳戒")
+najie_command = import_module("game.cmd.通用.纳戒")
 
 
 def _run(awaitable):

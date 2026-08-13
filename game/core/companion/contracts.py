@@ -1,8 +1,36 @@
-"""世界道侣核心微服务的稳定公共契约。"""
+"""道侣核心微服务的稳定公共契约。"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
+
+from game.core.database import StateMutation
+
+
+class CompanionError(RuntimeError):
+    """道侣定义或玩家关系无法完成请求。"""
+
+
+class CompanionNotFoundError(CompanionError, ValueError):
+    """名称或编号没有对应的正式道侣。"""
+
+
+class CompanionStateError(CompanionError):
+    """玩家保存的道侣状态不符合当前契约。"""
+
+
+class CompanionInvitationError(CompanionError, ValueError):
+    """当前关系不满足邀约条件。"""
+
+
+class CompanionGiftError(CompanionError, ValueError):
+    """目标物品不能作为该道侣的赠礼。"""
+
+
+class CompanionFarewellError(CompanionError, ValueError):
+    """当前同行事实不允许暂别目标道侣。"""
 
 
 @dataclass(frozen=True)
@@ -10,6 +38,58 @@ class CompanionStatus:
     initialized: bool
     companion_count: int
     location_count: int
+
+
+@dataclass(frozen=True)
+class CompanionRules:
+    base_affection_per_item: Decimal
+    active_limit: int
+    invitation_affection: Decimal
+    first_invitation_gender_relation: str
+    check_gender_again: bool
+    full_reward_affection: Decimal
+    full_reward_lifetime_limit: int
+
+
+@dataclass(frozen=True)
+class CompanionReward:
+    item_id: str
+    grade_id: str
+    quantity: int
+
+
+@dataclass(frozen=True)
+class CompanionDialogue:
+    daily: tuple[str, ...]
+    preference: str
+    accept_gift: tuple[str, ...]
+    refuse_gift: tuple[str, ...]
+    full_affection: str
+    invitation: str
+    farewell: str
+
+
+@dataclass(frozen=True)
+class CompanionDefinition:
+    companion_id: str
+    name: str
+    gender: str
+    title: str
+    stance: str
+    personality: str
+    description: str
+    location_name: str
+    realm_id: str
+    realm_name: str
+    level: int
+    interactable: bool
+    favorite_pool_names: tuple[str, ...]
+    favorite_item_ids: frozenset[str]
+    reward: CompanionReward
+    dialogue: CompanionDialogue
+    qualification_range: tuple[int, int]
+    fluctuating_attributes: tuple[str, ...]
+    attribute_multiplier_range: tuple[int, int]
 
 
 @dataclass(frozen=True)
@@ -25,4 +105,70 @@ class LocalCultivator:
     interactable: bool
 
 
-__all__ = ["CompanionStatus", "LocalCultivator"]
+@dataclass(frozen=True)
+class CompanionRelation:
+    companion_id: str
+    current_affection: Decimal
+    gift_totals: Mapping[str, int]
+    first_full_at: str
+    first_invited_at: str
+    version: int
+
+
+@dataclass(frozen=True)
+class ActiveCompanion:
+    companion_id: str
+    version: int
+
+
+@dataclass(frozen=True)
+class CompanionInstance:
+    companion_id: str
+    qualification: int
+    attribute_multipliers: Mapping[str, int]
+    version: int
+
+
+@dataclass(frozen=True)
+class CompanionGiftPlan:
+    relation_before: CompanionRelation
+    relation_after: CompanionRelation
+    first_full: bool
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CompanionInvitationPlan:
+    relation: CompanionRelation
+    instance: CompanionInstance
+    first_invitation: bool
+    already_active: bool
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionFarewellPlan:
+    companion_id: str
+    operation: StateMutation
+
+
+__all__ = [
+    "ActiveCompanion",
+    "CompanionDefinition",
+    "CompanionDialogue",
+    "CompanionError",
+    "CompanionFarewellError",
+    "CompanionFarewellPlan",
+    "CompanionGiftError",
+    "CompanionGiftPlan",
+    "CompanionInstance",
+    "CompanionInvitationError",
+    "CompanionInvitationPlan",
+    "CompanionNotFoundError",
+    "CompanionRelation",
+    "CompanionReward",
+    "CompanionRules",
+    "CompanionStateError",
+    "CompanionStatus",
+    "LocalCultivator",
+]

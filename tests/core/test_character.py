@@ -157,7 +157,7 @@ def test_character_overview_combines_owned_service_results(
             assert user_id == "qq-1"
             return result
 
-    command_module = import_module("game.cmd.角色")
+    command_module = import_module("game.cmd.通用.角色")
     monkeypatch.setattr(
         command_module,
         "current_game_services",

@@ -13,10 +13,11 @@ from game.features.najie import (
 )
 from message import Action, M
 
-from ..command import GameCommand, HelpSpec
+from ...command import GameCommand, HelpSpec
 
 
 @GameCommand.command(
+    scope="通用",
     cmd="纳戒",
     guard_rule="已创建",
     help=HelpSpec(
