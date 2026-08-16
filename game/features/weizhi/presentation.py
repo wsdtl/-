@@ -28,6 +28,7 @@ class PositionPresentation:
     meters_per_li: int
     rounding_step: int
     same_place: str
+    open_functions: frozenset[str]
     directions: Mapping[tuple[int, int], str]
     copy: PositionCopy
     buttons: tuple[ButtonTemplate, ...]
@@ -40,7 +41,7 @@ def load_position_presentation(
 
     _require_keys(
         dataset,
-        {"距离与方向", "文本", "图标", "位置", "附近"},
+        {"距离与方向", "开放功能", "文本", "图标", "位置", "附近"},
         "位置展示数据集",
     )
     distance_and_direction = _mapping(
@@ -53,6 +54,13 @@ def load_position_presentation(
     )
     distance = _mapping(distance_and_direction["距离"], "距离与方向.距离")
     _require_keys(distance, {"单位", "每里米数", "约数步长"}, "距离与方向.距离")
+    open_functions = _string_set(
+        _mapping(
+            dataset["开放功能"],
+            "展示/位置/规则/开放功能.json",
+        ).get("功能"),
+        "位置开放功能.功能",
+    )
 
     position_buttons = _button_templates(
         dataset["位置"],
@@ -72,6 +80,7 @@ def load_position_presentation(
         meters_per_li=_positive_int(distance["每里米数"], "距离与方向.距离.每里米数"),
         rounding_step=_positive_int(distance["约数步长"], "距离与方向.距离.约数步长"),
         same_place=_text(distance_and_direction["同处措辞"], "距离与方向.同处措辞"),
+        open_functions=open_functions,
         directions=MappingProxyType(_direction_map(distance_and_direction["方向"])),
         copy=_position_copy(dataset["文本"], dataset["图标"]),
         buttons=buttons,
@@ -418,6 +427,15 @@ def _positive_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise JsonDataError(f"{label}必须是正整数")
     return value
+
+
+def _string_set(value: object, label: str) -> frozenset[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise JsonDataError(f"{label}必须是字符串列表")
+    result = tuple(_text(item, f"{label}[{index}]") for index, item in enumerate(value))
+    if len(result) != len(set(result)):
+        raise JsonDataError(f"{label}不能包含重复项")
+    return frozenset(result)
 
 
 def _text(value: object, label: str) -> str:

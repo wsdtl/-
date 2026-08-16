@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
+from game.core.asset import AssetService
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -35,17 +36,21 @@ from .contracts import (
 class CharacterService:
     """拥有玩家角色状态写权限的唯一核心服务。"""
 
+    state_types = frozenset({"character", "cultivation", "weapon"})
+
     def __init__(
         self,
         data: JsonDataService,
         database: DatabaseService,
         player_state: PlayerStateService,
         location: LocationService,
+        asset: AssetService,
     ) -> None:
         self._data = data
         self._database = database
         self._player_state = player_state
         self._location = location
+        self._asset = asset
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -65,6 +70,8 @@ class CharacterService:
             raise RuntimeError("人物状态服务必须先于角色服务启动")
         if not self._location.status().initialized:
             raise RuntimeError("玩家位置服务必须先于角色服务启动")
+        if not self._asset.status().initialized:
+            raise RuntimeError("玩家资产服务必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
         role_rule = role_rules.get("人物")
@@ -223,16 +230,9 @@ class CharacterService:
             self._player_state.initial_mutation(command.user_id),
             self._location.initial_mutation(command.user_id, command.birth_xy),
         ]
-        for item_id, grade, quantity in item_rows:
-            operations.append(
-                StateMutation(
-                    command.user_id,
-                    "inventory",
-                    f"{item_id}:{grade}",
-                    {"编号": item_id, "品级": grade, "数量": quantity},
-                    0,
-                )
-            )
+        operations.extend(
+            self._asset.initial_inventory_mutations(command.user_id, item_rows)
+        )
         try:
             receipt = await self._database.commit(
                 TransactionCommand(

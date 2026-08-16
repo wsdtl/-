@@ -63,3 +63,23 @@ def test_real_composition_root_builds_location_and_position_services(
     assert services.core.companion.status().companion_count == 264
     assert services.features.weizhi is not None
     services.core.database.close()
+
+
+def test_state_type_ownership_rejects_cross_service_collisions() -> None:
+    assert game_app.audit_state_type_ownership(
+        {
+            "character": {"character", "weapon"},
+            "asset": {"inventory"},
+        }
+    ) == {
+        "character": "character",
+        "weapon": "character",
+        "inventory": "asset",
+    }
+    with pytest.raises(ValueError, match="归属重复"):
+        game_app.audit_state_type_ownership(
+            {
+                "character": {"character"},
+                "other": {"character"},
+            }
+        )

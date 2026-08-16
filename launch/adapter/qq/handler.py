@@ -190,6 +190,10 @@ class QqEventHandler(BaseMessageHandler):
         )
 
     @staticmethod
+    def unregister_module(module_name: str) -> None:
+        _command_registry.unregister_module(module_name)
+
+    @staticmethod
     def _callback_wrapper(
         commands: list,
         registrar: Callable,

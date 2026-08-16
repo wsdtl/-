@@ -107,7 +107,8 @@ class CompanionInteractionFeature:
 
     def copy(self) -> CompanionCopy:
         self._require_initialized()
-        assert self._copy is not None
+        if self._copy is None:
+            raise RuntimeError("道侣展示契约尚未完成初始化")
         return self._copy
 
     async def inspect(self, user_id: str, companion: str) -> CompanionView:
@@ -405,7 +406,17 @@ class CompanionInteractionFeature:
             and active is None
             and first_gender_allowed
         )
-        return CompanionView(definition, relation, active, can_invite)
+        is_active = (
+            active is not None and active.companion_id == definition.companion_id
+        )
+        return CompanionView(
+            definition,
+            relation,
+            active,
+            relation.version > 0,
+            is_active,
+            can_invite,
+        )
 
     async def _ensure_accessible(self, user_id: str, companion_id: str) -> None:
         definition = self._companion.definition(companion_id)

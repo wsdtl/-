@@ -44,6 +44,8 @@ _CULTIVATION_CATEGORIES = frozenset({"功法", "真意", "气机"})
 class AssetService:
     """解释玩家资产，并为跨领域事务生成普通物品变更计划。"""
 
+    state_types = _STATE_TYPES
+
     def __init__(self, data: JsonDataService, database: DatabaseService) -> None:
         self._data = data
         self._database = database
@@ -154,6 +156,44 @@ class AssetService:
                 )
             )
         return tuple(sorted(result, key=lambda stack: stack.grade.order))
+
+    def initial_inventory_mutations(
+        self,
+        user_id: str,
+        items: Sequence[tuple[str, str, int]],
+    ) -> tuple[StateMutation, ...]:
+        """为创建人物事务生成由资产核心负责的初始背包状态。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        result: list[StateMutation] = []
+        seen: set[tuple[str, str]] = set()
+        for item_id, grade_id, quantity in items:
+            normalized_item_id = _required_text(item_id, "初始物品.编号")
+            normalized_grade_id = self.grade(grade_id).grade_id
+            if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+                raise InventoryChangeError("初始物品数量必须是正整数")
+            _entity_name(self._data, "物品", normalized_item_id)
+            key = (normalized_item_id, normalized_grade_id)
+            if key in seen:
+                raise InventoryChangeError(
+                    f"初始物品重复：{normalized_item_id}:{normalized_grade_id}"
+                )
+            seen.add(key)
+            result.append(
+                StateMutation(
+                    normalized_user_id,
+                    "inventory",
+                    f"{normalized_item_id}:{normalized_grade_id}",
+                    {
+                        "编号": normalized_item_id,
+                        "品级": normalized_grade_id,
+                        "数量": quantity,
+                    },
+                    0,
+                )
+            )
+        return tuple(result)
 
     async def plan_inventory_changes(
         self,

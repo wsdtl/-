@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from launch.paths import public_url
+
 from ...command import GameCommand
-from . import entry
+from . import reply
 from . import runtime as runtime
 from .site import router
 
@@ -15,7 +17,7 @@ from .site import router
     hidden=True,
 )
 async def heavenly_dao_console(*, manager) -> None:
-    await entry.show_entry(manager=manager)
+    await manager.send(reply.entry(public_url("game-console")))
 
 
 __all__ = ["router"]

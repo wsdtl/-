@@ -4,6 +4,7 @@ import asyncio
 import sqlite3
 from pathlib import Path
 
+from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
@@ -36,7 +37,9 @@ def _services(tmp_path: Path):
     location.initialize()
     companion = CompanionService(data, database)
     companion.initialize()
-    character = CharacterService(data, database, player_state, location)
+    asset = AssetService(data, database)
+    asset.initialize()
+    character = CharacterService(data, database, player_state, location, asset)
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
@@ -71,6 +74,7 @@ def test_position_is_created_atomically_and_not_repeated_in_character(
     assert "位置" not in character.value
     assert current.xy == view.location.xy == (15, 17)
     assert view.location.location_name == "溪隐台"
+    assert view.location.available_functions == ("修士",)
     assert view.local_cultivators
     assert all(value.realm_name == "灵动" for value in view.local_cultivators)
 

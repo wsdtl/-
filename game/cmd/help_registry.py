@@ -56,6 +56,7 @@ class CommandHelpEntry:
     command: str
     aliases: tuple[str, ...]
     spec: HelpSpec
+    source_module: str = ""
 
 
 class HelpRegistry:
@@ -69,15 +70,18 @@ class HelpRegistry:
         self,
         commands: str | Sequence[str],
         spec: HelpSpec,
+        *,
+        source_module: str = "",
     ) -> CommandHelpEntry:
         normalized = _commands(commands)
         primary = normalized[0]
-        entry = CommandHelpEntry(primary, normalized[1:], spec)
+        owner = _text(source_module)
+        entry = CommandHelpEntry(primary, normalized[1:], spec, owner)
         existing = self._entries.get(primary)
         if existing is not None:
-            if existing != entry:
+            if existing.source_module != owner:
                 raise ValueError(f"命令帮助重复且定义不一致：{primary}")
-            return existing
+            self.unregister_module(owner, primary=primary)
         for command in normalized:
             owner = self._commands.get(command.casefold())
             if owner is not None:
@@ -86,6 +90,20 @@ class HelpRegistry:
         for command in normalized:
             self._commands[command.casefold()] = primary
         return entry
+
+    def unregister_module(self, source_module: str, *, primary: str = "") -> None:
+        """移除一个来源模块的旧帮助，供服务热重启时幂等替换。"""
+
+        owner = _text(source_module)
+        targets = tuple(
+            key
+            for key, entry in self._entries.items()
+            if entry.source_module == owner and (not primary or key == primary)
+        )
+        for key in targets:
+            entry = self._entries.pop(key)
+            for command in (entry.command, *entry.aliases):
+                self._commands.pop(command.casefold(), None)
 
     def find(self, command: object) -> CommandHelpEntry | None:
         primary = self._commands.get(_text(command).casefold())

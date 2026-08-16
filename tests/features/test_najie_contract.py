@@ -18,7 +18,7 @@ from game.features.chuangjian_renwu import (
 from game.features.najie import NajieFeature
 from message import RenderedMessage, render_local_message
 
-najie_command = import_module("game.cmd.通用.纳戒")
+najie_reply = import_module("game.cmd.通用.纳戒.reply")
 
 
 def _run(awaitable):
@@ -37,12 +37,12 @@ def _services(tmp_path: Path):
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    character = CharacterService(data, database, player_state, location)
+    assets = AssetService(data, database)
+    assets.initialize()
+    character = CharacterService(data, database, player_state, location, assets)
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
-    assets = AssetService(data, database)
-    assets.initialize()
     najie = NajieFeature(assets)
     najie.initialize()
     return data, database, create, assets, najie
@@ -60,7 +60,7 @@ def test_initial_assets_form_json_driven_najie_home(tmp_path: Path) -> None:
 
     snapshot = _run(assets.snapshot("qq-1"))
     home = _run(najie.home("qq-1"))
-    rendered = _render(najie_command._home_message(home))
+    rendered = _render(najie_reply.home(home))
 
     assert snapshot.page_limit == 50
     assert [category.name for category in snapshot.categories] == [
@@ -213,8 +213,8 @@ def test_each_subcategory_pages_by_fifty_with_complete_navigation(
     first = _run(najie.page("qq-1", "物品", "灵植", 1))
     second = _run(najie.page("qq-1", "物品", "灵植", 2))
     overflow = _run(najie.page("qq-1", "物品", "灵植", 99))
-    first_message = _render(najie_command._page_message(first))
-    second_message = _render(najie_command._page_message(second))
+    first_message = _render(najie_reply.page(first))
+    second_message = _render(najie_reply.page(second))
 
     assert (len(first.entries), len(second.entries)) == (50, 1)
     assert overflow.page == 2

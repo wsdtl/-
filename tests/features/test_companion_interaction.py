@@ -48,10 +48,10 @@ def _services(tmp_path: Path):
     companion.initialize()
     item_catalog = ItemCatalogService(data)
     item_catalog.initialize()
-    character = CharacterService(data, database, player_state, location)
-    character.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    character = CharacterService(data, database, player_state, location, asset)
+    character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
     interaction = CompanionInteractionFeature(
@@ -137,6 +137,7 @@ def test_gift_invite_farewell_and_position_share_one_companion_state(
     )
 
     assert gift.accepted is True
+    assert gift.view.has_relation is True
     assert str(gift.affection_gain) == "108.0"
     assert str(gift.affection_after) == "108.0"
     assert gift.first_full is True
@@ -155,6 +156,7 @@ def test_gift_invite_farewell_and_position_share_one_companion_state(
         )
     )
     assert invitation.first_invitation is True
+    assert invitation.view.is_active is True
     assert 1 <= invitation.instance.qualification <= 1000
     current = _run(position.current("qq-1"))
     assert current.active_companion is not None

@@ -5,6 +5,74 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOTS = (PROJECT_ROOT / "game", PROJECT_ROOT / "launch")
+DYNAMIC_IMPORT_LOADERS = frozenset(
+    {
+        "game/cmd/__init__.py",
+        "launch/load_router.py",
+    }
+)
+
+
+def test_companion_interaction_keeps_its_specific_component_boundary() -> None:
+    generic_component = PROJECT_ROOT / "game" / "cmd" / "专属" / "道侣"
+    interaction_component = PROJECT_ROOT / "game" / "cmd" / "专属" / "道侣结交"
+
+    assert not generic_component.exists(), "道侣结交与道侣培养不得重新合并为笼统组件"
+    assert (interaction_component / "__init__.py").is_file()
+
+
+def test_command_components_use_init_as_the_callback_entry() -> None:
+    violations: list[str] = []
+    command_root = PROJECT_ROOT / "game" / "cmd"
+    for scope in ("通用", "专属", "后台"):
+        scope_root = command_root / scope
+        for component in sorted(path for path in scope_root.iterdir() if path.is_dir()):
+            if component.name == "__pycache__":
+                continue
+            init_path = component / "__init__.py"
+            if not init_path.is_file():
+                violations.append(
+                    f"{component.relative_to(PROJECT_ROOT)} 缺少 __init__.py"
+                )
+            handlers_path = component / "handlers.py"
+            if handlers_path.exists():
+                violations.append(
+                    f"{handlers_path.relative_to(PROJECT_ROOT)} 不应建立第二个回调入口"
+                )
+    assert violations == [], "命令二级组件目录不符合约定：\n" + "\n".join(violations)
+
+
+def test_game_commands_are_declared_only_in_handler_modules() -> None:
+    violations: list[str] = []
+    command_root = PROJECT_ROOT / "game" / "cmd"
+    for path in command_root.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+        if (
+            any(_is_game_command_decorator(node) for node in ast.walk(tree))
+            and path.name != "__init__.py"
+        ):
+            violations.append(path.relative_to(PROJECT_ROOT).as_posix())
+    assert violations == [], "GameCommand 只能在组件 __init__.py 声明：\n" + "\n".join(
+        violations
+    )
+
+
+def test_command_input_and_reply_modules_do_not_resolve_services() -> None:
+    violations: list[str] = []
+    command_root = PROJECT_ROOT / "game" / "cmd"
+    for filename in ("input.py", "reply.py"):
+        for path in command_root.rglob(filename):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name) and node.id == "current_game_services":
+                    violations.append(
+                        f"{path.relative_to(PROJECT_ROOT).as_posix()}:{node.lineno}"
+                    )
+    assert violations == [], "命令输入与回复模块不得取得游戏服务：\n" + "\n".join(
+        violations
+    )
 
 
 def test_runtime_imports_respect_service_boundaries() -> None:
@@ -18,6 +86,31 @@ def test_runtime_imports_respect_service_boundaries() -> None:
                 violations.append(f"{relative}:{line} {violation}: {target}")
 
     assert violations == [], "运行时代码越过微服务边界：\n" + "\n".join(violations)
+
+
+def test_dynamic_imports_only_exist_in_designated_loaders() -> None:
+    violations: list[str] = []
+    for path in _runtime_files():
+        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        for line in _dynamic_import_lines(path):
+            if relative not in DYNAMIC_IMPORT_LOADERS:
+                violations.append(f"{relative}:{line}")
+    assert violations == [], "动态导入只能存在于受控加载器：\n" + "\n".join(violations)
+
+
+def test_runtime_does_not_use_assert_for_integrity_checks() -> None:
+    violations: list[str] = []
+    for path in _runtime_files():
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        violations.extend(
+            f"{relative}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assert)
+        )
+    assert violations == [], "运行时代码禁止使用 assert 承担完整性判断：\n" + "\n".join(
+        violations
+    )
 
 
 def _runtime_files() -> tuple[Path, ...]:
@@ -65,6 +158,36 @@ def _resolve_from_import(package: str, node: ast.ImportFrom) -> str:
     if node.module:
         parts.extend(node.module.split("."))
     return ".".join(parts)
+
+
+def _dynamic_import_lines(path: Path) -> tuple[int, ...]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    result: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id in {"import_module", "__import__"}
+        ) or (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "importlib"
+            and node.func.attr == "import_module"
+        ):
+            result.append(node.lineno)
+    return tuple(result)
+
+
+def _is_game_command_decorator(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return False
+    owner = node.func.value
+    return (
+        isinstance(owner, ast.Name)
+        and owner.id == "GameCommand"
+        and node.func.attr in {"fullmatch", "command", "regex"}
+    )
 
 
 def _boundary_violation(source: str, target: str) -> str:

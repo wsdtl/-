@@ -8,17 +8,15 @@ from message import Action, DocumentMessage, M
 GAME_NAME = "晓楠修仙"
 
 
-async def show_help(query: str = "", *, manager) -> None:
+def help_message(query: str = "") -> DocumentMessage:
     normalized = " ".join(str(query or "").split())
     if not normalized:
-        message = _home_message()
+        return _home_message()
     elif normalized in help_registry.categories():
-        message = _category_message(normalized)
+        return _category_message(normalized)
     elif entry := help_registry.find(normalized):
-        message = _detail_message(entry)
-    else:
-        message = _not_found_message(normalized)
-    await manager.send(message)
+        return _detail_message(entry)
+    return _not_found_message(normalized)
 
 
 def _home_message() -> DocumentMessage:
@@ -104,5 +102,5 @@ __all__ = [
     "_category_message",
     "_detail_message",
     "_home_message",
-    "show_help",
+    "help_message",
 ]

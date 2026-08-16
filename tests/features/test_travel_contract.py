@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
@@ -40,7 +41,9 @@ def _features(
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    character = CharacterService(data, database, player_state, location)
+    asset = AssetService(data, database)
+    asset.initialize()
+    character = CharacterService(data, database, player_state, location, asset)
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()

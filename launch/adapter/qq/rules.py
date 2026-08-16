@@ -111,8 +111,10 @@ class QqCommandRegistry:
         command = cmd.strip()
         if not command or any(char.isspace() for char in command):
             raise ValueError("command 注册器需要一个不含空白的命令词")
-        self.command_rules.setdefault(command, []).append(
-            self._make_rule(func, priority, block, metadata=metadata)
+        self._replace_rule(
+            self.command_rules,
+            command,
+            self._make_rule(func, priority, block, metadata=metadata),
         )
 
     def register_fullmatch(
@@ -126,8 +128,10 @@ class QqCommandRegistry:
         command = cmd.strip()
         if not command:
             raise ValueError("fullmatch 注册器不接受空命令")
-        self.fullmatch_rules.setdefault(command, []).append(
-            self._make_rule(func, priority, block, metadata=metadata)
+        self._replace_rule(
+            self.fullmatch_rules,
+            command,
+            self._make_rule(func, priority, block, metadata=metadata),
         )
 
     def register_regex(
@@ -147,9 +151,44 @@ class QqCommandRegistry:
             metadata=metadata,
         )
         if prefix:
-            self.regex_rules.setdefault(prefix.casefold(), []).append(rule)
+            self._replace_rule(self.regex_rules, prefix.casefold(), rule)
         else:
-            self.regex_fallback.append(rule)
+            self.regex_fallback = self._replace_owned(self.regex_fallback, rule)
+
+    def unregister_module(self, module_name: str) -> None:
+        """移除一个模块的全部旧规则，供重启装载时使用。"""
+
+        owner = str(module_name or "").strip()
+        for registry in (
+            self.command_rules,
+            self.fullmatch_rules,
+            self.regex_rules,
+        ):
+            for key in tuple(registry):
+                rules = [rule for rule in registry[key] if rule.func.__module__ != owner]
+                if rules:
+                    registry[key] = rules
+                else:
+                    del registry[key]
+        self.regex_fallback = [
+            rule for rule in self.regex_fallback if rule.func.__module__ != owner
+        ]
+        self.build_index()
+
+    @staticmethod
+    def _replace_rule(
+        registry: dict[str, list[QqCommandRule]],
+        key: str,
+        rule: QqCommandRule,
+    ) -> None:
+        registry[key] = QqCommandRegistry._replace_owned(registry.get(key, []), rule)
+
+    @staticmethod
+    def _replace_owned(
+        rules: list[QqCommandRule], rule: QqCommandRule
+    ) -> list[QqCommandRule]:
+        owner = rule.func.__module__
+        return [value for value in rules if value.func.__module__ != owner] + [rule]
 
     def _make_rule(
         self,

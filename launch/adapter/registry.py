@@ -7,6 +7,7 @@ MessageHandler 把同一业务回调注册到所有启用驱动器；AdapterRepl
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any
 
 from fastapi import APIRouter
@@ -153,7 +154,15 @@ class MessageHandler:
         return wrapper
 
     @staticmethod
+    def unregister_module(module_name: str) -> None:
+        """同步移除所有驱动器中属于一个模块的旧回调。"""
+
+        for spec in enabled_adapter_specs():
+            spec.handler.unregister_module(module_name)
+
+    @staticmethod
     def _bind_manager(func: Callable, real_manager: Any) -> Callable:
+        @wraps(func)
         async def wrapped(**context: Any) -> Any:
             token = _current_manager.set(context.get("manager") or real_manager)
             try:

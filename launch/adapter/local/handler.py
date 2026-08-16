@@ -246,6 +246,29 @@ class LocalEventHandler(BaseMessageHandler):
         )
 
     @staticmethod
+    def unregister_module(module_name: str) -> None:
+        """移除一个来源模块的全部旧回调。"""
+
+        owner = str(module_name or "").strip()
+        for registry in (
+            LocalEventHandler.command_rules,
+            LocalEventHandler.fullmatch_rules,
+            LocalEventHandler.regex_rules,
+        ):
+            for key in tuple(registry):
+                rules = [rule for rule in registry[key] if rule.func.__module__ != owner]
+                if rules:
+                    registry[key] = rules
+                else:
+                    del registry[key]
+        LocalEventHandler.regex_fallback = [
+            rule
+            for rule in LocalEventHandler.regex_fallback
+            if rule.func.__module__ != owner
+        ]
+        LocalEventHandler._build_command_index()
+
+    @staticmethod
     def _callback_wrapper(
         commands: list,
         registrar: Callable,
@@ -388,7 +411,9 @@ class LocalEventHandler(BaseMessageHandler):
         rule = LocalEventHandler._make_rule(
             func=func, priority=priority, block=block, metadata=metadata
         )
-        LocalEventHandler.command_rules.setdefault(command, []).append(rule)
+        LocalEventHandler.command_rules[command] = LocalEventHandler._replace_owned(
+            LocalEventHandler.command_rules.get(command, []), rule
+        )
 
     @staticmethod
     def _register_fullmatch_command(
@@ -406,7 +431,9 @@ class LocalEventHandler(BaseMessageHandler):
         rule = LocalEventHandler._make_rule(
             func=func, priority=priority, block=block, metadata=metadata
         )
-        LocalEventHandler.fullmatch_rules.setdefault(command, []).append(rule)
+        LocalEventHandler.fullmatch_rules[command] = LocalEventHandler._replace_owned(
+            LocalEventHandler.fullmatch_rules.get(command, []), rule
+        )
 
     @staticmethod
     def _register_regex_command(
@@ -427,9 +454,21 @@ class LocalEventHandler(BaseMessageHandler):
             metadata=metadata,
         )
         if prefix:
-            LocalEventHandler.regex_rules.setdefault(prefix.casefold(), []).append(rule)
+            key = prefix.casefold()
+            LocalEventHandler.regex_rules[key] = LocalEventHandler._replace_owned(
+                LocalEventHandler.regex_rules.get(key, []), rule
+            )
         else:
-            LocalEventHandler.regex_fallback.append(rule)
+            LocalEventHandler.regex_fallback = LocalEventHandler._replace_owned(
+                LocalEventHandler.regex_fallback, rule
+            )
+
+    @staticmethod
+    def _replace_owned(
+        rules: list[LocalCommandRule], rule: LocalCommandRule
+    ) -> list[LocalCommandRule]:
+        owner = rule.func.__module__
+        return [value for value in rules if value.func.__module__ != owner] + [rule]
 
     @staticmethod
     def _make_rule(

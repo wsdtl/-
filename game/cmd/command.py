@@ -11,8 +11,7 @@ from .help_registry import HelpSpec, help_registry
 
 GAME_METADATA_KEY = "game"
 COMMAND_SCOPES = frozenset({"通用", "专属", "后台"})
-_registered_guard_rules: set[str] = set()
-_registered_commands: list[tuple[str, str, str]] = []
+_registered_commands: list[tuple[str, str, str, str]] = []
 
 
 class GameCommand:
@@ -106,6 +105,8 @@ def _register(
     normalized_scope = str(scope or "").strip()
     if normalized_scope not in COMMAND_SCOPES:
         raise ValueError(f"游戏命令 scope 必须是：{'、'.join(sorted(COMMAND_SCOPES))}")
+    if normalized_scope == "后台" and (not hidden or help is not None):
+        raise ValueError("后台命令必须 hidden=True，且禁止登记玩家帮助")
     normalized_guard_rule = str(guard_rule or "").strip()
     if not normalized_guard_rule:
         raise ValueError("游戏命令必须显式声明状态守卫规则")
@@ -118,14 +119,22 @@ def _register(
     game_metadata["guard_rule"] = normalized_guard_rule
     game_metadata["scope"] = normalized_scope
     merged[GAME_METADATA_KEY] = game_metadata
-    _registered_guard_rules.add(normalized_guard_rule)
-    if help is not None:
-        help_registry.register(cmd, help)
     register = registrar(cmd=cmd, priority=priority, block=block, metadata=merged)
 
     def decorate(func: Callable) -> Callable:
+        source_module = func.__module__
+        command_key = str(cmd)
+        _registered_commands[:] = [
+            entry
+            for entry in _registered_commands
+            if (entry[0], entry[2]) != (command_key, source_module)
+        ]
+        if help is not None:
+            help_registry.register(cmd, help, source_module=source_module)
         decorated = register(func)
-        _registered_commands.append((str(cmd), normalized_scope, func.__module__))
+        _registered_commands.append(
+            (command_key, normalized_scope, source_module, normalized_guard_rule)
+        )
         return decorated
 
     return decorate
@@ -134,13 +143,29 @@ def _register(
 def registered_guard_rules() -> tuple[str, ...]:
     """返回所有已加载游戏命令显式引用的守卫规则。"""
 
-    return tuple(sorted(_registered_guard_rules))
+    return tuple(sorted({entry[3] for entry in _registered_commands}))
 
 
 def registered_commands() -> tuple[tuple[str, str, str], ...]:
     """返回命令、声明范围和来源模块，供启动审查器使用。"""
 
-    return tuple(_registered_commands)
+    return tuple(
+        (command, scope, module)
+        for command, scope, module, _ in _registered_commands
+    )
+
+
+def unregister_command_module(module_name: str) -> None:
+    """同步卸载一个命令模块在游戏层和全部驱动器中的旧登记。"""
+
+    owner = str(module_name or "").strip()
+    if not owner:
+        raise ValueError("命令模块名不能为空")
+    _registered_commands[:] = [
+        entry for entry in _registered_commands if entry[2] != owner
+    ]
+    help_registry.unregister_module(owner)
+    MessageHandler.unregister_module(owner)
 
 
 __all__ = [
@@ -150,4 +175,5 @@ __all__ = [
     "HelpSpec",
     "registered_commands",
     "registered_guard_rules",
+    "unregister_command_module",
 ]

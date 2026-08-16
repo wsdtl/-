@@ -12,7 +12,7 @@ from game.features.ditu import WorldMapFeature
 from main import create_app
 from message import RenderedMessage, render_local_message
 
-world_map_entry = import_module("game.cmd.通用.地图.entry")
+world_map_reply = import_module("game.cmd.通用.地图.reply")
 world_map_site = import_module("game.cmd.通用.地图.site")
 
 
@@ -94,7 +94,7 @@ def test_world_map_endpoint_serializes_core_snapshot(monkeypatch) -> None:
 def test_world_map_command_uses_snapshot_facts_and_public_link() -> None:
     overview = _map_feature().overview()
     url = "https://example.test/world-map"
-    message = world_map_entry._entry_message(overview, url)
+    message = world_map_reply.entry(overview, url)
     rendered = render_local_message(message, markdown=False)
 
     assert isinstance(rendered, RenderedMessage)

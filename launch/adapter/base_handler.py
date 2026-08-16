@@ -62,3 +62,8 @@ class BaseMessageHandler(BaseAdapter):
     @abstractmethod
     def regex(*args, **kwargs) -> Callable:
         """注册完整消息正则回调。"""
+
+    @staticmethod
+    @abstractmethod
+    def unregister_module(module_name: str) -> None:
+        """移除一个来源模块的全部回调。"""

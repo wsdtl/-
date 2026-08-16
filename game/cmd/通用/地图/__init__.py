@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from game.app import current_game_services
+from launch.paths import public_url
+
 from ...command import GameCommand, HelpSpec
-from . import entry
+from . import reply
 from .site import router
 
 
@@ -20,7 +23,8 @@ from .site import router
     ),
 )
 async def show_world_map(*, manager, **_) -> None:
-    await entry.show_entry(manager=manager)
+    overview = current_game_services().features.ditu.overview()
+    await manager.send(reply.entry(overview, public_url("world-map")))
 
 
 __all__ = ["router"]

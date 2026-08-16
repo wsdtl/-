@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from game.core.character import CharacterService
 from game.core.companion import CompanionService, LocalCultivator
@@ -51,6 +52,7 @@ class PositionFeature:
         self._meters_per_li = 0
         self._rounding_step = 0
         self._same_place = ""
+        self._open_functions: frozenset[str] = frozenset()
         self._directions: Mapping[tuple[int, int], str] = {}
         self._copy: PositionCopy | None = None
         self._buttons: tuple[ButtonTemplate, ...] = ()
@@ -80,6 +82,7 @@ class PositionFeature:
         self._meters_per_li = presentation.meters_per_li
         self._rounding_step = presentation.rounding_step
         self._same_place = presentation.same_place
+        self._open_functions = presentation.open_functions
         self._directions = presentation.directions
         self._copy = presentation.copy
         self._buttons = presentation.buttons
@@ -136,7 +139,9 @@ class PositionFeature:
             self._location.current(user_id),
             self._companion.active(user_id),
         )
-        location = self._world.locate(LocationQuery(xy=current.xy))
+        location = self._visible_location(
+            self._world.locate(LocationQuery(xy=current.xy))
+        )
         excluded = (active.companion_id,) if active is not None else ()
         local = (
             self._companion.local_cultivators(
@@ -271,7 +276,7 @@ class PositionFeature:
                     name=location.name,
                     region=location.region,
                     terrain=location.terrain,
-                    functions=location.available_functions,
+                    functions=self._visible_functions(location.available_functions),
                     direction=self._direction(current.xy, location.xy),
                     distance=self._distance(distance_squared),
                 )
@@ -295,6 +300,15 @@ class PositionFeature:
             int(distance_li / self._rounding_step + 0.5) * self._rounding_step,
         )
         return f"约{rounded}里"
+
+    def _visible_location(self, location):
+        return replace(
+            location,
+            available_functions=self._visible_functions(location.available_functions),
+        )
+
+    def _visible_functions(self, functions: Sequence[str]) -> tuple[str, ...]:
+        return tuple(value for value in functions if value in self._open_functions)
 
     def _require_initialized(self) -> None:
         if not self._initialized:

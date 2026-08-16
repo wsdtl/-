@@ -64,6 +64,12 @@ class CharacterOverviewFeature:
         except LocationMissingError as exc:
             raise CharacterOverviewError(str(exc)) from exc
         location = self._world.locate(LocationQuery(xy=player_location.xy))
+        equipped_counts = {
+            category: sum(
+                content.category == category for content in character.equipped_content
+            )
+            for category, _ in character.cultivation_slots
+        }
         return CharacterOverviewResult(
             character=character,
             xy=player_location.xy,
@@ -73,6 +79,10 @@ class CharacterOverviewFeature:
             altitude=location.altitude,
             states=tuple(
                 (state_type, slot.name) for state_type, slot in state.states.items()
+            ),
+            cultivation_usage=tuple(
+                (category, equipped_counts[category], total)
+                for category, total in character.cultivation_slots
             ),
         )
 

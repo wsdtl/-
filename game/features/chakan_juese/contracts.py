@@ -24,6 +24,7 @@ class CharacterOverviewResult:
     terrain: str
     altitude: int
     states: tuple[tuple[str, str], ...]
+    cultivation_usage: tuple[tuple[str, int, int], ...]
 
 
 __all__ = [

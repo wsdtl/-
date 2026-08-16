@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from game.cmd import access_guard
-from game.cmd.command import GameCommand, HelpSpec
+from game.cmd.command import GameCommand, HelpSpec, unregister_command_module
 from game.cmd.help_registry import help_registry
 from game.cmd.registry_audit import CommandRegistryError, audit_command_registry
 from game.core.data import JsonDataService
@@ -67,6 +67,46 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
             help=HelpSpec("角色", "测试命令", ("重复声明",)),
             hidden=True,
         )
+    with pytest.raises(ValueError, match="后台命令必须"):
+        GameCommand.fullmatch(
+            "错误后台命令",
+            scope="后台",
+            guard_rule="始终可用",
+            help=HelpSpec("角色", "不应公开", ("错误后台命令",)),
+        )
+
+
+def test_command_module_can_replace_and_unload_all_driver_registrations() -> None:
+    module_name = "game.cmd.通用.热重启测试"
+
+    async def old_callback() -> None:
+        return None
+
+    async def new_callback() -> None:
+        return None
+
+    old_callback.__module__ = module_name
+    new_callback.__module__ = module_name
+    decorator = GameCommand.command(
+        "热重启测试",
+        scope="通用",
+        guard_rule="始终可用",
+        help=HelpSpec("行动", "验证模块替换", ("热重启测试",)),
+    )
+    decorator(old_callback)
+    decorator(new_callback)
+
+    from launch.adapter.qq.handler import _command_registry
+
+    assert len(LocalEventHandler.command_rules["热重启测试"]) == 1
+    assert len(_command_registry.match("热重启测试")) == 1
+    assert help_registry.find("热重启测试") is not None
+
+    unregister_command_module(module_name)
+
+    assert "热重启测试" not in LocalEventHandler.command_rules
+    assert _command_registry.match("热重启测试") == []
+    assert help_registry.find("热重启测试") is None
 
 
 def test_command_scope_matches_managed_directory() -> None:

@@ -8,9 +8,9 @@ from game.features.xinglu import (
     TravelQueryError,
     TravelRequest,
 )
-from message import M
 
 from ...command import GameCommand, HelpSpec
+from . import reply
 
 
 @GameCommand.command(
@@ -34,13 +34,7 @@ async def travel(
 ) -> None:
     destination = str(message or "").strip()
     if not destination:
-        await manager.send(
-            M.document()
-            .section("行路", icon="navigation")
-            .line("格式：去 地点名，或：去 x y")
-            .line(M.command("查看全境地图", "地图"))
-            .build()
-        )
+        await manager.send(reply.missing_destination())
         return
     try:
         result = await current_game_services().features.xinglu.travel(
@@ -51,48 +45,12 @@ async def travel(
             )
         )
     except TravelQueryError as exc:
-        await manager.send(
-            M.document().section("行路", icon="navigation").line(str(exc)).build()
-        )
+        await manager.send(reply.query_error(str(exc)))
         return
     except TravelConflictError:
-        await manager.send(
-            M.document()
-            .section("行路", icon="notice")
-            .line("你的位置刚刚发生变化，本次行路没有覆盖新的落脚处，请重新查看人物。")
-            .build()
-        )
+        await manager.send(reply.conflict())
         return
-
-    plan = result.plan
-    destination_view = plan.destination
-    reply = (
-        M.document()
-        .header("抵达 · ", _location_name(destination_view))
-        .section(f"行路 · {plan.travel_method}", icon="navigation")
-    )
-    for line in plan.narrative:
-        reply.line(line)
-    reply.section("落脚处", icon="map")
-    reply.field("地点", _location_name(destination_view))
-    reply.row(("区域", destination_view.region), ("地形", destination_view.terrain))
-    reply.row(
-        ("坐标", f"{destination_view.xy[0]}, {destination_view.xy[1]}"),
-        ("海拔", f"{destination_view.altitude}米"),
-    )
-    reply.section("可用功能", icon="guide")
-    if destination_view.available_functions:
-        for index, function in enumerate(destination_view.available_functions, start=1):
-            reply.item(index, function)
-    else:
-        reply.line("此处没有已经开放的地点功能。")
-    await manager.send(reply.build())
-
-
-def _location_name(location) -> str:
-    if location.location_name:
-        return location.location_name
-    return f"{location.region}·{location.terrain}（{location.xy[0]}, {location.xy[1]}）"
+    await manager.send(reply.success(result))
 
 
 __all__ = []

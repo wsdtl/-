@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateAddress
@@ -55,7 +56,9 @@ def _features(
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    character = CharacterService(data, database, player_state, location)
+    asset = AssetService(data, database)
+    asset.initialize()
+    character = CharacterService(data, database, player_state, location, asset)
     character.initialize()
     feature = CreateCharacterFeature(data, world, character)
     feature.initialize()
@@ -137,6 +140,11 @@ def test_character_overview_combines_owned_service_results(
     assert dict(character.attributes)["攻击"] == 5
     assert dict(character.resources) == {"血气": 100, "精神": 100, "护盾": 0}
     assert character.cultivation_slots == (("功法", 6), ("真意", 6), ("气机", 6))
+    assert result.cultivation_usage == (
+        ("功法", 0, 6),
+        ("真意", 0, 6),
+        ("气机", 0, 6),
+    )
     assert character.equipped_content == ()
     assert character.weapon.stage == "凡器"
     assert character.weapon.attack == 10

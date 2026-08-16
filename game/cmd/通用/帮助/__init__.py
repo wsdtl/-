@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...command import GameCommand, HelpSpec
-from . import service
+from . import reply
 
 
 @GameCommand.command(
@@ -18,7 +18,7 @@ from . import service
     ),
 )
 async def help_command(*, message: str, manager) -> None:
-    await service.show_help(message, manager=manager)
+    await manager.send(reply.help_message(message))
 
 
 __all__ = []

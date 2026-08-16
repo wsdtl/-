@@ -63,7 +63,8 @@ def _markdown(value: str, flow_id: int) -> str:
             continue
         if stripped.startswith("![") and IMAGE_RE.fullmatch(stripped):
             image = IMAGE_RE.fullmatch(stripped)
-            assert image is not None
+            if image is None:
+                raise ValueError("Markdown 图片标记解析失败")
             source = _safe_url(image.group(2), image=True)
             if source:
                 output.append(
@@ -105,7 +106,8 @@ def _inline(value: str, flow_id: int) -> str:
                 )
         else:
             link_match = LINK_RE.fullmatch(token)
-            assert link_match is not None
+            if link_match is None:
+                raise ValueError("Markdown 链接标记解析失败")
             label = _format_text(link_match.group(1))
             target = link_match.group(2)
             if target.startswith("webcmd://"):

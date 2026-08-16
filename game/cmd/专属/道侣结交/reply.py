@@ -1,0 +1,219 @@
+"""道侣结交命令回复构造。"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from game.features.daolv_jiejiao import (
+    CompanionAction,
+    CompanionConversation,
+    CompanionCopy,
+    CompanionFarewellResult,
+    CompanionGiftResult,
+    CompanionInvitationResult,
+    CompanionView,
+)
+from message import Action, M
+
+
+def text(copy: CompanionCopy, section: str, key: str, **values) -> str:
+    return copy.text[section][key].format_map(values)
+
+
+def error(copy: CompanionCopy, message: str):
+    return (
+        M.document()
+        .section(text(copy, "错误", "标题"), icon=copy.icons["错误"])
+        .line(message)
+        .build()
+    )
+
+
+def view(
+    copy: CompanionCopy, value: CompanionView, actions: tuple[CompanionAction, ...]
+):
+    definition = value.definition
+    relation_text = (
+        text(copy, "查看", "尚未结交")
+        if not value.has_relation
+        else _affection(value.relation.current_affection)
+    )
+    return (
+        M.document()
+        .header(text(copy, "查看", "标题", 名称=definition.name))
+        .section(text(copy, "查看", "身份"), icon=copy.icons["身份"])
+        .row(
+            (text(copy, "查看", "称号"), definition.title),
+            (text(copy, "查看", "性别"), definition.gender),
+        )
+        .row(
+            (text(copy, "查看", "境界"), definition.realm_name),
+            (text(copy, "查看", "等级"), definition.level),
+        )
+        .line(definition.description)
+        .section(text(copy, "查看", "性情"), icon=copy.icons["性情"])
+        .line(definition.personality)
+        .section(text(copy, "查看", "喜好"), icon=copy.icons["喜好"])
+        .line(
+            "、".join(
+                name.removeprefix("灵植-") + "灵植"
+                for name in definition.favorite_pool_names
+            )
+        )
+        .line(definition.dialogue.preference)
+        .section(text(copy, "查看", "关系"), icon=copy.icons["关系"])
+        .field(text(copy, "查看", "当前好感"), relation_text)
+        .line(
+            text(copy, "查看", "同行中")
+            if value.is_active
+            else text(copy, "查看", "未同行")
+        )
+        .actions(_actions(actions))
+        .build()
+    )
+
+
+def conversation(
+    copy: CompanionCopy,
+    result: CompanionConversation,
+    actions: tuple[CompanionAction, ...],
+):
+    definition = result.view.definition
+    return (
+        M.document()
+        .header(text(copy, "交谈", "标题", 名称=definition.name))
+        .section(definition.title, icon=copy.icons["交谈"])
+        .line(f"“{result.line}”")
+        .line(definition.dialogue.preference)
+        .actions(_actions(actions))
+        .build()
+    )
+
+
+def gift(
+    copy: CompanionCopy,
+    result: CompanionGiftResult,
+    actions: tuple[CompanionAction, ...],
+):
+    definition = result.view.definition
+    builder = M.document().header(text(copy, "赠礼", "标题", 名称=definition.name))
+    if not result.accepted:
+        return (
+            builder.section(definition.title, icon=copy.icons["赠礼"])
+            .line(
+                text(copy, "赠礼", "婉拒", 名称=definition.name, 物品=result.item.name)
+            )
+            .line(f"“{result.dialogue}”")
+            .line(text(copy, "赠礼", "物品未消耗"))
+            .actions(_actions(actions))
+            .build()
+        )
+    if result.grade is None:
+        raise RuntimeError("已接受的道侣赠礼缺少品级结果")
+    if result.replayed:
+        builder.section(definition.title, icon=copy.icons["赠礼"]).line(
+            text(copy, "赠礼", "已处理")
+        )
+    else:
+        builder.section(definition.title, icon=copy.icons["赠礼"]).line(
+            text(
+                copy,
+                "赠礼",
+                "收下",
+                名称=definition.name,
+                数量=result.quantity,
+                品级=result.grade.name,
+                物品=result.item.name,
+            )
+        ).line(f"“{result.dialogue}”").row(
+            (text(copy, "赠礼", "基础好感"), _affection(result.base_affection)),
+            (
+                text(copy, "赠礼", "品级倍率", 品级=result.grade.name),
+                result.grade.ability_multiplier,
+            ),
+        ).row(
+            (text(copy, "赠礼", "实际好感"), _affection(result.affection_gain)),
+            (
+                text(copy, "赠礼", "当前好感"),
+                f"{_affection(result.affection_before)} → {_affection(result.affection_after)}",
+            ),
+        )
+    if result.first_full:
+        builder.line(text(copy, "赠礼", "首次圆满")).line(
+            f"“{definition.dialogue.full_affection}”"
+        )
+        if result.reward_item is None or result.reward_grade is None:
+            raise RuntimeError("道侣首次圆满结果缺少回礼")
+        builder.field(
+            text(copy, "赠礼", "获得回礼"),
+            f"{result.reward_grade.name}{result.reward_item.name} × {result.reward_quantity}",
+        )
+    return builder.actions(_actions(actions)).build()
+
+
+def invitation(
+    copy: CompanionCopy,
+    result: CompanionInvitationResult,
+    actions: tuple[CompanionAction, ...],
+):
+    definition = result.view.definition
+    builder = (
+        M.document()
+        .header(text(copy, "邀约", "标题", 名称=definition.name))
+        .section(definition.title, icon=copy.icons["邀约"])
+        .line(f"“{result.dialogue}”")
+    )
+    if result.already_active:
+        builder.line(text(copy, "邀约", "已经同行", 名称=definition.name))
+    elif result.first_invitation:
+        builder.line(text(copy, "邀约", "首次同行")).row(
+            ("资质", result.instance.qualification), ("同行", definition.name)
+        )
+    else:
+        builder.line(text(copy, "邀约", "再次同行", 名称=definition.name))
+    return builder.actions(_actions(actions)).build()
+
+
+def farewell(
+    copy: CompanionCopy,
+    result: CompanionFarewellResult,
+    actions: tuple[CompanionAction, ...],
+):
+    definition = result.definition
+    return (
+        M.document()
+        .header(text(copy, "暂别", "标题", 名称=definition.name))
+        .section(definition.title, icon=copy.icons["暂别"])
+        .line(f"“{result.dialogue}”")
+        .line(
+            text(
+                copy,
+                "暂别",
+                "返回故地",
+                名称=definition.name,
+                地点=definition.location_name,
+            )
+        )
+        .actions(_actions(actions))
+        .build()
+    )
+
+
+def _actions(values: tuple[CompanionAction, ...]) -> tuple[Action, ...]:
+    return tuple(
+        Action(
+            value.action_id,
+            value.label,
+            value.command,
+            behavior=value.behavior,
+            style=value.style,
+        )
+        for value in values
+    )
+
+
+def _affection(value: Decimal) -> str:
+    return f"{value:.1f}"
+
+
+__all__ = ["conversation", "error", "farewell", "gift", "invitation", "text", "view"]

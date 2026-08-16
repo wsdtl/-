@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,6 +67,26 @@ class GameServices:
 
     core: CoreServices
     features: FeatureServices
+
+
+def audit_state_type_ownership(
+    owners: Mapping[str, Iterable[str]],
+) -> dict[str, str]:
+    """确认每种数据库状态只由一个核心服务持有写权限。"""
+
+    ownership: dict[str, str] = {}
+    for owner, state_types in owners.items():
+        for raw_state_type in state_types:
+            state_type = str(raw_state_type or "").strip()
+            if not state_type:
+                raise ValueError(f"核心服务 {owner} 声明了空状态类型")
+            existing = ownership.get(state_type)
+            if existing is not None:
+                raise ValueError(
+                    f"数据库状态类型归属重复：{state_type} -> {existing}、{owner}"
+                )
+            ownership[state_type] = owner
+    return ownership
 
 
 def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
@@ -161,16 +182,6 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("locations", companion_status.location_count),
         )
     )
-    character = CharacterService(data, database, player_state, location)
-    character_service_status = character.initialize()
-    logger.opt(colors=True).success(
-        C.join(
-            C.ok("角色核心微服务已启动"),
-            C.kv("role", character_service_status.role_name),
-            C.kv("genders", character_service_status.gender_count),
-            C.kv("initial_items", character_service_status.initial_item_count),
-        )
-    )
     asset = AssetService(data, database)
     asset_status = asset.initialize()
     logger.opt(colors=True).success(
@@ -180,6 +191,24 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("subcategories", asset_status.subcategory_count),
             C.kv("page_limit", asset_status.page_limit),
         )
+    )
+    character = CharacterService(data, database, player_state, location, asset)
+    character_service_status = character.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("角色核心微服务已启动"),
+            C.kv("role", character_service_status.role_name),
+            C.kv("genders", character_service_status.gender_count),
+            C.kv("initial_items", character_service_status.initial_item_count),
+        )
+    )
+    audit_state_type_ownership(
+        {
+            "player_state": player_state.state_types,
+            "companion": companion.state_types,
+            "character": character.state_types,
+            "asset": asset.state_types,
+        }
     )
     core = CoreServices(
         data=data,
@@ -308,6 +337,7 @@ __all__ = [
     "CoreServices",
     "FeatureServices",
     "GameServices",
+    "audit_state_type_ownership",
     "build_game_services",
     "current_game_services",
     "initialize_game_services",

@@ -52,6 +52,8 @@ class CompanionView:
     definition: CompanionDefinition
     relation: CompanionRelation
     active: ActiveCompanion | None
+    has_relation: bool
+    is_active: bool
     can_invite: bool
 
 
