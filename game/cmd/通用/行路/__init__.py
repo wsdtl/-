@@ -36,8 +36,9 @@ async def travel(
     if not destination:
         await manager.send(reply.missing_destination())
         return
+    services = current_game_services()
     try:
-        result = await current_game_services().features.xinglu.travel(
+        result = await services.features.xinglu.travel(
             TravelRequest(
                 user_id=user_id,
                 request_id=message_context.request_id,
@@ -50,7 +51,17 @@ async def travel(
     except TravelConflictError:
         await manager.send(reply.conflict())
         return
-    await manager.send(reply.success(result))
+    position = services.features.weizhi
+    functions = position.open_location_functions(
+        result.plan.destination.available_functions
+    )
+    await manager.send(
+        reply.success(
+            result,
+            functions,
+            position.position_actions(functions),
+        )
+    )
 
 
 __all__ = []

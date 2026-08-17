@@ -9,8 +9,10 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
+from game.core.growth import GrowthService
 from game.core.location import LocationMoveCommand, LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
+from game.core.pool import PoolService
 from game.core.world import LocationQuery, WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -27,6 +29,10 @@ def _services(tmp_path: Path):
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
     world = WorldService(data)
@@ -35,11 +41,13 @@ def _services(tmp_path: Path):
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database)
+    companion = CompanionService(data, database, growth)
     companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    character = CharacterService(data, database, player_state, location, asset)
+    character = CharacterService(
+        data, database, player_state, location, asset, growth
+    )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
@@ -122,11 +130,15 @@ def test_all_companions_resolve_to_exact_world_locations(tmp_path: Path) -> None
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     world = WorldService(data)
     world.initialize()
     database = DatabaseService(tmp_path / "companions.db")
     database.initialize()
-    companion = CompanionService(data, database)
+    companion = CompanionService(data, database, growth)
     status = companion.initialize()
 
     resolved = []
@@ -184,10 +196,20 @@ def test_position_copy_overview_and_buttons_are_json_driven(tmp_path: Path) -> N
     assert copy.overview_title.format(地点="溪隐台") == "溪隐台周边"
     assert len(overview.current.local_cultivators) == 3
     assert overview.visiting_cultivator_count == 0
-    assert tuple(action.command for action in position.position_actions()) == (
+    assert tuple(
+        action.command
+        for action in position.position_actions(
+            overview.current.location.available_functions
+        )
+    ) == (
+        "附近 修士",
         "附近",
         "地图",
     )
+    assert position.open_location_functions(("修士", "闭关", "交易")) == ("修士",)
+    assert tuple(
+        action.command for action in _run(position.current_location_actions("qq-1"))
+    ) == ("附近 修士", "附近", "地图")
     assert tuple(action.command for action in position.nearby_overview_actions()) == (
         "附近 修士",
         "附近 地点",

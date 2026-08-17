@@ -25,7 +25,11 @@ async def show_position(*, user_id: str, manager, **_) -> None:
     feature = current_game_services().features.weizhi
     result = await feature.current(user_id)
     await manager.send(
-        reply.current(feature.copy(), result, feature.position_actions())
+        reply.current(
+            feature.copy(),
+            result,
+            feature.position_actions(result.location.available_functions),
+        )
     )
 
 

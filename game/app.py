@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from .core.combat import CombatService
 from .core.companion import CompanionService
 from .core.data import JsonDataService
 from .core.database import DatabaseService
+from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
 from .core.player_state import PlayerStateService
@@ -24,10 +24,13 @@ from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
 from .features.daolv_jiejiao import CompanionInteractionFeature
+from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.najie import NajieFeature
+from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.weizhi import PositionFeature
 from .features.xinglu import TravelFeature
+from .startup import validate_startup_contracts
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ class CoreServices:
     item_catalog: ItemCatalogService
     combat: CombatService
     pool: PoolService
+    growth: GrowthService
     world: WorldService
     companion: CompanionService
     database: DatabaseService
@@ -59,6 +63,8 @@ class FeatureServices:
     weizhi: PositionFeature
     xinglu: TravelFeature
     daolv_jiejiao: CompanionInteractionFeature
+    renwu_peiyang: CharacterCultivationFeature
+    daolv_peiyang: CompanionCultivationFeature
 
 
 @dataclass(frozen=True)
@@ -67,26 +73,6 @@ class GameServices:
 
     core: CoreServices
     features: FeatureServices
-
-
-def audit_state_type_ownership(
-    owners: Mapping[str, Iterable[str]],
-) -> dict[str, str]:
-    """确认每种数据库状态只由一个核心服务持有写权限。"""
-
-    ownership: dict[str, str] = {}
-    for owner, state_types in owners.items():
-        for raw_state_type in state_types:
-            state_type = str(raw_state_type or "").strip()
-            if not state_type:
-                raise ValueError(f"核心服务 {owner} 声明了空状态类型")
-            existing = ownership.get(state_type)
-            if existing is not None:
-                raise ValueError(
-                    f"数据库状态类型归属重复：{state_type} -> {existing}、{owner}"
-                )
-            ownership[state_type] = owner
-    return ownership
 
 
 def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
@@ -128,6 +114,16 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         C.join(
             C.ok("资源池微服务已启动"),
             C.kv("modes", len(pool_status.modes)),
+        )
+    )
+    growth = GrowthService(data, pool)
+    growth_status = growth.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("角色成长核心微服务已启动"),
+            C.kv("realms", growth_status.realm_count),
+            C.kv("max_level", growth_status.maximum_level),
+            C.kv("weapon_max_level", growth_status.weapon_maximum_level),
         )
     )
     world = WorldService(data)
@@ -173,7 +169,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_size", location_status.nearby_page_size),
         )
     )
-    companion = CompanionService(data, database)
+    companion = CompanionService(data, database, growth)
     companion_status = companion.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -192,7 +188,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_limit", asset_status.page_limit),
         )
     )
-    character = CharacterService(data, database, player_state, location, asset)
+    character = CharacterService(
+        data, database, player_state, location, asset, growth
+    )
     character_service_status = character.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -202,19 +200,12 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
-    audit_state_type_ownership(
-        {
-            "player_state": player_state.state_types,
-            "companion": companion.state_types,
-            "character": character.state_types,
-            "asset": asset.state_types,
-        }
-    )
     core = CoreServices(
         data=data,
         item_catalog=item_catalog,
         combat=combat,
         pool=pool,
+        growth=growth,
         world=world,
         companion=companion,
         database=database,
@@ -269,6 +260,24 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         database,
     )
     daolv_jiejiao.initialize()
+    renwu_peiyang = CharacterCultivationFeature(
+        data,
+        character,
+        asset,
+        item_catalog,
+        growth,
+        database,
+    )
+    renwu_peiyang.initialize()
+    daolv_peiyang = CompanionCultivationFeature(
+        data,
+        companion,
+        asset,
+        item_catalog,
+        growth,
+        database,
+    )
+    daolv_peiyang.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -278,6 +287,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         weizhi=weizhi,
         xinglu=xinglu,
         daolv_jiejiao=daolv_jiejiao,
+        renwu_peiyang=renwu_peiyang,
+        daolv_peiyang=daolv_peiyang,
     )
     return GameServices(core=core, features=features)
 
@@ -304,14 +315,10 @@ def initialize_game_services() -> None:
         register_game_access_guard,
         unregister_game_access_guard,
     )
-    from .cmd.command import registered_guard_rules
-    from .cmd.registry_audit import audit_command_registry
 
     services = build_game_services()
     try:
-        audit_command_registry()
-        for rule_name in registered_guard_rules():
-            services.core.player_state.validate_guard_rule(rule_name)
+        validate_startup_contracts(services.core)
         register_game_access_guard()
     except Exception:
         unregister_game_access_guard()
@@ -337,7 +344,6 @@ __all__ = [
     "CoreServices",
     "FeatureServices",
     "GameServices",
-    "audit_state_type_ownership",
     "build_game_services",
     "current_game_services",
     "initialize_game_services",

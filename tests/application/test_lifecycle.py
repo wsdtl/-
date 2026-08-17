@@ -7,6 +7,11 @@ import pytest
 import game.app as game_app
 from game.cmd import access_guard, command
 from game.config import GameConfig, GameDatabaseConfig
+from game.startup import (
+    StartupContractError,
+    validate_command_uniqueness,
+    validate_state_type_ownership,
+)
 
 
 class _FakeDatabase:
@@ -18,8 +23,15 @@ class _FakeDatabase:
 
 
 class _BrokenPlayerState:
+    state_types: tuple[str, ...] = ("player_state",)
+
     def validate_guard_rule(self, rule_name: str) -> None:
         raise RuntimeError(f"未知规则：{rule_name}")
+
+
+class _StateOwner:
+    def __init__(self, *state_types: str) -> None:
+        self.state_types = state_types
 
 
 def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
@@ -28,6 +40,9 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
         core=SimpleNamespace(
             database=database,
             player_state=_BrokenPlayerState(),
+            companion=_StateOwner("companion"),
+            character=_StateOwner("character", "weapon"),
+            asset=_StateOwner("inventory"),
         )
     )
     monkeypatch.setattr(game_app, "_services", None)
@@ -66,7 +81,7 @@ def test_real_composition_root_builds_location_and_position_services(
 
 
 def test_state_type_ownership_rejects_cross_service_collisions() -> None:
-    assert game_app.audit_state_type_ownership(
+    assert validate_state_type_ownership(
         {
             "character": {"character", "weapon"},
             "asset": {"inventory"},
@@ -77,9 +92,19 @@ def test_state_type_ownership_rejects_cross_service_collisions() -> None:
         "inventory": "asset",
     }
     with pytest.raises(ValueError, match="归属重复"):
-        game_app.audit_state_type_ownership(
+        validate_state_type_ownership(
             {
                 "character": {"character"},
                 "other": {"character"},
             }
         )
+
+
+def test_command_uniqueness_rejects_cross_component_collisions() -> None:
+    commands = (
+        ("位置", "通用", "game.cmd.通用.位置"),
+        ("位置", "专属", "game.cmd.专属.测试"),
+    )
+
+    with pytest.raises(StartupContractError, match="命令重复注册"):
+        validate_command_uniqueness(commands)

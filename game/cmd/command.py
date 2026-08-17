@@ -147,11 +147,10 @@ def registered_guard_rules() -> tuple[str, ...]:
 
 
 def registered_commands() -> tuple[tuple[str, str, str], ...]:
-    """返回命令、声明范围和来源模块，供启动审查器使用。"""
+    """返回命令、声明范围和来源模块，供正式检查入口使用。"""
 
     return tuple(
-        (command, scope, module)
-        for command, scope, module, _ in _registered_commands
+        (command, scope, module) for command, scope, module, _ in _registered_commands
     )
 
 

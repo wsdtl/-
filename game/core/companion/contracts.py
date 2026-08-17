@@ -33,6 +33,10 @@ class CompanionFarewellError(CompanionError, ValueError):
     """当前同行事实不允许暂别目标道侣。"""
 
 
+class CompanionCultivationError(CompanionError, ValueError):
+    """当前同行道侣不能完成这次培养。"""
+
+
 @dataclass(frozen=True)
 class CompanionStatus:
     initialized: bool
@@ -49,6 +53,9 @@ class CompanionRules:
     check_gender_again: bool
     full_reward_affection: Decimal
     full_reward_lifetime_limit: int
+    cultivation_slots: Mapping[str, int]
+    qualification_growth_minimum: Decimal
+    qualification_growth_maximum: Decimal
 
 
 @dataclass(frozen=True)
@@ -90,6 +97,12 @@ class CompanionDefinition:
     qualification_range: tuple[int, int]
     fluctuating_attributes: tuple[str, ...]
     attribute_multiplier_range: tuple[int, int]
+    cultivation_pools: Mapping[str, str]
+    attribute_overrides: Mapping[str, int | float]
+    weapon_name: str
+    weapon_level: int
+    weapon_experience: int
+    weapon_laws: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)
@@ -124,9 +137,55 @@ class ActiveCompanion:
 @dataclass(frozen=True)
 class CompanionInstance:
     companion_id: str
+    realm_id: str
+    level: int
+    experience: int
+    attributes: Mapping[str, int | float]
+    cultivation: Mapping[str, tuple[str, ...]]
+    weapon_name: str
+    weapon_level: int
+    weapon_experience: int
+    weapon_laws: tuple[str, ...]
     qualification: int
     attribute_multipliers: Mapping[str, int]
+    breakthrough_records: tuple[Mapping[str, object], ...]
     version: int
+
+
+@dataclass(frozen=True)
+class ActiveCompanionInstance:
+    active: ActiveCompanion
+    instance: CompanionInstance
+
+
+@dataclass(frozen=True)
+class CompanionGrowthPlan:
+    companion_id: str
+    level_before: int
+    level_after: int
+    weapon_level_before: int
+    weapon_level_after: int
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionBreakthroughPlan:
+    companion_id: str
+    realm_before: str
+    realm_after: str
+    realm_name_after: str
+    medicine_id: str
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionLawPlan:
+    companion_id: str
+    slot: int
+    law_id: str
+    law_name: str
+    replaced_law_id: str
+    operations: tuple[StateMutation, ...]
 
 
 @dataclass(frozen=True)
@@ -154,6 +213,9 @@ class CompanionFarewellPlan:
 
 __all__ = [
     "ActiveCompanion",
+    "ActiveCompanionInstance",
+    "CompanionBreakthroughPlan",
+    "CompanionCultivationError",
     "CompanionDefinition",
     "CompanionDialogue",
     "CompanionError",
@@ -161,9 +223,11 @@ __all__ = [
     "CompanionFarewellPlan",
     "CompanionGiftError",
     "CompanionGiftPlan",
+    "CompanionGrowthPlan",
     "CompanionInstance",
     "CompanionInvitationError",
     "CompanionInvitationPlan",
+    "CompanionLawPlan",
     "CompanionNotFoundError",
     "CompanionRelation",
     "CompanionReward",

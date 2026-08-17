@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from game.core.database import StateMutation
+
 
 class CharacterCreationError(RuntimeError):
     """角色创建无法完成。"""
@@ -23,6 +25,10 @@ class CharacterNotFoundError(RuntimeError):
 
 class CharacterStateError(RuntimeError):
     """已经保存的角色资产不符合当前正式规则。"""
+
+
+class CharacterCultivationError(CharacterStateError, ValueError):
+    """人物培养请求不符合当前人物、道藏或本命武器状态。"""
 
 
 @dataclass(frozen=True)
@@ -110,12 +116,55 @@ class CharacterProfile:
     inventory: InventorySummary
 
 
+@dataclass(frozen=True)
+class CharacterGrowthPlan:
+    level_before: int
+    level_after: int
+    weapon_level_before: int
+    weapon_level_after: int
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CharacterEquipPlan:
+    category: str
+    slot: int
+    content_id: str
+    content_name: str
+    grade_id: str
+    replaced_content_id: str
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterBreakthroughPlan:
+    realm_before: str
+    realm_after: str
+    realm_name_after: str
+    medicine_id: str
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterLawPlan:
+    slot: int
+    law_id: str
+    law_name: str
+    replaced_law_id: str
+    operation: StateMutation
+
+
 __all__ = [
     "CharacterAlreadyExistsError",
+    "CharacterBreakthroughPlan",
     "CharacterCreateCommand",
     "CharacterCreationError",
     "CharacterCreationResult",
+    "CharacterCultivationError",
+    "CharacterEquipPlan",
+    "CharacterGrowthPlan",
     "CharacterInputError",
+    "CharacterLawPlan",
     "CharacterNotFoundError",
     "CharacterProfile",
     "CharacterPublicProfile",

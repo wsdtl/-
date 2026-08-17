@@ -489,6 +489,17 @@ class Audit:
         if not isinstance(rule, dict):
             return
         weapon = rule.get("本命武器")
+        if name in {"人物", "道侣"}:
+            if not isinstance(weapon, dict) or weapon != {
+                "器律来源": "玩家器藏",
+                "装配方式": "手动覆炼",
+            }:
+                self.add(
+                    "角色",
+                    f"规则/角色/主体/{name}.json",
+                    "人物与道侣本命武器必须从玩家器藏手动覆炼器律",
+                )
+            return
         pools = weapon.get("器律池") if isinstance(weapon, dict) else None
         expected = ["器律池-灵器", "器律池-法器", "器律池-法宝", "器律池-后天灵宝"]
         if pools != expected:

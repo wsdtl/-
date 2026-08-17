@@ -94,9 +94,36 @@ class PositionFeature:
             raise RuntimeError("位置展示文案尚未初始化")
         return self._copy
 
-    def position_actions(self) -> tuple[PositionAction, ...]:
+    def position_actions(self, functions: Sequence[str]) -> tuple[PositionAction, ...]:
         self._require_initialized()
-        return self._actions_for("位置")
+        return self.location_actions(functions) + self._actions_for("位置")
+
+    def open_location_functions(self, functions: Sequence[str]) -> tuple[str, ...]:
+        """只返回已经建立玩家入口的地点功能。"""
+
+        self._require_initialized()
+        return self._visible_functions(functions)
+
+    def location_actions(self, functions: Sequence[str]) -> tuple[PositionAction, ...]:
+        """按地点已经开放的功能生成当前可用按钮。"""
+
+        self._require_initialized()
+        available = set(self.open_location_functions(functions))
+        return tuple(
+            render_action(template, {})
+            for template in self._buttons
+            if template.page == "地点功能" and template.function in available
+        )
+
+    async def current_location_actions(
+        self, user_id: str
+    ) -> tuple[PositionAction, ...]:
+        """为地点专属回复取得当前地点的完整操作面板。"""
+
+        self._require_initialized()
+        current = await self._location.current(user_id)
+        location = self._world.locate(LocationQuery(xy=current.xy))
+        return self.position_actions(location.available_functions)
 
     def nearby_overview_actions(
         self, locations: Sequence[NearbyWorldLocation] = ()

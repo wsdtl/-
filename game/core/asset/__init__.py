@@ -9,11 +9,14 @@ from .contracts import (
     AssetStateError,
     AssetStatus,
     AssetSubcategory,
+    CultivationOwnership,
     InventoryAdjustment,
     InventoryChange,
     InventoryChangeError,
     InventoryMutationPlan,
     InventoryStack,
+    LawReserveChangePlan,
+    LawReserveStack,
 )
 from .service import AssetService
 
@@ -27,9 +30,12 @@ __all__ = [
     "AssetStateError",
     "AssetStatus",
     "AssetSubcategory",
+    "CultivationOwnership",
     "InventoryAdjustment",
     "InventoryChange",
     "InventoryChangeError",
     "InventoryMutationPlan",
     "InventoryStack",
+    "LawReserveChangePlan",
+    "LawReserveStack",
 ]

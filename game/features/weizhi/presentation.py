@@ -16,6 +16,7 @@ from .contracts import PositionAction, PositionCopy
 class ButtonTemplate:
     page: str
     condition: str
+    function: str
     action_id: str
     label: str
     command: str
@@ -41,7 +42,7 @@ def load_position_presentation(
 
     _require_keys(
         dataset,
-        {"距离与方向", "开放功能", "文本", "图标", "位置", "附近"},
+        {"距离与方向", "文本", "图标", "位置", "附近", "地点功能"},
         "位置展示数据集",
     )
     distance_and_direction = _mapping(
@@ -54,14 +55,11 @@ def load_position_presentation(
     )
     distance = _mapping(distance_and_direction["距离"], "距离与方向.距离")
     _require_keys(distance, {"单位", "每里米数", "约数步长"}, "距离与方向.距离")
-    open_functions = _string_set(
-        _mapping(
-            dataset["开放功能"],
-            "展示/位置/规则/开放功能.json",
-        ).get("功能"),
-        "位置开放功能.功能",
+    function_buttons = _button_templates(
+        dataset["地点功能"],
+        "展示/位置/按钮/地点功能.json",
+        function_buttons=True,
     )
-
     position_buttons = _button_templates(
         dataset["位置"],
         "展示/位置/按钮/位置.json",
@@ -71,7 +69,7 @@ def load_position_presentation(
         dataset["附近"],
         "展示/位置/按钮/附近.json",
     )
-    buttons = position_buttons + nearby_buttons
+    buttons = function_buttons + position_buttons + nearby_buttons
     identities = tuple((item.page, item.action_id) for item in buttons)
     if len(identities) != len(set(identities)):
         raise JsonDataError("位置展示存在重复的页面按钮编号")
@@ -80,7 +78,7 @@ def load_position_presentation(
         meters_per_li=_positive_int(distance["每里米数"], "距离与方向.距离.每里米数"),
         rounding_step=_positive_int(distance["约数步长"], "距离与方向.距离.约数步长"),
         same_place=_text(distance_and_direction["同处措辞"], "距离与方向.同处措辞"),
-        open_functions=open_functions,
+        open_functions=frozenset(item.function for item in function_buttons),
         directions=MappingProxyType(_direction_map(distance_and_direction["方向"])),
         copy=_position_copy(dataset["文本"], dataset["图标"]),
         buttons=buttons,
@@ -331,6 +329,7 @@ def _button_templates(
     label: str,
     *,
     default_page: str = "",
+    function_buttons: bool = False,
 ) -> tuple[ButtonTemplate, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise JsonDataError(f"{label}必须是字典列表")
@@ -338,15 +337,35 @@ def _button_templates(
     for index, raw in enumerate(value):
         row = _mapping(raw, f"{label}[{index}]")
         allowed = {"编号", "名称", "命令", "行为", "样式"}
-        if not default_page:
+        if function_buttons:
+            allowed.add("功能")
+        elif not default_page:
             allowed.update({"页面", "条件"})
         if unknown := set(row) - allowed:
             raise JsonDataError(
                 f"{label}[{index}]存在未知字段：{'、'.join(sorted(unknown))}"
             )
-        page = default_page or _text(row.get("页面"), f"{label}[{index}].页面")
-        condition = "" if default_page else str(row.get("条件") or "").strip()
-        if page not in {"位置", "概览", "修士", "地点", "地点条目"}:
+        page = (
+            "地点功能"
+            if function_buttons
+            else default_page or _text(row.get("页面"), f"{label}[{index}].页面")
+        )
+        condition = (
+            ""
+            if function_buttons or default_page
+            else str(row.get("条件") or "").strip()
+        )
+        function = (
+            _text(row.get("功能"), f"{label}[{index}].功能") if function_buttons else ""
+        )
+        if page not in {
+            "地点功能",
+            "位置",
+            "概览",
+            "修士",
+            "地点",
+            "地点条目",
+        }:
             raise JsonDataError(f"{label}[{index}].页面无效：{page}")
         if condition not in {"", "有上一页", "有下一页"}:
             raise JsonDataError(f"{label}[{index}].条件无效：{condition}")
@@ -379,6 +398,7 @@ def _button_templates(
             ButtonTemplate(
                 page,
                 condition,
+                function,
                 action_id,
                 action_label,
                 action_command,
@@ -386,6 +406,9 @@ def _button_templates(
                 style,
             )
         )
+    functions = tuple(item.function for item in result if item.function)
+    if len(functions) != len(set(functions)):
+        raise JsonDataError(f"{label}不能重复定义同一地点功能")
     return tuple(result)
 
 
@@ -427,15 +450,6 @@ def _positive_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise JsonDataError(f"{label}必须是正整数")
     return value
-
-
-def _string_set(value: object, label: str) -> frozenset[str]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise JsonDataError(f"{label}必须是字符串列表")
-    result = tuple(_text(item, f"{label}[{index}]") for index, item in enumerate(value))
-    if len(result) != len(set(result)):
-        raise JsonDataError(f"{label}不能包含重复项")
-    return frozenset(result)
 
 
 def _text(value: object, label: str) -> str:

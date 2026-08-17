@@ -28,7 +28,8 @@ from . import reply
     ),
 )
 async def inspect_companion(*, user_id: str, message: str, manager, **_) -> None:
-    feature = current_game_services().features.daolv_jiejiao
+    services = current_game_services()
+    feature = services.features.daolv_jiejiao
     copy = feature.copy()
     query = str(message or "").strip()
     if not query:
@@ -36,7 +37,12 @@ async def inspect_companion(*, user_id: str, message: str, manager, **_) -> None
         return
     try:
         view = await feature.inspect(user_id, query)
-        await manager.send(reply.view(copy, view, feature.actions("查看", view)))
+        actions = await _with_location_actions(
+            services,
+            user_id,
+            feature.actions("查看", view),
+        )
+        await manager.send(reply.view(copy, view, actions))
     except CompanionInteractionError as exc:
         await manager.send(reply.error(copy, str(exc)))
 
@@ -54,7 +60,8 @@ async def inspect_companion(*, user_id: str, message: str, manager, **_) -> None
     ),
 )
 async def converse_companion(*, user_id: str, message: str, manager, **_) -> None:
-    feature = current_game_services().features.daolv_jiejiao
+    services = current_game_services()
+    feature = services.features.daolv_jiejiao
     copy = feature.copy()
     query = str(message or "").strip()
     if not query:
@@ -62,9 +69,12 @@ async def converse_companion(*, user_id: str, message: str, manager, **_) -> Non
         return
     try:
         result = await feature.converse(user_id, query)
-        await manager.send(
-            reply.conversation(copy, result, feature.actions("交谈", result.view))
+        actions = await _with_location_actions(
+            services,
+            user_id,
+            feature.actions("交谈", result.view),
         )
+        await manager.send(reply.conversation(copy, result, actions))
     except CompanionInteractionError as exc:
         await manager.send(reply.error(copy, str(exc)))
 
@@ -84,7 +94,8 @@ async def converse_companion(*, user_id: str, message: str, manager, **_) -> Non
 async def gift_companion(
     *, user_id: str, message: str, message_context, manager
 ) -> None:
-    feature = current_game_services().features.daolv_jiejiao
+    services = current_game_services()
+    feature = services.features.daolv_jiejiao
     copy = feature.copy()
     try:
         companion, item, grade, quantity = command_input.gift_arguments(message)
@@ -93,9 +104,12 @@ async def gift_companion(
                 user_id, message_context.request_id, companion, item, grade, quantity
             )
         )
-        await manager.send(
-            reply.gift(copy, result, feature.actions("赠礼", result.view))
+        actions = await _with_location_actions(
+            services,
+            user_id,
+            feature.actions("赠礼", result.view),
         )
+        await manager.send(reply.gift(copy, result, actions))
     except (CompanionInteractionError, ValueError) as exc:
         await manager.send(reply.error(copy, str(exc)))
 
@@ -115,7 +129,8 @@ async def gift_companion(
 async def invite_companion(
     *, user_id: str, message: str, message_context, manager
 ) -> None:
-    feature = current_game_services().features.daolv_jiejiao
+    services = current_game_services()
+    feature = services.features.daolv_jiejiao
     copy = feature.copy()
     query = str(message or "").strip()
     if not query:
@@ -125,9 +140,12 @@ async def invite_companion(
         result = await feature.invite(
             CompanionInvitationRequest(user_id, message_context.request_id, query)
         )
-        await manager.send(
-            reply.invitation(copy, result, feature.actions("邀约", result.view))
+        actions = await _with_location_actions(
+            services,
+            user_id,
+            feature.actions("邀约", result.view),
         )
+        await manager.send(reply.invitation(copy, result, actions))
     except (CompanionInteractionError, ValueError) as exc:
         await manager.send(reply.error(copy, str(exc)))
 
@@ -147,7 +165,8 @@ async def invite_companion(
 async def farewell_companion(
     *, user_id: str, message: str, message_context, manager
 ) -> None:
-    feature = current_game_services().features.daolv_jiejiao
+    services = current_game_services()
+    feature = services.features.daolv_jiejiao
     copy = feature.copy()
     query = str(message or "").strip()
     if not query:
@@ -157,13 +176,19 @@ async def farewell_companion(
         result = await feature.farewell(
             CompanionFarewellRequest(user_id, message_context.request_id, query)
         )
-        await manager.send(
-            reply.farewell(
-                copy, result, feature.farewell_actions(result.definition.companion_id)
-            )
+        actions = await _with_location_actions(
+            services,
+            user_id,
+            feature.farewell_actions(result.definition.companion_id),
         )
+        await manager.send(reply.farewell(copy, result, actions))
     except (CompanionInteractionError, ValueError) as exc:
         await manager.send(reply.error(copy, str(exc)))
+
+
+async def _with_location_actions(services, user_id: str, business_actions: tuple):
+    location_actions = await services.features.weizhi.current_location_actions(user_id)
+    return business_actions + location_actions
 
 
 __all__ = []

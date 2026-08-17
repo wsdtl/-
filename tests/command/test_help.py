@@ -8,9 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 from game.cmd import access_guard
-from game.cmd.command import GameCommand, HelpSpec, unregister_command_module
+from game.cmd.command import (
+    COMMAND_SCOPES,
+    GameCommand,
+    HelpSpec,
+    unregister_command_module,
+)
 from game.cmd.help_registry import help_registry
-from game.cmd.registry_audit import CommandRegistryError, audit_command_registry
 from game.core.data import JsonDataService
 from game.core.item_catalog import ItemCatalogService
 from game.core.player_state import StateGuardResult
@@ -23,6 +27,7 @@ from launch.adapter import (
 )
 from launch.adapter.local import LocalEventHandler, dispatch
 from main import create_app
+from tools.架构审查.校验命令目录 import CommandLayoutError, audit_command_layout
 
 
 def _run(awaitable):
@@ -38,7 +43,14 @@ def _content(result) -> str:
 def test_loaded_commands_have_one_valid_help_declaration() -> None:
     create_app()
 
-    assert help_registry.categories() == ("角色", "道侣", "行动", "世界", "资源")
+    assert help_registry.categories() == (
+        "角色",
+        "道侣",
+        "修行",
+        "行动",
+        "世界",
+        "资源",
+    )
     assert [entry.command for entry in help_registry.entries()] == [
         "帮助",
         "创建人物",
@@ -48,6 +60,13 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "赠予",
         "邀约",
         "暂别",
+        "人物培养",
+        "人物装配",
+        "人物突破",
+        "人物覆炼",
+        "道侣培养",
+        "道侣突破",
+        "道侣覆炼",
         "去",
         "地图",
         "位置",
@@ -109,15 +128,23 @@ def test_command_module_can_replace_and_unload_all_driver_registrations() -> Non
     assert help_registry.find("热重启测试") is None
 
 
-def test_command_scope_matches_managed_directory() -> None:
+def test_command_layout_tool_checks_scope_and_managed_directory() -> None:
     create_app()
 
-    entries = audit_command_registry()
+    from game.cmd.command import registered_commands
+
+    entries = audit_command_layout(registered_commands(), scopes=COMMAND_SCOPES)
     assert {scope for _, scope, _ in entries} == {"通用", "专属", "后台"}
-    with pytest.raises(CommandRegistryError, match="命令范围不一致"):
-        audit_command_registry((("错放命令", "专属", "game.cmd.通用.测试"),))
-    with pytest.raises(CommandRegistryError, match="不在受管目录"):
-        audit_command_registry((("游离命令", "通用", "game.cmd.测试"),))
+    with pytest.raises(CommandLayoutError, match="命令范围不一致"):
+        audit_command_layout(
+            (("错放命令", "专属", "game.cmd.通用.测试"),),
+            scopes=COMMAND_SCOPES,
+        )
+    with pytest.raises(CommandLayoutError, match="不在受管目录"):
+        audit_command_layout(
+            (("游离命令", "通用", "game.cmd.测试"),),
+            scopes=COMMAND_SCOPES,
+        )
 
 
 def test_help_home_and_detail_use_real_registered_commands(monkeypatch) -> None:

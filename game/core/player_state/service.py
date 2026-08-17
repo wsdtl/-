@@ -124,7 +124,7 @@ class PlayerStateService:
         return StateMutation(user_id, STATE_TYPE, STATE_KEY, value, 0)
 
     def validate_guard_rule(self, rule_name: str) -> None:
-        """供组合根在启动时校验全部命令引用。"""
+        """供统一启动契约校验命令引用。"""
 
         self._require_initialized()
         normalized = _text(rule_name, "状态守卫规则")

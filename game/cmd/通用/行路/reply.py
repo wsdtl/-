@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from game.features.xinglu import TravelResult
 from message import M
+
+from ...actions import CommandAction, message_actions
 
 
 def missing_destination():
@@ -29,7 +33,11 @@ def conflict():
     )
 
 
-def success(result: TravelResult):
+def success(
+    result: TravelResult,
+    functions: Sequence[str],
+    actions: tuple[CommandAction, ...],
+):
     plan = result.plan
     destination = plan.destination
     reply = (
@@ -47,12 +55,12 @@ def success(result: TravelResult):
         ("海拔", f"{destination.altitude}米"),
     )
     reply.section("可用功能", icon="guide")
-    if destination.available_functions:
-        for index, function in enumerate(destination.available_functions, start=1):
+    if functions:
+        for index, function in enumerate(functions, start=1):
             reply.item(index, function)
     else:
         reply.line("此处没有已经开放的地点功能。")
-    return reply.build()
+    return reply.actions(message_actions(actions)).build()
 
 
 def _location_name(location) -> str:

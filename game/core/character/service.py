@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
-from game.core.asset import AssetService
+from game.core.asset import AssetService, AssetStateError
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -14,14 +14,20 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.growth import GrowthError, GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 
 from .contracts import (
     CharacterAlreadyExistsError,
+    CharacterBreakthroughPlan,
     CharacterCreateCommand,
     CharacterCreationResult,
+    CharacterCultivationError,
+    CharacterEquipPlan,
+    CharacterGrowthPlan,
     CharacterInputError,
+    CharacterLawPlan,
     CharacterNotFoundError,
     CharacterProfile,
     CharacterPublicProfile,
@@ -45,12 +51,14 @@ class CharacterService:
         player_state: PlayerStateService,
         location: LocationService,
         asset: AssetService,
+        growth: GrowthService,
     ) -> None:
         self._data = data
         self._database = database
         self._player_state = player_state
         self._location = location
         self._asset = asset
+        self._growth = growth
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -72,6 +80,8 @@ class CharacterService:
             raise RuntimeError("玩家位置服务必须先于角色服务启动")
         if not self._asset.status().initialized:
             raise RuntimeError("玩家资产服务必须先于角色服务启动")
+        if not self._growth.status().initialized:
+            raise RuntimeError("成长核心必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
         role_rule = role_rules.get("人物")
@@ -266,6 +276,290 @@ class CharacterService:
             replayed=receipt.replayed,
         )
 
+    async def plan_growth(
+        self,
+        user_id: str,
+        *,
+        experience: int = 0,
+        weapon_experience: int = 0,
+    ) -> CharacterGrowthPlan:
+        """生成一次人物与其本命武器的独立成长变更。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        character_snapshot, weapon_snapshot = await self._growth_snapshots(
+            normalized_user_id
+        )
+        character = dict(_state_mapping(character_snapshot.value, "character/main"))
+        weapon = dict(_state_mapping(weapon_snapshot.value, "weapon/main"))
+        try:
+            cultivator_advance = self._growth.advance_cultivator(
+                level=_state_positive_int(character.get("等级"), "人物.等级"),
+                experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
+                realm_id=_state_text(character.get("境界"), "人物.境界"),
+                gained=_nonnegative_request_int(experience, "人物经验"),
+            )
+            weapon_advance = self._growth.advance_weapon(
+                level=_state_positive_int(weapon.get("等级"), "本命武器.等级"),
+                experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
+                gained=_nonnegative_request_int(weapon_experience, "本命武器经验"),
+            )
+        except GrowthError as exc:
+            raise CharacterCultivationError(str(exc)) from exc
+        character["等级"] = cultivator_advance.level_after
+        character["经验"] = cultivator_advance.experience_after
+        character["属性"] = _add_numbers(
+            _state_mapping(character.get("属性"), "人物.属性"),
+            self._growth.cultivator_attribute_growth(cultivator_advance.levels_gained),
+        )
+        weapon["等级"] = weapon_advance.level_after
+        weapon["经验"] = weapon_advance.experience_after
+        weapon["器阶"] = weapon_advance.stage_after
+        return CharacterGrowthPlan(
+            cultivator_advance.level_before,
+            cultivator_advance.level_after,
+            weapon_advance.level_before,
+            weapon_advance.level_after,
+            (
+                StateMutation(
+                    normalized_user_id,
+                    "character",
+                    "main",
+                    character,
+                    character_snapshot.version,
+                ),
+                StateMutation(
+                    normalized_user_id,
+                    "weapon",
+                    "main",
+                    weapon,
+                    weapon_snapshot.version,
+                ),
+            ),
+        )
+
+    async def plan_equip(
+        self,
+        user_id: str,
+        *,
+        category: str,
+        content_id: str,
+        grade_id: str,
+        slot: int,
+    ) -> CharacterEquipPlan:
+        """验证道藏所有权，并生成一个人物修行槽替换。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        normalized_category = str(category or "").strip()
+        if normalized_category not in {"功法", "真意", "气机"}:
+            raise CharacterCultivationError("人物只能装配功法、真意或气机")
+        if isinstance(slot, bool) or not isinstance(slot, int) or slot < 1:
+            raise CharacterCultivationError("修行槽位必须是正整数")
+        try:
+            ownership = await self._asset.cultivation_ownership(
+                normalized_user_id,
+                normalized_category,
+                content_id,
+                grade_id,
+            )
+        except (AssetStateError, ValueError) as exc:
+            raise CharacterCultivationError(str(exc)) from exc
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "cultivation", "main")
+        )
+        if snapshot is None:
+            raise CharacterStateError("人物缺少修行槽状态")
+        cultivation = dict(_state_mapping(snapshot.value, "cultivation/main"))
+        slots = list(_state_slots(cultivation.get(normalized_category), normalized_category))
+        if slot > len(slots):
+            raise CharacterCultivationError(
+                f"{normalized_category}槽位只有{len(slots)}个"
+            )
+        replaced = slots[slot - 1]
+        slots[slot - 1] = {
+            "编号": ownership.content_id,
+            "品级": ownership.grade.grade_id,
+        }
+        cultivation[normalized_category] = slots
+        build = {
+            name: tuple(
+                str(entry["编号"])
+                for raw in _state_slots(cultivation.get(name), name)
+                if raw is not None
+                for entry in (_state_mapping(raw, f"{name}槽"),)
+            )
+            for name in ("功法", "真意", "气机")
+        }
+        conflict = self._growth.build_conflict(build)
+        if conflict is not None:
+            raise CharacterCultivationError(
+                f"该构筑触发相冲机制：{'、'.join(sorted(conflict))}"
+            )
+        replaced_id = "" if replaced is None else _state_text(
+            _state_mapping(replaced, "原修行槽").get("编号"), "原修行槽.编号"
+        )
+        return CharacterEquipPlan(
+            normalized_category,
+            slot,
+            ownership.content_id,
+            ownership.name,
+            ownership.grade.grade_id,
+            replaced_id,
+            StateMutation(
+                normalized_user_id,
+                "cultivation",
+                "main",
+                cultivation,
+                snapshot.version,
+            ),
+        )
+
+    async def plan_breakthrough(
+        self, user_id: str, *, medicine_id: str
+    ) -> CharacterBreakthroughPlan:
+        """校验突破丹并结算人物境界、永久属性和积压经验。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        current_realm_id = _state_text(character.get("境界"), "人物.境界")
+        current_realm = self._growth.realm(current_realm_id)
+        level_before = _state_positive_int(character.get("等级"), "人物.等级")
+        if level_before != current_realm.maximum_level:
+            raise CharacterCultivationError(
+                f"达到{current_realm.maximum_level}级后才能突破{current_realm.name}"
+            )
+        next_realm = self._growth.next_realm(current_realm_id)
+        medicine, permanent = self._breakthrough_medicine(medicine_id, next_realm.realm_id)
+        records = list(_state_records(character.get("突破记录"), "人物.突破记录"))
+        if any(record.get("目标境界") == next_realm.realm_id for record in records):
+            raise CharacterCultivationError("该境界已经完成突破")
+        attributes = _add_numbers(
+            _state_mapping(character.get("属性"), "人物.属性"), permanent
+        )
+        bonuses = _add_numbers(
+            _state_mapping(character.get("属性加成"), "人物.属性加成"), permanent
+        )
+        advance = self._growth.advance_cultivator(
+            level=level_before,
+            experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
+            realm_id=next_realm.realm_id,
+            gained=0,
+        )
+        attributes = _add_numbers(
+            attributes,
+            self._growth.cultivator_attribute_growth(advance.levels_gained),
+        )
+        records.append(
+            {
+                "目标境界": next_realm.realm_id,
+                "突破丹": str(medicine.get("编号")),
+                "补正来源丹药": None,
+            }
+        )
+        character.update(
+            {
+                "境界": next_realm.realm_id,
+                "等级": advance.level_after,
+                "经验": advance.experience_after,
+                "属性": attributes,
+                "属性加成": bonuses,
+                "突破记录": records,
+            }
+        )
+        return CharacterBreakthroughPlan(
+            current_realm_id,
+            next_realm.realm_id,
+            next_realm.name,
+            str(medicine.get("编号")),
+            StateMutation(
+                normalized_user_id,
+                "character",
+                "main",
+                character,
+                snapshot.version,
+            ),
+        )
+
+    async def plan_weapon_law(
+        self, user_id: str, *, law_id: str, slot: int
+    ) -> CharacterLawPlan:
+        """生成玩家本命武器指定孔位的器律覆炼。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        if isinstance(slot, bool) or not isinstance(slot, int) or slot < 1:
+            raise CharacterCultivationError("器律孔位必须是正整数")
+        law = self._data.entity("器律", str(law_id or "").strip())
+        law_name = str(law.get("名称") or "").strip()
+        law_stage = str(law.get("器阶") or "").strip()
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "weapon", "main")
+        )
+        if snapshot is None:
+            raise CharacterStateError("人物缺少本命武器状态")
+        weapon = dict(_state_mapping(snapshot.value, "weapon/main"))
+        level = _state_positive_int(weapon.get("等级"), "本命武器.等级")
+        _, open_slots = self._growth.weapon_stage(level)
+        if slot > open_slots:
+            raise CharacterCultivationError(f"当前本命武器只开放{open_slots}个器律孔")
+        if not self._growth.law_allowed(level, law_stage):
+            raise CharacterCultivationError("该器律的器阶高于当前本命武器")
+        laws = list(_state_law_slots(weapon.get("器律"), "本命武器.器律"))
+        laws.extend([None] * (slot - len(laws)))
+        replaced = laws[slot - 1]
+        laws[slot - 1] = str(law.get("编号") or law_id)
+        weapon["器律"] = laws
+        return CharacterLawPlan(
+            slot,
+            str(law.get("编号") or law_id),
+            law_name,
+            "" if replaced is None else replaced,
+            StateMutation(
+                normalized_user_id,
+                "weapon",
+                "main",
+                weapon,
+                snapshot.version,
+            ),
+        )
+
+    async def _growth_snapshots(self, user_id: str):
+        snapshots = await self._database.get_many(
+            (
+                StateAddress(user_id, "character", "main"),
+                StateAddress(user_id, "weapon", "main"),
+            )
+        )
+        by_type = {snapshot.address.state_type: snapshot for snapshot in snapshots}
+        if "character" not in by_type:
+            raise CharacterNotFoundError("尚未创建人物")
+        if "weapon" not in by_type:
+            raise CharacterStateError("人物缺少本命武器状态")
+        return by_type["character"], by_type["weapon"]
+
+    def _breakthrough_medicine(
+        self, medicine_id: str, target_realm_id: str
+    ) -> tuple[Mapping[str, object], Mapping[str, int | float]]:
+        normalized = str(medicine_id or "").strip()
+        medicine = self._data.entity("物品", normalized)
+        if self._data.entity_record("物品", normalized).number_category != "丹药":
+            raise CharacterCultivationError("只能使用突破丹突破境界")
+        effect = _mapping(medicine.get("使用效果"), "突破丹.使用效果")
+        if effect.get("类型") != "境界突破" or effect.get("目标境界") != target_realm_id:
+            raise CharacterCultivationError("该突破丹不对应下一境界")
+        permanent = _mapping(effect.get("永久属性", {}), "突破丹.永久属性")
+        return medicine, {
+            str(name): _number(raw, f"突破丹.永久属性.{name}")
+            for name, raw in permanent.items()
+        }
+
     def _validate_static_rules(self) -> None:
         creation = _mapping(self._role_rule.get("创建"), "人物.json.创建")
         name_rule = _mapping(creation.get("姓名"), "人物.json.创建.姓名")
@@ -343,6 +637,8 @@ class CharacterService:
             raise CharacterStateError("本命武器已装器律超过当前开放孔数")
         equipped_laws: list[EquippedContent] = []
         for slot, raw in enumerate(raw_laws, start=1):
+            if raw is None:
+                continue
             content_id = _state_text(raw, f"本命武器.器律[{slot}]")
             name = _state_text(
                 self._data.entity("器律", content_id).get("名称"),
@@ -408,6 +704,7 @@ class CharacterService:
             "属性加成": {},
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},
             "自动用药": bool(self._role_rule.get("自动用药")),
+            "突破记录": [],
         }
 
     def _cultivation_state(self) -> dict[str, object]:
@@ -464,6 +761,55 @@ def _state_nonnegative_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise CharacterStateError(f"{label}必须是非负整数")
     return value
+
+
+def _nonnegative_request_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise CharacterCultivationError(f"{label}必须是非负整数")
+    return value
+
+
+def _required_user_id(value: object) -> str:
+    result = str(value or "").strip()
+    if not result:
+        raise CharacterCultivationError("user_id不能为空")
+    return result
+
+
+def _state_slots(value: object, category: str) -> tuple[object | None, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise CharacterStateError(f"修行槽.{category}必须是数组")
+    return tuple(value)
+
+
+def _state_law_slots(value: object, label: str) -> tuple[str | None, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise CharacterStateError(f"{label}必须是数组")
+    result: list[str | None] = []
+    for index, raw in enumerate(value, start=1):
+        result.append(None if raw is None else _state_text(raw, f"{label}[{index}]"))
+    return tuple(result)
+
+
+def _state_records(value: object, label: str) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise CharacterStateError(f"{label}必须是数组")
+    return tuple(_state_mapping(raw, f"{label}[]") for raw in value)
+
+
+def _add_numbers(
+    source: Mapping[str, object], additions: Mapping[str, int | float]
+) -> dict[str, int | float]:
+    result: dict[str, int | float] = {}
+    for name, raw in source.items():
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise CharacterStateError(f"属性.{name}必须是数值")
+        result[str(name)] = raw
+    for name, raw in additions.items():
+        before = result.get(str(name), 0)
+        value = float(before) + float(raw)
+        result[str(name)] = int(value) if value.is_integer() else round(value, 4)
+    return result
 
 
 def _state_bool(value: object, label: str) -> bool:

@@ -22,11 +22,14 @@ from .contracts import (
     AssetStateError,
     AssetStatus,
     AssetSubcategory,
+    CultivationOwnership,
     InventoryAdjustment,
     InventoryChange,
     InventoryChangeError,
     InventoryMutationPlan,
     InventoryStack,
+    LawReserveChangePlan,
+    LawReserveStack,
 )
 
 _STATE_TYPES = frozenset(
@@ -269,6 +272,92 @@ class AssetService:
                 )
             )
         return InventoryMutationPlan(tuple(changes), tuple(operations))
+
+    async def cultivation_ownership(
+        self,
+        user_id: str,
+        category: str,
+        content_id: str,
+        grade_id: str,
+    ) -> CultivationOwnership:
+        """精确确认玩家道藏中的一个修行实例。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_category = _required_text(category, "修行类别")
+        if normalized_category not in _CULTIVATION_CATEGORIES:
+            raise AssetStateError(f"不能装配该类别：{normalized_category}")
+        normalized_content_id = _required_text(content_id, "修行编号")
+        normalized_grade_id = self.grade(grade_id).grade_id
+        record = self._data.entity_record(normalized_category, normalized_content_id)
+        if record.number_category != normalized_category:
+            raise AssetStateError("修行编号类别不匹配")
+        snapshot = await self._database.get(
+            StateAddress(
+                normalized_user_id,
+                "cultivation_library",
+                f"{normalized_content_id}:{normalized_grade_id}",
+            )
+        )
+        if snapshot is None:
+            raise AssetStateError("道藏中没有该修行内容")
+        value = _mapping(snapshot.value, "道藏实例")
+        if _text(value.get("编号"), "道藏实例.编号") != normalized_content_id:
+            raise AssetStateError("道藏状态键与编号不一致")
+        stored_grade = self.grade(_text(value.get("品级"), "道藏实例.品级"))
+        if stored_grade.grade_id != normalized_grade_id:
+            raise AssetStateError("道藏状态键与品级不一致")
+        return CultivationOwnership(
+            normalized_category,
+            normalized_content_id,
+            _entity_name(self._data, normalized_category, normalized_content_id),
+            stored_grade,
+            snapshot.version,
+        )
+
+    async def law_reserve_stack(
+        self, user_id: str, law_id: str
+    ) -> LawReserveStack:
+        """取得玩家器藏中的一类待覆炼器律。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_law_id = _required_text(law_id, "器律编号")
+        law = self._data.entity("器律", normalized_law_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "law_reserve", normalized_law_id)
+        )
+        if snapshot is None:
+            raise AssetStateError("器藏中没有该器律")
+        value = _mapping(snapshot.value, "器藏实例")
+        if _text(value.get("编号"), "器藏实例.编号") != normalized_law_id:
+            raise AssetStateError("器藏状态键与编号不一致")
+        return LawReserveStack(
+            normalized_law_id,
+            _required_entity_text(law, "名称", f"器律 {normalized_law_id}"),
+            _required_entity_text(law, "器阶", f"器律 {normalized_law_id}"),
+            _positive_int(value.get("数量"), "器藏实例.数量"),
+            snapshot.version,
+        )
+
+    async def plan_law_reserve_consumption(
+        self, user_id: str, law_id: str
+    ) -> LawReserveChangePlan:
+        """为覆炼事务生成一份共享器藏扣除。"""
+
+        stack = await self.law_reserve_stack(user_id, law_id)
+        after = stack.quantity - 1
+        return LawReserveChangePlan(
+            stack,
+            after,
+            StateMutation(
+                _required_text(user_id, "user_id"),
+                "law_reserve",
+                stack.law_id,
+                {"编号": stack.law_id, "数量": after} if after else None,
+                stack.version,
+            ),
+        )
 
     def _entry(
         self,

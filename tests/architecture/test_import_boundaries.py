@@ -216,6 +216,8 @@ def _boundary_violation(source: str, target: str) -> str:
             return "玩法服务不得反向引用触发层"
         if _is_internal_core_module(target):
             return "玩法服务只能从核心微服务包顶层导入"
+        if _cross_feature_import(source, target):
+            return "玩法组件不得互相导入，协作必须经过核心状态或组合根"
         return ""
 
     if source.startswith("game.cmd.") and _is_within(target, "game.core"):
@@ -233,6 +235,14 @@ def _cross_core_violation(source: str, target: str) -> str:
     if source_parts[2] != target_parts[2] and len(target_parts) > 3:
         return "跨核心服务只能从目标包顶层导入"
     return ""
+
+
+def _cross_feature_import(source: str, target: str) -> bool:
+    if not target.startswith("game.features."):
+        return False
+    source_parts = source.split(".")
+    target_parts = target.split(".")
+    return len(source_parts) >= 3 and len(target_parts) >= 3 and source_parts[2] != target_parts[2]
 
 
 def _is_internal_core_module(target: str) -> bool:

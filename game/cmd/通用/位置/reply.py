@@ -8,14 +8,17 @@ from game.features.weizhi import (
     NearbyOverview,
     NearbyWorldLocation,
     NearbyWorldLocations,
-    PositionAction,
     PositionCopy,
 )
-from message import Action, M
+from message import M
+
+from ...actions import CommandAction, message_actions
 
 
 def current(
-    copy: PositionCopy, result: CurrentPositionView, actions: tuple[PositionAction, ...]
+    copy: PositionCopy,
+    result: CurrentPositionView,
+    actions: tuple[CommandAction, ...],
 ):
     location = result.location
     builder = (
@@ -44,11 +47,11 @@ def current(
         builder.section(copy.active_companion_section, icon=copy.cultivator_icon).field(
             result.active_companion.name, result.active_companion.title
         )
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def nearby_overview(
-    copy: PositionCopy, result: NearbyOverview, actions: tuple[PositionAction, ...]
+    copy: PositionCopy, result: NearbyOverview, actions: tuple[CommandAction, ...]
 ):
     location = result.current.location
     location_name = _location_name(copy, location)
@@ -72,13 +75,13 @@ def nearby_overview(
     builder.row(
         (copy.region_label, location.region), (copy.terrain_label, location.terrain)
     )
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def nearby_cultivators(
     copy: PositionCopy,
     result: NearbyCultivatorPage,
-    actions: tuple[PositionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     builder = M.document().header(copy.cultivators_title)
     if result.active_companion is not None:
@@ -131,13 +134,13 @@ def nearby_cultivators(
     )
     if result.truncated:
         builder.line(copy.cultivators_truncated)
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def nearby_locations(
     copy: PositionCopy,
     result: NearbyWorldLocations,
-    actions: tuple[PositionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     builder = (
         M.document()
@@ -148,17 +151,20 @@ def nearby_locations(
         builder.line(copy.locations_empty)
     for index, location in enumerate(result.values, start=1):
         _append_location(builder, copy, index, location)
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def error(
-    copy: PositionCopy, title: str, message: str, actions: tuple[PositionAction, ...]
+    copy: PositionCopy,
+    title: str,
+    message: str,
+    actions: tuple[CommandAction, ...],
 ):
     return (
         M.document()
         .section(title, icon=copy.error_icon)
         .line(message)
-        .actions(_actions(actions))
+        .actions(message_actions(actions))
         .build()
     )
 
@@ -189,19 +195,6 @@ def _location_name(copy: PositionCopy, location) -> str:
 
 def _coordinate(copy: PositionCopy, xy: tuple[int, int]) -> str:
     return copy.coordinate.format(横坐标=xy[0], 纵坐标=xy[1])
-
-
-def _actions(values: tuple[PositionAction, ...]) -> tuple[Action, ...]:
-    return tuple(
-        Action(
-            value.action_id,
-            value.label,
-            value.command,
-            behavior=value.behavior,
-            style=value.style,
-        )
-        for value in values
-    )
 
 
 __all__ = [

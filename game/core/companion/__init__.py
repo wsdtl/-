@@ -2,6 +2,9 @@
 
 from .contracts import (
     ActiveCompanion,
+    ActiveCompanionInstance,
+    CompanionBreakthroughPlan,
+    CompanionCultivationError,
     CompanionDefinition,
     CompanionDialogue,
     CompanionError,
@@ -9,9 +12,11 @@ from .contracts import (
     CompanionFarewellPlan,
     CompanionGiftError,
     CompanionGiftPlan,
+    CompanionGrowthPlan,
     CompanionInstance,
     CompanionInvitationError,
     CompanionInvitationPlan,
+    CompanionLawPlan,
     CompanionNotFoundError,
     CompanionRelation,
     CompanionReward,
@@ -24,6 +29,9 @@ from .service import CompanionService
 
 __all__ = [
     "ActiveCompanion",
+    "ActiveCompanionInstance",
+    "CompanionBreakthroughPlan",
+    "CompanionCultivationError",
     "CompanionDefinition",
     "CompanionDialogue",
     "CompanionError",
@@ -31,9 +39,11 @@ __all__ = [
     "CompanionFarewellPlan",
     "CompanionGiftError",
     "CompanionGiftPlan",
+    "CompanionGrowthPlan",
     "CompanionInstance",
     "CompanionInvitationError",
     "CompanionInvitationPlan",
+    "CompanionLawPlan",
     "CompanionNotFoundError",
     "CompanionRelation",
     "CompanionReward",

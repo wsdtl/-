@@ -9,18 +9,24 @@ from types import MappingProxyType
 
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import DatabaseService, StateAddress, StateMutation
+from game.core.growth import GrowthService
 
 from .contracts import (
     ActiveCompanion,
+    ActiveCompanionInstance,
+    CompanionBreakthroughPlan,
+    CompanionCultivationError,
     CompanionDefinition,
     CompanionDialogue,
     CompanionFarewellError,
     CompanionFarewellPlan,
     CompanionGiftError,
     CompanionGiftPlan,
+    CompanionGrowthPlan,
     CompanionInstance,
     CompanionInvitationError,
     CompanionInvitationPlan,
+    CompanionLawPlan,
     CompanionNotFoundError,
     CompanionRelation,
     CompanionReward,
@@ -42,9 +48,15 @@ class CompanionService:
 
     state_types = frozenset({RELATION_STATE, ACTIVE_STATE, INSTANCE_STATE})
 
-    def __init__(self, data: JsonDataService, database: DatabaseService) -> None:
+    def __init__(
+        self,
+        data: JsonDataService,
+        database: DatabaseService,
+        growth: GrowthService,
+    ) -> None:
         self._data = data
         self._database = database
+        self._growth = growth
         self._initialized = False
         self._rules: CompanionRules | None = None
         self._definitions: Mapping[str, CompanionDefinition] = MappingProxyType({})
@@ -60,7 +72,15 @@ class CompanionService:
             raise RuntimeError("JSON 数据服务必须先于道侣核心启动")
         if not self._database.status().initialized:
             raise RuntimeError("核心数据库必须先于道侣核心启动")
+        if not self._growth.status().initialized:
+            raise RuntimeError("成长核心必须先于道侣核心启动")
         self._rules = self._load_rules()
+        if (
+            self._rules.qualification_growth_minimum <= 0
+            or self._rules.qualification_growth_maximum
+            < self._rules.qualification_growth_minimum
+        ):
+            raise JsonDataError("道侣资质成长倍率必须为正数且最高倍率不低于最低倍率")
         if self._rules.active_limit != 1:
             raise JsonDataError("当前同行位契约要求道侣.同行上限为1")
         if self._rules.full_reward_lifetime_limit != 1:
@@ -214,8 +234,19 @@ class CompanionService:
         if snapshot is None:
             return None
         value = _state_mapping(snapshot.value, f"{INSTANCE_STATE}/{companion_id}")
-        if set(value) != {"资质", "属性倍率"}:
-            raise CompanionStateError("道侣轻实例字段不完整")
+        expected = {
+            "境界",
+            "等级",
+            "经验",
+            "属性",
+            "修行槽",
+            "本命武器",
+            "资质",
+            "属性倍率",
+            "突破记录",
+        }
+        if set(value) != expected:
+            raise CompanionStateError("道侣实例字段不完整")
         multipliers_value = _state_mapping(value.get("属性倍率"), "道侣实例.属性倍率")
         if set(multipliers_value) != set(definition.fluctuating_attributes):
             raise CompanionStateError("道侣实例属性倍率与正式定义不一致")
@@ -223,12 +254,303 @@ class CompanionService:
             str(key): _state_positive_int(raw, f"道侣实例.属性倍率.{key}")
             for key, raw in multipliers_value.items()
         }
+        realm_id = _state_text(value.get("境界"), "道侣实例.境界")
+        self._growth.realm(realm_id)
+        attributes_value = _state_mapping(value.get("属性"), "道侣实例.属性")
+        attributes = {
+            str(key): _state_number(raw, f"道侣实例.属性.{key}")
+            for key, raw in attributes_value.items()
+        }
+        cultivation_value = _state_mapping(value.get("修行槽"), "道侣实例.修行槽")
+        cultivation = {
+            category: tuple(
+                _state_text(raw, f"道侣实例.修行槽.{category}[]")
+                for raw in _state_sequence(
+                    cultivation_value.get(category),
+                    f"道侣实例.修行槽.{category}",
+                )
+            )
+            for category in ("功法", "真意", "气机")
+        }
+        for category, content_ids in cultivation.items():
+            for content_id in content_ids:
+                self._data.entity(category, content_id)
+        weapon = _state_mapping(value.get("本命武器"), "道侣实例.本命武器")
+        weapon_laws = tuple(
+            None if raw is None else _state_text(raw, "道侣实例.本命武器.器律[]")
+            for raw in _state_sequence(
+                weapon.get("器律"), "道侣实例.本命武器.器律", allow_empty=True
+            )
+        )
+        for law_id in weapon_laws:
+            if law_id is not None:
+                self._data.entity("器律", law_id)
+        weapon_level = _state_positive_int(
+            weapon.get("等级"), "道侣实例.本命武器.等级"
+        )
+        stage_name, open_slots = self._growth.weapon_stage(weapon_level)
+        if _state_text(weapon.get("器阶"), "道侣实例.本命武器.器阶") != stage_name:
+            raise CompanionStateError("道侣本命武器器阶与等级不一致")
+        if len(weapon_laws) > open_slots:
+            raise CompanionStateError("道侣本命武器器律超过已开放孔位")
         return CompanionInstance(
             definition.companion_id,
+            realm_id,
+            _state_positive_int(value.get("等级"), "道侣实例.等级"),
+            _state_nonnegative_int(value.get("经验"), "道侣实例.经验"),
+            MappingProxyType(attributes),
+            MappingProxyType(cultivation),
+            _state_text(weapon.get("名称"), "道侣实例.本命武器.名称"),
+            weapon_level,
+            _state_nonnegative_int(
+                weapon.get("经验"), "道侣实例.本命武器.经验"
+            ),
+            weapon_laws,
             _state_positive_int(value.get("资质"), "道侣实例.资质"),
             MappingProxyType(multipliers),
+            tuple(
+                _state_mapping(raw, "道侣实例.突破记录[]")
+                for raw in _state_sequence(
+                    value.get("突破记录"),
+                    "道侣实例.突破记录",
+                    allow_empty=True,
+                )
+            ),
             snapshot.version,
         )
+
+    async def active_instance(self, user_id: str) -> ActiveCompanionInstance:
+        """取得当前同行事实及其唯一培养实例。"""
+
+        active = await self.active(user_id)
+        if active is None:
+            raise CompanionCultivationError("当前没有同行道侣")
+        instance = await self.instance(user_id, active.companion_id)
+        if instance is None:
+            raise CompanionStateError("当前同行道侣缺少培养实例")
+        return ActiveCompanionInstance(active, instance)
+
+    async def plan_growth(
+        self,
+        user_id: str,
+        *,
+        experience: int = 0,
+        weapon_experience: int = 0,
+    ) -> CompanionGrowthPlan:
+        """只为当前同行道侣结算人物与本命武器成长。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        try:
+            cultivator = self._growth.advance_cultivator(
+                level=before.level,
+                experience=before.experience,
+                realm_id=before.realm_id,
+                gained=_request_nonnegative_int(experience, "道侣经验"),
+            )
+            weapon = self._growth.advance_weapon(
+                level=before.weapon_level,
+                experience=before.weapon_experience,
+                gained=_request_nonnegative_int(
+                    weapon_experience, "道侣本命武器经验"
+                ),
+            )
+        except ValueError as exc:
+            raise CompanionCultivationError(str(exc)) from exc
+        definition = self.definition(before.companion_id)
+        multiplier = _qualification_multiplier(before, definition, self.rules())
+        attributes = _add_numbers(
+            before.attributes,
+            self._growth.cultivator_attribute_growth(
+                cultivator.levels_gained,
+                multiplier=multiplier,
+            ),
+        )
+        after = CompanionInstance(
+            before.companion_id,
+            before.realm_id,
+            cultivator.level_after,
+            cultivator.experience_after,
+            MappingProxyType(attributes),
+            before.cultivation,
+            before.weapon_name,
+            weapon.level_after,
+            weapon.experience_after,
+            before.weapon_laws,
+            before.qualification,
+            before.attribute_multipliers,
+            before.breakthrough_records,
+            before.version + 1,
+        )
+        return CompanionGrowthPlan(
+            before.companion_id,
+            before.level,
+            after.level,
+            before.weapon_level,
+            after.weapon_level,
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_breakthrough(
+        self, user_id: str, *, medicine_id: str
+    ) -> CompanionBreakthroughPlan:
+        """只为当前同行道侣生成独立突破。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        realm = self._growth.realm(before.realm_id)
+        if before.level != realm.maximum_level:
+            raise CompanionCultivationError(
+                f"{self.definition(before.companion_id).name}达到"
+                f"{realm.maximum_level}级后才能突破{realm.name}"
+            )
+        next_realm = self._growth.next_realm(before.realm_id)
+        medicine, permanent = self._breakthrough_medicine(
+            medicine_id, next_realm.realm_id
+        )
+        if any(
+            record.get("目标境界") == next_realm.realm_id
+            for record in before.breakthrough_records
+        ):
+            raise CompanionCultivationError("该道侣已经完成此次境界突破")
+        definition = self.definition(before.companion_id)
+        multiplier = _qualification_multiplier(before, definition, self.rules())
+        advance = self._growth.advance_cultivator(
+            level=before.level,
+            experience=before.experience,
+            realm_id=next_realm.realm_id,
+            gained=0,
+        )
+        attributes = _add_numbers(before.attributes, permanent)
+        attributes = _add_numbers(
+            attributes,
+            self._growth.cultivator_attribute_growth(
+                advance.levels_gained,
+                multiplier=multiplier,
+            ),
+        )
+        records = before.breakthrough_records + (
+            MappingProxyType(
+                {
+                    "目标境界": next_realm.realm_id,
+                    "突破丹": str(medicine.get("编号")),
+                    "补正来源丹药": None,
+                }
+            ),
+        )
+        after = CompanionInstance(
+            before.companion_id,
+            next_realm.realm_id,
+            advance.level_after,
+            advance.experience_after,
+            MappingProxyType(attributes),
+            before.cultivation,
+            before.weapon_name,
+            before.weapon_level,
+            before.weapon_experience,
+            before.weapon_laws,
+            before.qualification,
+            before.attribute_multipliers,
+            records,
+            before.version + 1,
+        )
+        return CompanionBreakthroughPlan(
+            before.companion_id,
+            before.realm_id,
+            next_realm.realm_id,
+            next_realm.name,
+            str(medicine.get("编号")),
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_weapon_law(
+        self, user_id: str, *, law_id: str, slot: int
+    ) -> CompanionLawPlan:
+        """只覆炼当前同行道侣自己的本命武器。"""
+
+        if isinstance(slot, bool) or not isinstance(slot, int) or slot < 1:
+            raise CompanionCultivationError("器律孔位必须是正整数")
+        current = await self.active_instance(user_id)
+        before = current.instance
+        law = self._data.entity("器律", str(law_id or "").strip())
+        law_name = _text(law.get("名称"), "器律.名称")
+        law_stage = _text(law.get("器阶"), "器律.器阶")
+        _, open_slots = self._growth.weapon_stage(before.weapon_level)
+        if slot > open_slots:
+            raise CompanionCultivationError(
+                f"当前道侣本命武器只开放{open_slots}个器律孔"
+            )
+        if not self._growth.law_allowed(before.weapon_level, law_stage):
+            raise CompanionCultivationError("该器律的器阶高于道侣本命武器")
+        laws = list(before.weapon_laws)
+        laws.extend([None] * (slot - len(laws)))
+        replaced = laws[slot - 1]
+        normalized_law_id = _text(law.get("编号") or law_id, "器律.编号")
+        laws[slot - 1] = normalized_law_id
+        after = CompanionInstance(
+            before.companion_id,
+            before.realm_id,
+            before.level,
+            before.experience,
+            before.attributes,
+            before.cultivation,
+            before.weapon_name,
+            before.weapon_level,
+            before.weapon_experience,
+            tuple(laws),
+            before.qualification,
+            before.attribute_multipliers,
+            before.breakthrough_records,
+            before.version + 1,
+        )
+        return CompanionLawPlan(
+            before.companion_id,
+            slot,
+            normalized_law_id,
+            law_name,
+            "" if replaced is None else replaced,
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    def _active_instance_operations(
+        self,
+        user_id: str,
+        current: ActiveCompanionInstance,
+        after: CompanionInstance,
+    ) -> tuple[StateMutation, ...]:
+        normalized_user_id = _user_id(user_id)
+        return (
+            StateMutation(
+                normalized_user_id,
+                INSTANCE_STATE,
+                after.companion_id,
+                _instance_value(after, self._growth),
+                current.instance.version,
+            ),
+            StateMutation(
+                normalized_user_id,
+                ACTIVE_STATE,
+                ACTIVE_KEY,
+                {"道侣编号": current.active.companion_id},
+                current.active.version,
+            ),
+        )
+
+    def _breakthrough_medicine(
+        self, medicine_id: str, target_realm_id: str
+    ) -> tuple[Mapping[str, object], Mapping[str, int | float]]:
+        normalized = str(medicine_id or "").strip()
+        medicine = self._data.entity("物品", normalized)
+        if self._data.entity_record("物品", normalized).number_category != "丹药":
+            raise CompanionCultivationError("只能使用突破丹突破境界")
+        effect = _mapping(medicine.get("使用效果"), "突破丹.使用效果")
+        if effect.get("类型") != "境界突破" or effect.get("目标境界") != target_realm_id:
+            raise CompanionCultivationError("该突破丹不对应道侣的下一境界")
+        permanent = _mapping(effect.get("永久属性", {}), "突破丹.永久属性")
+        return medicine, {
+            str(name): _number(raw, f"突破丹.永久属性.{name}")
+            for name, raw in permanent.items()
+        }
 
     async def plan_gift(
         self,
@@ -346,10 +668,7 @@ class CompanionService:
                     _user_id(user_id),
                     INSTANCE_STATE,
                     definition.companion_id,
-                    {
-                        "资质": instance.qualification,
-                        "属性倍率": dict(instance.attribute_multipliers),
-                    },
+                    _instance_value(instance, self._growth),
                     0,
                 )
             )
@@ -402,10 +721,35 @@ class CompanionService:
             attribute: source.randint(*definition.attribute_multiplier_range)
             for attribute in definition.fluctuating_attributes
         }
+        attributes = {
+            name: _scaled_number(raw, multipliers.get(name, 100))
+            for name, raw in definition.attribute_overrides.items()
+        }
+        build = self._growth.random_companion_build(
+            pools=definition.cultivation_pools,
+            slots=self.rules().cultivation_slots,
+            seed=source.getrandbits(64),
+        )
         return CompanionInstance(
             definition.companion_id,
+            definition.realm_id,
+            definition.level,
+            0,
+            MappingProxyType(attributes),
+            MappingProxyType(
+                {
+                    "功法": build.techniques,
+                    "真意": build.intents,
+                    "气机": build.qi_patterns,
+                }
+            ),
+            definition.weapon_name,
+            definition.weapon_level,
+            definition.weapon_experience,
+            definition.weapon_laws,
             qualification,
             MappingProxyType(multipliers),
+            (),
             1,
         )
 
@@ -416,6 +760,10 @@ class CompanionService:
         )
         invitation = _mapping(value.get("邀约"), "道侣.邀约")
         reward = _mapping(value.get("圆满回礼"), "道侣.圆满回礼")
+        slots_value = _mapping(value.get("修行槽位"), "道侣.修行槽位")
+        qualification_growth = _mapping(
+            value.get("资质成长修正"), "道侣.资质成长修正"
+        )
         return CompanionRules(
             _positive_affection(value.get("赠礼每件好感"), "道侣.赠礼每件好感"),
             _positive_int(value.get("同行上限"), "道侣.同行上限"),
@@ -433,6 +781,16 @@ class CompanionService:
                 reward.get("每名道侣终身次数"),
                 "道侣.圆满回礼.每名道侣终身次数",
             ),
+            MappingProxyType(
+                {
+                    category: _positive_int(
+                        slots_value.get(category), f"道侣.修行槽位.{category}"
+                    )
+                    for category in ("功法", "真意", "气机")
+                }
+            ),
+            Decimal(str(qualification_growth.get("最低倍率"))),
+            Decimal(str(qualification_growth.get("最高倍率"))),
         )
 
     def _realms(self) -> tuple[tuple[str, str, int, int], ...]:
@@ -485,6 +843,27 @@ class CompanionService:
         if reward.grade_id not in grade_ids:
             raise JsonDataError(f"道侣 {companion_id} 使用未知回礼品级")
         fluctuation = _mapping(value.get("实力波动"), "道侣.实力波动")
+        attributes = _mapping(value.get("属性覆盖"), "道侣.属性覆盖")
+        cultivation_pools = MappingProxyType(
+            {
+                category: _text(value.get(f"{category}池"), f"道侣 {companion_id}.{category}池")
+                for category in ("功法", "真意", "气机")
+            }
+        )
+        for category, pool_name in cultivation_pools.items():
+            if not self._data.pool_members((pool_name,), category):
+                raise JsonDataError(f"道侣 {companion_id} 的{category}池为空")
+        weapon = _mapping(value.get("本命武器"), f"道侣 {companion_id}.本命武器")
+        weapon_laws = tuple(
+            _text(raw, f"道侣 {companion_id}.本命武器.器律[]")
+            for raw in _sequence(
+                weapon.get("器律"),
+                f"道侣 {companion_id}.本命武器.器律",
+                allow_empty=True,
+            )
+        )
+        for law_id in weapon_laws:
+            self._data.entity("器律", law_id)
         qualification = _integer_range(value.get("资质范围"), "道侣.资质范围")
         multiplier_range = _integer_range(fluctuation.get("倍率"), "道侣.实力波动.倍率")
         realm_id, realm_name = matches[0]
@@ -516,6 +895,19 @@ class CompanionService:
             qualification,
             _text_sequence(fluctuation.get("属性"), "道侣.实力波动.属性"),
             multiplier_range,
+            cultivation_pools,
+            MappingProxyType(
+                {
+                    str(key): _number(raw, f"道侣 {companion_id}.属性覆盖.{key}")
+                    for key, raw in attributes.items()
+                }
+            ),
+            _text(weapon.get("名称"), f"道侣 {companion_id}.本命武器.名称"),
+            _positive_int(weapon.get("等级"), f"道侣 {companion_id}.本命武器.等级"),
+            _nonnegative_int(
+                weapon.get("经验"), f"道侣 {companion_id}.本命武器.经验"
+            ),
+            weapon_laws,
         )
 
     def _require_initialized(self) -> None:
@@ -532,6 +924,70 @@ def _relation_value(relation: CompanionRelation) -> dict[str, object]:
         value["首次圆满时间"] = relation.first_full_at
     if relation.first_invited_at:
         value["首次邀约时间"] = relation.first_invited_at
+    return value
+
+
+def _instance_value(
+    instance: CompanionInstance,
+    growth: GrowthService,
+) -> dict[str, object]:
+    stage_name, _ = growth.weapon_stage(instance.weapon_level)
+    return {
+        "境界": instance.realm_id,
+        "等级": instance.level,
+        "经验": instance.experience,
+        "属性": dict(instance.attributes),
+        "修行槽": {
+            category: list(content_ids)
+            for category, content_ids in instance.cultivation.items()
+        },
+        "本命武器": {
+            "名称": instance.weapon_name,
+            "等级": instance.weapon_level,
+            "经验": instance.weapon_experience,
+            "器阶": stage_name,
+            "器律": list(instance.weapon_laws),
+        },
+        "资质": instance.qualification,
+        "属性倍率": dict(instance.attribute_multipliers),
+        "突破记录": [dict(record) for record in instance.breakthrough_records],
+    }
+
+
+def _scaled_number(value: float, multiplier: int) -> int | float:
+    result = float(value) * multiplier / 100
+    return int(result) if result.is_integer() else round(result, 4)
+
+
+def _qualification_multiplier(
+    instance: CompanionInstance,
+    definition: CompanionDefinition,
+    rules: CompanionRules,
+) -> float:
+    minimum, maximum = definition.qualification_range
+    if minimum == maximum:
+        return 1.0
+    progress = Decimal(instance.qualification - minimum) / Decimal(maximum - minimum)
+    result = rules.qualification_growth_minimum + progress * (
+        rules.qualification_growth_maximum - rules.qualification_growth_minimum
+    )
+    return float(result)
+
+
+def _add_numbers(
+    source: Mapping[str, int | float], additions: Mapping[str, int | float]
+) -> dict[str, int | float]:
+    result = dict(source)
+    for name, raw in additions.items():
+        before = result.get(str(name), 0)
+        value = float(before) + float(raw)
+        result[str(name)] = int(value) if value.is_integer() else round(value, 4)
+    return result
+
+
+def _request_nonnegative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise CompanionCultivationError(f"{label}必须是非负整数")
     return value
 
 
@@ -582,12 +1038,31 @@ def _state_mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
-def _sequence(value: object, label: str) -> tuple[object, ...]:
+def _sequence(
+    value: object,
+    label: str,
+    *,
+    allow_empty: bool = False,
+) -> tuple[object, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise JsonDataError(f"{label}必须是数组")
     result = tuple(value)
-    if not result:
+    if not result and not allow_empty:
         raise JsonDataError(f"{label}不能为空")
+    return result
+
+
+def _state_sequence(
+    value: object,
+    label: str,
+    *,
+    allow_empty: bool = False,
+) -> tuple[object, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise CompanionStateError(f"{label}必须是数组")
+    result = tuple(value)
+    if not result and not allow_empty:
+        raise CompanionStateError(f"{label}不能为空")
     return result
 
 
@@ -629,9 +1104,33 @@ def _positive_int(value: object, label: str) -> int:
     return value
 
 
+def _nonnegative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise JsonDataError(f"{label}必须是非负整数")
+    return value
+
+
+def _number(value: object, label: str) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise JsonDataError(f"{label}必须是数值")
+    return value
+
+
 def _state_positive_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise CompanionStateError(f"{label}必须是正整数")
+    return value
+
+
+def _state_nonnegative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise CompanionStateError(f"{label}必须是非负整数")
+    return value
+
+
+def _state_number(value: object, label: str) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise CompanionStateError(f"{label}必须是数值")
     return value
 
 

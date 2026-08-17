@@ -108,6 +108,31 @@ class InventoryMutationPlan:
     operations: tuple[StateMutation, ...]
 
 
+@dataclass(frozen=True)
+class CultivationOwnership:
+    category: str
+    content_id: str
+    name: str
+    grade: AssetGrade
+    version: int
+
+
+@dataclass(frozen=True)
+class LawReserveStack:
+    law_id: str
+    name: str
+    stage: str
+    quantity: int
+    version: int
+
+
+@dataclass(frozen=True)
+class LawReserveChangePlan:
+    stack_before: LawReserveStack
+    quantity_after: int
+    operation: StateMutation
+
+
 __all__ = [
     "AssetCategory",
     "AssetEntry",
@@ -117,9 +142,12 @@ __all__ = [
     "AssetStateError",
     "AssetStatus",
     "AssetSubcategory",
+    "CultivationOwnership",
     "InventoryAdjustment",
     "InventoryChange",
     "InventoryChangeError",
     "InventoryMutationPlan",
     "InventoryStack",
+    "LawReserveChangePlan",
+    "LawReserveStack",
 ]

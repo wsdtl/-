@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,9 +12,11 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, TransactionCommand
+from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
+from game.core.pool import PoolService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -26,6 +30,7 @@ from game.features.daolv_jiejiao import (
     CompanionQueryError,
 )
 from game.features.weizhi import PositionFeature
+from message import DocumentMessage
 
 
 def _run(awaitable):
@@ -36,6 +41,10 @@ def _services(tmp_path: Path):
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
     world = WorldService(data)
@@ -44,13 +53,15 @@ def _services(tmp_path: Path):
     player_state.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database)
+    companion = CompanionService(data, database, growth)
     companion.initialize()
     item_catalog = ItemCatalogService(data)
     item_catalog.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    character = CharacterService(data, database, player_state, location, asset)
+    character = CharacterService(
+        data, database, player_state, location, asset, growth
+    )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
@@ -242,3 +253,47 @@ def test_unliked_gift_is_not_consumed_and_multiple_grades_require_choice(
                 )
             )
         )
+
+
+def test_companion_command_repeats_current_location_actions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, companion, _, _, create, interaction, position = _services(tmp_path)
+    _create(create)
+    definition = _local_female(companion)
+
+    class RecordingManager:
+        message: DocumentMessage | None = None
+
+        async def send(self, message: DocumentMessage) -> None:
+            self.message = message
+
+    command_module = import_module("game.cmd.专属.道侣结交")
+    monkeypatch.setattr(
+        command_module,
+        "current_game_services",
+        lambda: SimpleNamespace(
+            features=SimpleNamespace(
+                daolv_jiejiao=interaction,
+                weizhi=position,
+            )
+        ),
+    )
+    manager = RecordingManager()
+
+    _run(
+        command_module.inspect_companion(
+            user_id="qq-1",
+            message=definition.companion_id,
+            manager=manager,
+        )
+    )
+
+    assert manager.message is not None
+    commands = tuple(action.data for action in manager.message.document.actions)
+    assert commands[:2] == (
+        f"交谈 {definition.companion_id}",
+        f"赠予 {definition.companion_id}",
+    )
+    assert commands[-3:] == ("附近 修士", "附近", "地图")

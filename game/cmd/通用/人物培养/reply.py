@@ -1,0 +1,84 @@
+"""人物培养回复构造。"""
+
+from __future__ import annotations
+
+from game.features.renwu_peiyang import (
+    CharacterBreakthroughResult,
+    CharacterCultivationFeature,
+    CharacterCultivationView,
+    CharacterEquipResult,
+    CharacterLawResult,
+)
+from message import M
+
+
+def view(feature: CharacterCultivationFeature, result: CharacterCultivationView):
+    profile = result.profile
+    builder = (
+        M.document()
+        .header(feature.copy("人物", "标题"))
+        .section(profile.name, icon="status")
+        .row(
+            (feature.copy("人物", "境界"), profile.realm_name),
+            (feature.copy("人物", "等级"), profile.level),
+        )
+        .field(
+            feature.copy("人物", "经验"),
+            _progress(profile.experience, result.next_experience),
+        )
+        .section(feature.copy("人物", "修行构筑"), icon="skill")
+    )
+    equipped = {(entry.category, entry.slot): entry for entry in profile.equipped_content}
+    for category, total in profile.cultivation_slots:
+        values = [
+            equipped.get((category, slot)).name if (category, slot) in equipped else "空"
+            for slot in range(1, total + 1)
+        ]
+        builder.field(category, "、".join(values))
+    weapon = profile.weapon
+    builder.section(feature.copy("人物", "本命武器"), icon="weapon")
+    builder.row(("名称", weapon.name), ("器阶", weapon.stage))
+    builder.row(("等级", weapon.level), ("器律孔", f"{len(weapon.equipped_laws)}/{weapon.open_law_slots}"))
+    builder.field("经验", _progress(weapon.experience, result.weapon_next_experience))
+    for law in weapon.equipped_laws:
+        builder.item(law.slot, law.name)
+    return builder.build()
+
+
+def equipped(feature: CharacterCultivationFeature, result: CharacterEquipResult):
+    text = feature.copy("装配", "人物成功").format(
+        名称=result.content_name, 类别=result.category, 槽位=result.slot
+    )
+    return (
+        M.document()
+        .section("人物装配", icon="skill")
+        .line(text)
+        .build()
+    )
+
+
+def breakthrough(
+    feature: CharacterCultivationFeature, result: CharacterBreakthroughResult
+):
+    text = feature.copy("突破", "人物成功").format(
+        丹药=result.medicine_name, 境界=result.realm_name
+    )
+    return M.document().section("人物突破", icon="status").line(text).build()
+
+
+def forged(feature: CharacterCultivationFeature, result: CharacterLawResult):
+    text = feature.copy("覆炼", "人物成功").format(
+        器律=result.law_name, 孔位=result.slot
+    )
+    return M.document().section("人物覆炼", icon="weapon").line(text).build()
+
+
+def error(message: str):
+    return M.document().section("人物培养", icon="notice").line(message).build()
+
+
+def _progress(current: int, required: int) -> str:
+    return str(current) if required == 0 else f"{current}/{required}"
+
+
+__all__ = ["breakthrough", "equipped", "error", "forged", "view"]

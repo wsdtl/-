@@ -5,7 +5,6 @@ from __future__ import annotations
 from decimal import Decimal
 
 from game.features.daolv_jiejiao import (
-    CompanionAction,
     CompanionConversation,
     CompanionCopy,
     CompanionFarewellResult,
@@ -13,7 +12,9 @@ from game.features.daolv_jiejiao import (
     CompanionInvitationResult,
     CompanionView,
 )
-from message import Action, M
+from message import M
+
+from ...actions import CommandAction, message_actions
 
 
 def text(copy: CompanionCopy, section: str, key: str, **values) -> str:
@@ -29,9 +30,7 @@ def error(copy: CompanionCopy, message: str):
     )
 
 
-def view(
-    copy: CompanionCopy, value: CompanionView, actions: tuple[CompanionAction, ...]
-):
+def view(copy: CompanionCopy, value: CompanionView, actions: tuple[CommandAction, ...]):
     definition = value.definition
     relation_text = (
         text(copy, "查看", "尚未结交")
@@ -68,7 +67,7 @@ def view(
             if value.is_active
             else text(copy, "查看", "未同行")
         )
-        .actions(_actions(actions))
+        .actions(message_actions(actions))
         .build()
     )
 
@@ -76,7 +75,7 @@ def view(
 def conversation(
     copy: CompanionCopy,
     result: CompanionConversation,
-    actions: tuple[CompanionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     definition = result.view.definition
     return (
@@ -85,7 +84,7 @@ def conversation(
         .section(definition.title, icon=copy.icons["交谈"])
         .line(f"“{result.line}”")
         .line(definition.dialogue.preference)
-        .actions(_actions(actions))
+        .actions(message_actions(actions))
         .build()
     )
 
@@ -93,7 +92,7 @@ def conversation(
 def gift(
     copy: CompanionCopy,
     result: CompanionGiftResult,
-    actions: tuple[CompanionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     definition = result.view.definition
     builder = M.document().header(text(copy, "赠礼", "标题", 名称=definition.name))
@@ -105,7 +104,7 @@ def gift(
             )
             .line(f"“{result.dialogue}”")
             .line(text(copy, "赠礼", "物品未消耗"))
-            .actions(_actions(actions))
+            .actions(message_actions(actions))
             .build()
         )
     if result.grade is None:
@@ -148,13 +147,13 @@ def gift(
             text(copy, "赠礼", "获得回礼"),
             f"{result.reward_grade.name}{result.reward_item.name} × {result.reward_quantity}",
         )
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def invitation(
     copy: CompanionCopy,
     result: CompanionInvitationResult,
-    actions: tuple[CompanionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     definition = result.view.definition
     builder = (
@@ -171,13 +170,13 @@ def invitation(
         )
     else:
         builder.line(text(copy, "邀约", "再次同行", 名称=definition.name))
-    return builder.actions(_actions(actions)).build()
+    return builder.actions(message_actions(actions)).build()
 
 
 def farewell(
     copy: CompanionCopy,
     result: CompanionFarewellResult,
-    actions: tuple[CompanionAction, ...],
+    actions: tuple[CommandAction, ...],
 ):
     definition = result.definition
     return (
@@ -194,21 +193,8 @@ def farewell(
                 地点=definition.location_name,
             )
         )
-        .actions(_actions(actions))
+        .actions(message_actions(actions))
         .build()
-    )
-
-
-def _actions(values: tuple[CompanionAction, ...]) -> tuple[Action, ...]:
-    return tuple(
-        Action(
-            value.action_id,
-            value.label,
-            value.command,
-            behavior=value.behavior,
-            style=value.style,
-        )
-        for value in values
     )
 
 

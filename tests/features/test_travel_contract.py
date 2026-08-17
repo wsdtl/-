@@ -11,13 +11,16 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
+from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
+from game.core.pool import PoolService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
     CreateCharacterRequest,
 )
+from game.features.weizhi import PositionAction
 from game.features.xinglu import TravelFeature, TravelQueryError, TravelRequest
 from message import DocumentMessage
 from message.renderers.plain_text import render_plain_text
@@ -33,6 +36,10 @@ def _features(
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
     world = WorldService(data)
@@ -43,7 +50,9 @@ def _features(
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    character = CharacterService(data, database, player_state, location, asset)
+    character = CharacterService(
+        data, database, player_state, location, asset, growth
+    )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
@@ -80,10 +89,32 @@ def test_travel_command_renders_journey_destination_and_available_functions(
             self.message = message
 
     command_module = import_module("game.cmd.通用.行路")
+
+    class PositionButtons:
+        @staticmethod
+        def open_location_functions(functions):
+            assert "修士" in functions
+            return ("修士",)
+
+        @staticmethod
+        def position_actions(functions):
+            assert functions == ("修士",)
+            return (
+                PositionAction(
+                    "location.cultivators",
+                    "附近修士",
+                    "附近 修士",
+                    "callback",
+                    "primary",
+                ),
+            )
+
     monkeypatch.setattr(
         command_module,
         "current_game_services",
-        lambda: SimpleNamespace(features=SimpleNamespace(xinglu=travel)),
+        lambda: SimpleNamespace(
+            features=SimpleNamespace(xinglu=travel, weizhi=PositionButtons())
+        ),
     )
     manager = RecordingManager()
     _run(
@@ -102,6 +133,11 @@ def test_travel_command_renders_journey_destination_and_available_functions(
     assert "地点: 天衡城" in content
     assert "区域: 天衡州" in content
     assert "可用功能" in content
+    assert "修士" in content
+    assert "闭关" not in content
+    assert tuple(action.data for action in manager.message.document.actions) == (
+        "附近 修士",
+    )
 
 
 def test_travel_by_xy_returns_named_or_wilderness_location_fact(tmp_path: Path) -> None:

@@ -8,8 +8,10 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateMutation, TransactionCommand
+from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
+from game.core.pool import PoolService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -29,6 +31,10 @@ def _services(tmp_path: Path):
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
     world = WorldService(data)
@@ -39,7 +45,9 @@ def _services(tmp_path: Path):
     location.initialize()
     assets = AssetService(data, database)
     assets.initialize()
-    character = CharacterService(data, database, player_state, location, assets)
+    character = CharacterService(
+        data, database, player_state, location, assets, growth
+    )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()

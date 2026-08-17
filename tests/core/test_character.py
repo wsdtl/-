@@ -11,12 +11,14 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateAddress
+from game.core.growth import GrowthService
 from game.core.location import (
     LocationConflictError,
     LocationMoveCommand,
     LocationService,
 )
 from game.core.player_state import PlayerStateService
+from game.core.pool import PoolService
 from game.core.world import WorldService
 from game.features.chakan_juese import (
     CharacterOverviewFeature,
@@ -48,6 +50,10 @@ def _features(
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
+    pool = PoolService(data)
+    pool.initialize()
+    growth = GrowthService(data, pool)
+    growth.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
     world = WorldService(data)
@@ -58,7 +64,9 @@ def _features(
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    character = CharacterService(data, database, player_state, location, asset)
+    character = CharacterService(
+        data, database, player_state, location, asset, growth
+    )
     character.initialize()
     feature = CreateCharacterFeature(data, world, character)
     feature.initialize()
