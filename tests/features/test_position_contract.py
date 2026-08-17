@@ -13,6 +13,7 @@ from game.core.growth import GrowthService
 from game.core.location import LocationMoveCommand, LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
 from game.core.pool import PoolService
+from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -39,6 +40,8 @@ def _services(tmp_path: Path):
     world.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
+    team = TeamService(data, database, player_state)
+    team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     companion = CompanionService(data, database, growth)
@@ -58,9 +61,10 @@ def _services(tmp_path: Path):
         character,
         player_state,
         companion,
+        team,
     )
     position.initialize()
-    return database, player_state, location, create, position
+    return database, player_state, team, location, create, position
 
 
 def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
@@ -72,7 +76,7 @@ def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
 def test_position_is_created_atomically_and_not_repeated_in_character(
     tmp_path: Path,
 ) -> None:
-    database, _, location, create, position = _services(tmp_path)
+    database, _, _, location, create, position = _services(tmp_path)
     _create(create, "qq-1", "林远")
 
     character = _run(database.list_for_user("qq-1", state_type="character"))[0]
@@ -90,7 +94,7 @@ def test_position_is_created_atomically_and_not_repeated_in_character(
 def test_nearby_cultivators_respect_distance_and_hidden_behavior(
     tmp_path: Path,
 ) -> None:
-    _, player_state, location, create, position = _services(tmp_path)
+    _, player_state, _, location, create, position = _services(tmp_path)
     _create(create, "qq-1", "林远")
     _create(create, "qq-2", "白川")
     _create(create, "qq-3", "顾山")
@@ -111,10 +115,28 @@ def test_nearby_cultivators_respect_distance_and_hidden_behavior(
     assert hidden.cultivators == ()
 
 
+def test_nearby_cultivators_only_publish_team_status_and_player_count(
+    tmp_path: Path,
+) -> None:
+    _, _, team, _, create, position = _services(tmp_path)
+    _create(create, "qq-1", "林远")
+    _create(create, "qq-2", "白川")
+    _create(create, "qq-3", "顾山")
+    _run(team.invite("qq-1", "qq-2", "invite-2"))
+    _run(team.accept("qq-2", "accept-2"))
+
+    visible = _run(position.nearby_cultivators("qq-3"))
+
+    by_name = {value.name: value for value in visible.cultivators}
+    assert by_name["林远"].states[-1] == "组队中（2人）"
+    assert by_name["白川"].states[-1] == "组队中（2人）"
+    assert all("qq-" not in state for value in by_name.values() for state in value.states)
+
+
 def test_nearby_cultivators_use_surface_altitude_for_distance(
     tmp_path: Path,
 ) -> None:
-    _, _, location, create, position = _services(tmp_path)
+    _, _, _, location, create, position = _services(tmp_path)
     _create(create, "qq-1", "林远")
     _create(create, "qq-2", "白川")
     _run(location.move(LocationMoveCommand("qq-1", "move-1", (15, 17), (94, 3))))
@@ -153,7 +175,7 @@ def test_all_companions_resolve_to_exact_world_locations(tmp_path: Path) -> None
 
 
 def test_nearby_query_uses_coordinate_index(tmp_path: Path) -> None:
-    database, _, _, create, _ = _services(tmp_path)
+    database, _, _, _, create, _ = _services(tmp_path)
     _create(create, "qq-1", "林远")
 
     with sqlite3.connect(database.path) as connection:
@@ -174,7 +196,7 @@ def test_nearby_query_uses_coordinate_index(tmp_path: Path) -> None:
 
 
 def test_nearby_locations_are_bounded_static_world_facts(tmp_path: Path) -> None:
-    _, _, _, create, position = _services(tmp_path)
+    _, _, _, _, create, position = _services(tmp_path)
     _create(create, "qq-1", "林远")
 
     result = _run(position.nearby_locations("qq-1"))
@@ -187,7 +209,7 @@ def test_nearby_locations_are_bounded_static_world_facts(tmp_path: Path) -> None
 
 
 def test_position_copy_overview_and_buttons_are_json_driven(tmp_path: Path) -> None:
-    _, _, location, create, position = _services(tmp_path)
+    _, _, _, location, create, position = _services(tmp_path)
     _create(create, "qq-1", "林远")
 
     copy = position.copy()

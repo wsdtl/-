@@ -148,6 +148,7 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
             "地点详情",
             "状态前缀",
             "状态分隔",
+            "队伍状态",
             "功能分隔",
             "无开放功能",
         },
@@ -249,6 +250,11 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
             common.get("状态前缀"), "位置文本.格式.状态前缀", {"状态"}
         ),
         state_separator=_text(common.get("状态分隔"), "位置文本.格式.状态分隔"),
+        team_state=_template(
+            common.get("队伍状态"),
+            "位置文本.格式.队伍状态",
+            {"人数"},
+        ),
         function_separator=_text(common.get("功能分隔"), "位置文本.格式.功能分隔"),
         no_available_function=_text(
             common.get("无开放功能"), "位置文本.格式.无开放功能"

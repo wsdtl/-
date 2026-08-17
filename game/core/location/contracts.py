@@ -67,7 +67,28 @@ class LocationMoveResult:
     replayed: bool
 
 
+@dataclass(frozen=True)
+class GroupLocationMoveCommand:
+    owner_user_id: str
+    request_id: str
+    participant_user_ids: tuple[str, ...]
+    expected_origin_xy: tuple[int, int]
+    destination_xy: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class GroupLocationMoveResult:
+    owner_user_id: str
+    participant_user_ids: tuple[str, ...]
+    origin_xy: tuple[int, int]
+    destination_xy: tuple[int, int]
+    changed: bool
+    replayed: bool
+
+
 __all__ = [
+    "GroupLocationMoveCommand",
+    "GroupLocationMoveResult",
     "LocationConflictError",
     "LocationError",
     "LocationMissingError",

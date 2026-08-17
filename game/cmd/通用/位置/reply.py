@@ -109,7 +109,7 @@ def nearby_cultivators(
     if result.cultivators:
         for cultivator in result.cultivators:
             state = copy.state_separator.join(cultivator.states)
-            state_text = copy.state_prefix.format(状态=state) if state else ""
+            state_text = f" {copy.state_prefix.format(状态=state)}" if state else ""
             builder.field(
                 cultivator.name,
                 copy.cultivator_summary.format(

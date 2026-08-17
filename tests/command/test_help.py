@@ -71,6 +71,7 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "探险",
         "探险进度",
         "探险结算",
+        "队伍",
         "地图",
         "位置",
         "附近",

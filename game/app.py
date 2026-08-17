@@ -21,6 +21,7 @@ from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
+from .core.team import TeamService
 from .core.world import WorldService
 from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
@@ -28,6 +29,7 @@ from .features.chuangjian_renwu import CreateCharacterFeature
 from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
+from .features.duiwu import TeamFeature
 from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
@@ -50,6 +52,7 @@ class CoreServices:
     database: DatabaseService
     location: LocationService
     player_state: PlayerStateService
+    team: TeamService
     character: CharacterService
     asset: AssetService
     enemy: EnemyService
@@ -71,6 +74,7 @@ class FeatureServices:
     renwu_peiyang: CharacterCultivationFeature
     daolv_peiyang: CompanionCultivationFeature
     tanxian: ExplorationFeature
+    duiwu: TeamFeature
 
 
 @dataclass(frozen=True)
@@ -165,6 +169,15 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("guard_rules", player_state_status.guard_rule_count),
         )
     )
+    team = TeamService(data, database, player_state)
+    team_status = team.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("队伍核心微服务已启动"),
+            C.kv("maximum_players", team_status.maximum_players),
+            C.kv("invitation_seconds", team_status.invitation_seconds),
+        )
+    )
     location = LocationService(data, database, world)
     location_status = location.initialize()
     logger.opt(colors=True).success(
@@ -245,6 +258,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         database=database,
         location=location,
         player_state=player_state,
+        team=team,
         character=character,
         asset=asset,
         enemy=enemy,
@@ -281,9 +295,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         character,
         player_state,
         companion,
+        team,
     )
     weizhi.initialize()
-    xinglu = TravelFeature(world, character, location)
+    xinglu = TravelFeature(world, character, location, team)
     xinglu.initialize()
     daolv_jiejiao = CompanionInteractionFeature(
         data,
@@ -314,7 +329,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         database,
     )
     daolv_peiyang.initialize()
-    tanxian = ExplorationFeature(data, exploration, item_catalog, asset)
+    duiwu = TeamFeature(data, team, character, location, player_state)
+    duiwu.initialize()
+    tanxian = ExplorationFeature(data, exploration, item_catalog, asset, team)
     tanxian.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
@@ -328,6 +345,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         renwu_peiyang=renwu_peiyang,
         daolv_peiyang=daolv_peiyang,
         tanxian=tanxian,
+        duiwu=duiwu,
     )
     return GameServices(core=core, features=features)
 

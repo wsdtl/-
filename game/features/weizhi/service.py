@@ -12,6 +12,7 @@ from game.core.companion import CompanionService, LocalCultivator
 from game.core.data import JsonDataError, JsonDataService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
+from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 
 from .contracts import (
@@ -39,6 +40,7 @@ class PositionFeature:
         character: CharacterService,
         player_state: PlayerStateService,
         companion: CompanionService,
+        team: TeamService,
     ) -> None:
         self._data = data
         self._world = world
@@ -46,6 +48,7 @@ class PositionFeature:
         self._character = character
         self._player_state = player_state
         self._companion = companion
+        self._team = team
         self._initialized = False
         self._location_radius_meters = 0
         self._location_limit = 0
@@ -208,18 +211,24 @@ class PositionFeature:
             self._companion.active(user_id),
         )
         user_ids = tuple(value.user_id for value in candidates.values)
-        profiles, states = await asyncio.gather(
+        profiles, states, teams = await asyncio.gather(
             self._character.public_profiles(user_ids),
             self._player_state.public_many(user_ids),
+            self._team.public_many(user_ids),
         )
         profile_by_user = {value.user_id: value for value in profiles}
         state_by_user = {value.user_id: value for value in states}
+        team_by_user = {value.user_id: value for value in teams}
         visible: list[NearbyCultivatorView] = []
         for candidate in candidates.values:
             profile = profile_by_user.get(candidate.user_id)
             state = state_by_user.get(candidate.user_id)
+            team = team_by_user.get(candidate.user_id)
             if profile is None or state is None or not state.appears_nearby:
                 continue
+            names = state.names
+            if team is not None and team.grouped:
+                names += (self.copy().team_state.format(人数=team.member_count),)
             visible.append(
                 NearbyCultivatorView(
                     user_id=candidate.user_id,
@@ -227,7 +236,7 @@ class PositionFeature:
                     gender=profile.gender,
                     realm_name=profile.realm_name,
                     level=profile.level,
-                    states=state.names,
+                    states=names,
                     direction=self._direction(candidates.origin.xy, candidate.xy),
                     distance=self._distance(candidate.distance_squared_meters),
                 )

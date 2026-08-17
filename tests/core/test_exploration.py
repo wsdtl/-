@@ -11,7 +11,7 @@ from game.core.character import CharacterService
 from game.core.combat import CombatService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
-from game.core.database import DatabaseService
+from game.core.database import DatabaseService, StateAddress
 from game.core.enemy import EnemyService
 from game.core.exploration import (
     ExplorationNotFinishedError,
@@ -19,14 +19,17 @@ from game.core.exploration import (
     ExplorationStartCommand,
 )
 from game.core.growth import GrowthService
+from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
     CreateCharacterRequest,
 )
+from game.features.tanxian import ExplorationFeature
 
 
 def _run(awaitable):
@@ -49,12 +52,16 @@ def _services(tmp_path: Path):
     database.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
+    team = TeamService(data, database, player_state)
+    team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     companion = CompanionService(data, database, growth)
     companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    item_catalog = ItemCatalogService(data)
+    item_catalog.initialize()
     character = CharacterService(
         data, database, player_state, location, asset, growth
     )
@@ -74,14 +81,28 @@ def _services(tmp_path: Path):
         combat,
     )
     exploration.initialize()
+    exploration_feature = ExplorationFeature(
+        data, exploration, item_catalog, asset, team
+    )
+    exploration_feature.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
-    return database, player_state, character, asset, create, world, exploration
+    return (
+        database,
+        player_state,
+        character,
+        asset,
+        create,
+        world,
+        exploration,
+        team,
+        exploration_feature,
+    )
 
 
 def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> None:
-    database, player_state, character, asset, create, _, exploration = _services(
-        tmp_path
+    database, player_state, character, asset, create, _, exploration, _, _ = (
+        _services(tmp_path)
     )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     medicines_before = _run(asset.recovery_medicines("qq-1"))
@@ -170,8 +191,37 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
     assert allocated["qq-2"]["掉落"] == {}
 
 
+def test_team_leader_starts_one_real_exploration_for_all_players(
+    tmp_path: Path,
+) -> None:
+    database, player_state, _, _, create, _, _, team, feature = _services(tmp_path)
+    _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
+    _run(create.create(CreateCharacterRequest("qq-2", "create-2", "白川", "男")))
+    _run(team.invite("qq-1", "qq-2", "invite-2"))
+    _run(team.accept("qq-2", "accept-2"))
+
+    started = _run(feature.start("qq-1", "explore-team"))
+
+    assert started.participant_count == 2
+    session = _run(
+        database.get(
+            StateAddress("qq-1", "exploration_session", started.session_id)
+        )
+    )
+    assert session is not None
+    assert session.value["参与用户"] == ("qq-1", "qq-2")
+    for user_id in ("qq-1", "qq-2"):
+        state = _run(player_state.current(user_id))
+        assert state is not None and state.states["行为"].name == "探险中"
+        latest = _run(
+            database.get(StateAddress(user_id, "exploration_latest", "main"))
+        )
+        assert latest is not None
+        assert latest.value["探险编号"] == started.session_id
+
+
 def test_world_exposes_enemy_multiplier_and_environment_id(tmp_path: Path) -> None:
-    _, _, _, _, _, world, _ = _services(tmp_path)
+    _, _, _, _, _, world, _, _, _ = _services(tmp_path)
     location = world.locate(LocationQuery(location_name="溪隐台"))
 
     assert location.enemy_multiplier == (1, 2)

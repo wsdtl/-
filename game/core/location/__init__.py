@@ -1,6 +1,8 @@
 """玩家地表位置核心微服务。"""
 
 from .contracts import (
+    GroupLocationMoveCommand,
+    GroupLocationMoveResult,
     LocationConflictError,
     LocationError,
     LocationMissingError,
@@ -14,6 +16,8 @@ from .contracts import (
 from .service import LocationService
 
 __all__ = [
+    "GroupLocationMoveCommand",
+    "GroupLocationMoveResult",
     "LocationConflictError",
     "LocationError",
     "LocationMissingError",

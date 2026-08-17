@@ -57,6 +57,15 @@ class PublicPlayerState:
 
 
 @dataclass(frozen=True)
+class StateContextUpdateCommand:
+    user_id: str
+    state_type: str
+    context: Mapping[str, Any]
+    expected_state_id: str
+    expected_version: int | None = None
+
+
+@dataclass(frozen=True)
 class StateTransitionCommand:
     user_id: str
     request_id: str
@@ -100,6 +109,7 @@ __all__ = [
     "PlayerStateServiceStatus",
     "PlayerStateSnapshot",
     "PublicPlayerState",
+    "StateContextUpdateCommand",
     "StateGuardResult",
     "StateSlot",
     "StateTransitionCommand",

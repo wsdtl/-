@@ -17,6 +17,7 @@ from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -51,6 +52,8 @@ def _services(tmp_path: Path):
     world.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
+    team = TeamService(data, database, player_state)
+    team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     companion = CompanionService(data, database, growth)
@@ -83,6 +86,7 @@ def _services(tmp_path: Path):
         character,
         player_state,
         companion,
+        team,
     )
     position.initialize()
     return database, companion, item_catalog, asset, create, interaction, position

@@ -5,10 +5,11 @@ from __future__ import annotations
 from game.core.character import CharacterService
 from game.core.data import JsonDataError
 from game.core.location import (
+    GroupLocationMoveCommand,
     LocationConflictError,
-    LocationMoveCommand,
     LocationService,
 )
+from game.core.team import TeamError, TeamService
 from game.core.world import JourneyQuery, LocationQuery, WorldService
 
 from .contracts import (
@@ -27,10 +28,12 @@ class TravelFeature:
         world: WorldService,
         character: CharacterService,
         location: LocationService,
+        team: TeamService,
     ) -> None:
         self._world = world
         self._character = character
         self._location = location
+        self._team = team
         self._initialized = False
 
     def initialize(self) -> None:
@@ -42,12 +45,20 @@ class TravelFeature:
             raise RuntimeError("角色核心必须先于行路玩法启动")
         if not self._location.status().initialized:
             raise RuntimeError("玩家位置核心必须先于行路玩法启动")
+        if not self._team.status().initialized:
+            raise RuntimeError("队伍核心必须先于行路玩法启动")
         self._initialized = True
 
     async def travel(self, request: TravelRequest) -> TravelResult:
         if not self._initialized:
             raise RuntimeError("行路玩法微服务尚未初始化")
         destination = _destination_query(request.destination)
+        try:
+            participants = await self._team.action_participants(request.user_id)
+        except TeamError as exc:
+            if exc.code == "member_cannot_start":
+                raise TravelQueryError("只有队长可以带队行路") from exc
+            raise TravelConflictError("队伍状态刚刚发生变化") from exc
         public_profiles = await self._character.public_profiles((request.user_id,))
         if not public_profiles:
             raise TravelQueryError("尚未创建人物")
@@ -67,10 +78,11 @@ class TravelFeature:
                 message = "你已经身在此处，无须再次动身。"
             raise TravelQueryError(message) from exc
         try:
-            moved = await self._location.move(
-                LocationMoveCommand(
-                    user_id=request.user_id,
+            moved = await self._location.move_many(
+                GroupLocationMoveCommand(
+                    owner_user_id=request.user_id,
                     request_id=request.request_id,
+                    participant_user_ids=participants,
                     expected_origin_xy=current.xy,
                     destination_xy=plan.destination.xy,
                 )
@@ -79,7 +91,11 @@ class TravelFeature:
             raise TravelConflictError(str(exc)) from exc
         if not moved.changed:
             raise TravelQueryError("你已经身在此处，无须再次动身。")
-        return TravelResult(plan=plan, replayed=moved.replayed)
+        return TravelResult(
+            plan=plan,
+            participant_user_ids=participants,
+            replayed=moved.replayed,
+        )
 
 
 def _destination_query(value: object) -> LocationQuery:

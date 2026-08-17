@@ -15,6 +15,7 @@ from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
@@ -46,6 +47,8 @@ def _features(
     world.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
+    team = TeamService(data, database, player_state)
+    team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -56,7 +59,7 @@ def _features(
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
-    travel = TravelFeature(world, character, location)
+    travel = TravelFeature(world, character, location, team)
     travel.initialize()
     return create, travel, database
 

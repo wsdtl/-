@@ -29,6 +29,7 @@ class TravelRequest:
 @dataclass(frozen=True)
 class TravelResult:
     plan: JourneyPlan
+    participant_user_ids: tuple[str, ...]
     replayed: bool
 
 

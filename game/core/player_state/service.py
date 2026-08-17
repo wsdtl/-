@@ -21,6 +21,7 @@ from .contracts import (
     PlayerStateServiceStatus,
     PlayerStateSnapshot,
     PublicPlayerState,
+    StateContextUpdateCommand,
     StateGuardResult,
     StateSlot,
     StateTransitionCommand,
@@ -175,6 +176,75 @@ class PlayerStateService:
             )
             result.append(PublicPlayerState(user_id, appears, names))
         return tuple(result)
+
+    async def current_many(
+        self, user_ids: tuple[str, ...]
+    ) -> tuple[PlayerStateSnapshot, ...]:
+        """批量返回通用三槽快照，不解释任何玩法上下文。"""
+
+        self._require_initialized()
+        normalized = _user_ids(user_ids)
+        snapshots = await self._database.get_many(
+            tuple(
+                StateAddress(user_id, STATE_TYPE, STATE_KEY) for user_id in normalized
+            )
+        )
+        by_user = {snapshot.address.user_id: snapshot for snapshot in snapshots}
+        return tuple(
+            PlayerStateSnapshot(
+                user_id,
+                MappingProxyType(self._parse_snapshot(snapshot.value)),
+                snapshot.version,
+                snapshot.updated_at,
+            )
+            for user_id in normalized
+            if (snapshot := by_user.get(user_id)) is not None
+        )
+
+    async def plan_context_update(
+        self, command: StateContextUpdateCommand
+    ) -> StateTransitionPlan:
+        """保持状态编号不变，只更新一个状态槽的业务上下文。"""
+
+        self._require_initialized()
+        state_type = _state_type(command.state_type)
+        expected_state_id = _text(command.expected_state_id, "预期状态编号")
+        if self._state_types_by_id.get(expected_state_id) != state_type:
+            raise PlayerStateRuleError(
+                f"{state_type}不存在状态编号：{expected_state_id}"
+            )
+        snapshot = await self.current(command.user_id)
+        if snapshot is None:
+            raise PlayerStateCharacterMissingError("尚未创建人物")
+        current_slot = snapshot.states[state_type]
+        if current_slot.state_id != expected_state_id:
+            raise PlayerStateConflictError(
+                f"{state_type}状态已经从{self._states[state_type][expected_state_id]['名称']}"
+                f"变为{current_slot.name}"
+            )
+        value = self._snapshot_value(snapshot)
+        value[state_type] = {
+            "状态编号": current_slot.state_id,
+            "上下文": materialize(_mapping(command.context, "玩家状态上下文")),
+        }
+        expected_version = (
+            snapshot.version
+            if command.expected_version is None
+            else command.expected_version
+        )
+        return StateTransitionPlan(
+            user_id=command.user_id,
+            state_type=state_type,
+            previous_state_id=current_slot.state_id,
+            current_state_id=current_slot.state_id,
+            mutation=StateMutation(
+                command.user_id,
+                STATE_TYPE,
+                STATE_KEY,
+                value,
+                expected_version,
+            ),
+        )
 
     async def authorize(self, user_id: str, rule_name: str) -> StateGuardResult:
         """按人物是否存在及三个状态槽的组合规则判断命令准入。"""

@@ -34,6 +34,7 @@ class PositionCopy:
     location_detail: str
     state_prefix: str
     state_separator: str
+    team_state: str
     function_separator: str
     no_available_function: str
     current_place_section: str

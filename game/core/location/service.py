@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 
 from game.core.data import JsonDataError, JsonDataService
@@ -14,6 +15,8 @@ from game.core.database import (
 from game.core.world import LocationQuery, WorldService
 
 from .contracts import (
+    GroupLocationMoveCommand,
+    GroupLocationMoveResult,
     LocationConflictError,
     LocationMissingError,
     LocationMoveCommand,
@@ -181,6 +184,65 @@ class LocationService:
         return LocationMoveResult(
             user_id,
             current.xy,
+            destination,
+            True,
+            receipt.replayed,
+        )
+
+    async def move_many(
+        self, command: GroupLocationMoveCommand
+    ) -> GroupLocationMoveResult:
+        """校验所有同行者仍在起点，并在一次事务中移动全部位置。"""
+
+        self._require_initialized()
+        owner = _text(command.owner_user_id, "owner_user_id")
+        request_id = _text(command.request_id, "request_id")
+        participants = tuple(
+            _text(value, "participant_user_id")
+            for value in command.participant_user_ids
+        )
+        if not participants or participants[0] != owner:
+            raise ValueError("同行玩家顺序必须以发起者开头")
+        if len(participants) != len(set(participants)):
+            raise ValueError("同行玩家不能重复")
+        expected = self._world.locate(
+            LocationQuery(xy=_xy(command.expected_origin_xy))
+        ).xy
+        destination = self._world.locate(
+            LocationQuery(xy=_xy(command.destination_xy))
+        ).xy
+        currents = await asyncio.gather(
+            *(self.current(user_id) for user_id in participants)
+        )
+        if any(current.xy != expected for current in currents):
+            raise LocationConflictError("同行修士已经不在同一出发位置")
+        if expected == destination:
+            return GroupLocationMoveResult(
+                owner, participants, expected, destination, False, False
+            )
+        try:
+            receipt = await self._database.commit(
+                TransactionCommand(
+                    user_id=owner,
+                    request_id=request_id,
+                    business_type="队伍行路" if len(participants) > 1 else "人物行路",
+                    operations=tuple(
+                        LocationMutation(user_id, destination, current.version)
+                        for user_id, current in zip(participants, currents, strict=True)
+                    ),
+                    payload={
+                        "起点": list(expected),
+                        "终点": list(destination),
+                        "同行玩家": list(participants),
+                    },
+                )
+            )
+        except StateConflictError as exc:
+            raise LocationConflictError("同行位置在行路结算前已经改变") from exc
+        return GroupLocationMoveResult(
+            owner,
+            participants,
+            expected,
             destination,
             True,
             receipt.replayed,
