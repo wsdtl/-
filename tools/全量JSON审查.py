@@ -1374,9 +1374,9 @@ class Audit:
                     "世界", path, f"地点 {name} 不应保存可派生字段：{legacy_field}"
                 )
         if has_exploration:
-            if not _ordered_pair(row.get("单次遭遇敌人数"), minimum=1):
-                self.add("世界", path, f"地点 {name} 单次遭遇敌人数非法")
-        elif row.get("单次遭遇敌人数"):
+            if not _ordered_pair(row.get("单次遭遇敌人倍率"), minimum=1):
+                self.add("世界", path, f"地点 {name} 单次遭遇敌人倍率非法")
+        elif row.get("单次遭遇敌人倍率"):
             self.add("世界", path, f"地点 {name} 不提供探险却保存了探险数据")
 
     def _audit_terrain_domains(

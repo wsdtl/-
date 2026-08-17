@@ -150,6 +150,7 @@ class CompanionInstance:
     attribute_multipliers: Mapping[str, int]
     breakthrough_records: tuple[Mapping[str, object], ...]
     version: int
+    resources: Mapping[str, int | float]
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,15 @@ class CompanionLawPlan:
 
 
 @dataclass(frozen=True)
+class CompanionBattlePlan:
+    companion_id: str
+    health: float
+    spirit: float
+    weapon_experience_gained: int
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
 class CompanionGiftPlan:
     relation_before: CompanionRelation
     relation_after: CompanionRelation
@@ -214,6 +224,7 @@ class CompanionFarewellPlan:
 __all__ = [
     "ActiveCompanion",
     "ActiveCompanionInstance",
+    "CompanionBattlePlan",
     "CompanionBreakthroughPlan",
     "CompanionCultivationError",
     "CompanionDefinition",

@@ -28,13 +28,14 @@ class LocationView:
     xy: tuple[int, int]
     region: str
     terrain: str
+    environment_id: str
     altitude: int
     available_functions: tuple[str, ...]
     plant_pool: tuple[str, ...]
     mineral_pool: tuple[str, ...]
     companion_pool: tuple[str, ...]
     enemy_pool: tuple[str, ...]
-    enemy_count: tuple[int, ...]
+    enemy_multiplier: tuple[int, ...]
 
 
 @dataclass(frozen=True)

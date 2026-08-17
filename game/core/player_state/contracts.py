@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from game.core.database import StateMutation
+
 
 class PlayerStateError(RuntimeError):
     """玩家状态无法完成请求。"""
@@ -75,6 +77,15 @@ class StateTransitionResult:
 
 
 @dataclass(frozen=True)
+class StateTransitionPlan:
+    user_id: str
+    state_type: str
+    previous_state_id: str
+    current_state_id: str
+    mutation: StateMutation
+
+
+@dataclass(frozen=True)
 class StateGuardResult:
     allowed: bool
     reason: str = ""
@@ -92,5 +103,6 @@ __all__ = [
     "StateGuardResult",
     "StateSlot",
     "StateTransitionCommand",
+    "StateTransitionPlan",
     "StateTransitionResult",
 ]

@@ -11,6 +11,7 @@ from .contracts import (
     StateGuardResult,
     StateSlot,
     StateTransitionCommand,
+    StateTransitionPlan,
     StateTransitionResult,
 )
 from .service import STATE_KEY, STATE_TYPE, PlayerStateService
@@ -29,5 +30,6 @@ __all__ = [
     "StateGuardResult",
     "StateSlot",
     "StateTransitionCommand",
+    "StateTransitionPlan",
     "StateTransitionResult",
 ]

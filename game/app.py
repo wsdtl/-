@@ -14,6 +14,8 @@ from .core.combat import CombatService
 from .core.companion import CompanionService
 from .core.data import JsonDataService
 from .core.database import DatabaseService
+from .core.enemy import EnemyService
+from .core.exploration import ExplorationService
 from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
@@ -28,6 +30,7 @@ from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
+from .features.tanxian import ExplorationFeature
 from .features.weizhi import PositionFeature
 from .features.xinglu import TravelFeature
 from .startup import validate_startup_contracts
@@ -49,6 +52,8 @@ class CoreServices:
     player_state: PlayerStateService
     character: CharacterService
     asset: AssetService
+    enemy: EnemyService
+    exploration: ExplorationService
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,7 @@ class FeatureServices:
     daolv_jiejiao: CompanionInteractionFeature
     renwu_peiyang: CharacterCultivationFeature
     daolv_peiyang: CompanionCultivationFeature
+    tanxian: ExplorationFeature
 
 
 @dataclass(frozen=True)
@@ -200,6 +206,34 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
+    enemy = EnemyService(data, pool, growth, asset)
+    enemy_status = enemy.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("敌人实例核心微服务已启动"),
+            C.kv("enemies", enemy_status.enemy_count),
+        )
+    )
+    exploration = ExplorationService(
+        data,
+        database,
+        world,
+        location,
+        character,
+        companion,
+        asset,
+        player_state,
+        enemy,
+        combat,
+    )
+    exploration_status = exploration.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("普通探险核心微服务已启动"),
+            C.kv("seconds_per_battle", exploration_status.seconds_per_battle),
+            C.kv("maximum_battles", exploration_status.maximum_battles),
+        )
+    )
     core = CoreServices(
         data=data,
         item_catalog=item_catalog,
@@ -213,6 +247,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         player_state=player_state,
         character=character,
         asset=asset,
+        enemy=enemy,
+        exploration=exploration,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -278,6 +314,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         database,
     )
     daolv_peiyang.initialize()
+    tanxian = ExplorationFeature(data, exploration, item_catalog, asset)
+    tanxian.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -289,6 +327,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         daolv_jiejiao=daolv_jiejiao,
         renwu_peiyang=renwu_peiyang,
         daolv_peiyang=daolv_peiyang,
+        tanxian=tanxian,
     )
     return GameServices(core=core, features=features)
 

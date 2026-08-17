@@ -65,7 +65,8 @@ def _fighter(
         },
         weapon_attack=240,
         build=_build(build),
-        inventory={"验收回血丹": 3, "验收回神丹": 3},
+        inventory={"验收回血丹:01": 3, "验收回神丹:01": 3},
+        inventory_owner_id=combatant_id,
         auto_medicine=True,
         medicine_threshold=0.8,
     )
@@ -90,8 +91,8 @@ def _request() -> CombatRequest:
         seed=20260806,
         action_limit=50,
         medicine_definitions=(
-            CombatMedicineSpec("验收回血丹", "血气", 25),
-            CombatMedicineSpec("验收回神丹", "精神", 25),
+            CombatMedicineSpec("验收回血丹:01", "验收回血丹", "01", "血气", 25),
+            CombatMedicineSpec("验收回神丹:01", "验收回神丹", "01", "精神", 25),
         ),
         report=CombatReportSpec(
             participants=participants,

@@ -109,6 +109,16 @@ class InventoryMutationPlan:
 
 
 @dataclass(frozen=True)
+class RecoveryMedicineStack:
+    stack_key: str
+    medicine_id: str
+    grade_id: str
+    quantity: int
+    resource: str
+    recovery_percent: float
+
+
+@dataclass(frozen=True)
 class CultivationOwnership:
     category: str
     content_id: str
@@ -150,4 +160,5 @@ __all__ = [
     "InventoryStack",
     "LawReserveChangePlan",
     "LawReserveStack",
+    "RecoveryMedicineStack",
 ]

@@ -2,6 +2,7 @@
 
 from .contracts import (
     CharacterAlreadyExistsError,
+    CharacterBattlePlan,
     CharacterBreakthroughPlan,
     CharacterCreateCommand,
     CharacterCreationError,
@@ -24,6 +25,7 @@ from .service import CharacterService
 
 __all__ = [
     "CharacterAlreadyExistsError",
+    "CharacterBattlePlan",
     "CharacterBreakthroughPlan",
     "CharacterCreateCommand",
     "CharacterCreationError",

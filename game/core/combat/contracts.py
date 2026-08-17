@@ -45,9 +45,11 @@ class CombatFormationSpec:
 class CombatMedicineSpec:
     """调用方提交的战斗恢复丹快照，不依赖物品业务对象。"""
 
+    stack_key: str
     medicine_id: str
+    grade_id: str
     resource: str
-    recovery_percent: int
+    recovery_percent: float
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class CombatantSpec:
     prepared_statuses: tuple[CombatStatusSpec, ...] = ()
     cooldowns: Mapping[str, int] = field(default_factory=dict)
     inventory: Mapping[str, int] = field(default_factory=dict)
+    inventory_owner_id: str = ""
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
     skill_cursor: int = 0
@@ -128,7 +131,6 @@ class CombatRequest:
     right_team: tuple[CombatantSpec, ...]
     seed: int
     action_limit: int
-    share_left_inventory: bool = False
     medicine_definitions: tuple[CombatMedicineSpec, ...] = ()
     report: CombatReportSpec | None = None
     field: CombatFieldSpec | None = None
@@ -256,6 +258,7 @@ class CombatantResult:
     cooldowns: Mapping[str, int]
     inventory: Mapping[str, int]
     consumed_items: Mapping[str, int]
+    inventory_owner_id: str
     skill_cursor: int
     form: str = "本相"
     owner_id: str = ""

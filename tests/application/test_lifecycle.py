@@ -43,6 +43,12 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
             companion=_StateOwner("companion"),
             character=_StateOwner("character", "weapon"),
             asset=_StateOwner("inventory"),
+            exploration=_StateOwner(
+                "exploration_session",
+                "exploration_battle",
+                "exploration_latest",
+                "exploration_settlement",
+            ),
         )
     )
     monkeypatch.setattr(game_app, "_services", None)

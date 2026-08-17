@@ -130,7 +130,6 @@ class BattleEngine(MechanismRuntime):
         medicine_definitions: dict[str, Any],
         seed: int,
         action_limit: int,
-        share_left_inventory: bool = False,
         field: PreparedCombatField | None = None,
         formations: tuple[PreparedFormation, ...] = (),
     ) -> CombatResult:
@@ -141,9 +140,8 @@ class BattleEngine(MechanismRuntime):
             raise ValueError("参战者 ID 必须非空且不可重复")
         left_fighters = [self._build_fighter(value) for value in left]
         right_fighters = [self._build_fighter(value) for value in right]
-        if share_left_inventory:
-            for fighter in left_fighters[1:]:
-                fighter.inventory = left_fighters[0].inventory
+        self._share_inventories(left_fighters)
+        self._share_inventories(right_fighters)
         runtime_field = self._build_field(field, (*left_fighters, *right_fighters))
         runtime_formations = [self._build_formation(value) for value in formations]
         context = BattleContext(
@@ -224,6 +222,20 @@ class BattleEngine(MechanismRuntime):
                 self._formation_result(value) for value in context.formations
             ),
         )
+
+    @staticmethod
+    def _share_inventories(fighters: list[Fighter]) -> None:
+        groups: dict[str, list[Fighter]] = {}
+        for fighter in fighters:
+            if fighter.inventory_owner_id:
+                groups.setdefault(fighter.inventory_owner_id, []).append(fighter)
+        for owner_id, members in groups.items():
+            declared = [dict(member.inventory) for member in members if member.inventory]
+            if declared and any(value != declared[0] for value in declared[1:]):
+                raise ValueError(f"同一库存归属提交了不同库存快照：{owner_id}")
+            shared = declared[0] if declared else {}
+            for member in members:
+                member.inventory = shared
 
     @staticmethod
     def _build_formation(definition: PreparedFormation) -> RuntimeFormation:
@@ -652,6 +664,7 @@ class BattleEngine(MechanismRuntime):
                     fighter.health,
                 )
                 if was_alive and not fighter.alive:
+                    fighter.spirit = 0
                     source = context.left if fighter.side == 1 else context.right
                     values = {"实际数值": damage, "伤害形式": "阵法冲击"}
                     self._dispatch_event(
@@ -808,6 +821,7 @@ class BattleEngine(MechanismRuntime):
             passives=list(passives),
             cooldowns={str(k): max(0, int(v)) for k, v in snapshot.cooldowns.items()},
             inventory={str(k): max(0, int(v)) for k, v in snapshot.inventory.items()},
+            inventory_owner_id=str(snapshot.inventory_owner_id),
             auto_medicine=snapshot.auto_medicine,
             medicine_threshold=self._clamp(snapshot.medicine_threshold, 0, 1),
             skill_cursor=max(0, int(snapshot.skill_cursor)),
@@ -842,6 +856,7 @@ class BattleEngine(MechanismRuntime):
             cooldowns={k: v for k, v in fighter.cooldowns.items() if v > 0},
             inventory={k: v for k, v in fighter.inventory.items() if v > 0},
             consumed_items=dict(fighter.consumed_items),
+            inventory_owner_id=fighter.inventory_owner_id,
             skill_cursor=fighter.skill_cursor,
             form=fighter.form,
             owner_id=fighter.owner_id,
@@ -1557,8 +1572,9 @@ class BattleEngine(MechanismRuntime):
                 amount=resolution.shield_damage,
                 values=values,
                 tags=tags,
-            )
+        )
         if target_was_alive and not target.alive:
+            target.spirit = 0
             self._dispatch_event(
                 context,
                 kind="死亡后",
@@ -1704,7 +1720,9 @@ class BattleEngine(MechanismRuntime):
                 f"{fighter.name}服用丹药恢复{resource}",
                 after - before,
                 values={
-                    "丹药编号": item_id,
+                    "丹药编号": medicine.medicine_id,
+                    "品级编号": medicine.grade_id,
+                    "堆叠键": item_id,
                     "资源": resource,
                     "恢复比例": medicine.recovery_percent,
                     "变化前数值": before,

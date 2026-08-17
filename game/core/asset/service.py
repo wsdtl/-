@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 
@@ -30,6 +31,7 @@ from .contracts import (
     InventoryStack,
     LawReserveChangePlan,
     LawReserveStack,
+    RecoveryMedicineStack,
 )
 
 _STATE_TYPES = frozenset(
@@ -58,6 +60,7 @@ class AssetService:
         self._subcategory_rules: dict[tuple[str, str], Mapping[str, object]] = {}
         self._prefixes: dict[str, tuple[str, str]] = {}
         self._grades: dict[str, AssetGrade] = {}
+        self._grade_drop_weights: dict[str, float] = {}
         self._grade_names: dict[str, str] = {}
         self._page_limit = 0
         self._sort_rules = AssetSortRules(False, False, False, False)
@@ -124,6 +127,48 @@ class AssetService:
         if grade is None:
             raise InventoryChangeError(f"未知物品品级：{normalized or '<空>'}")
         return grade
+
+    def draw_drop_grade(self, *, seed: int) -> AssetGrade:
+        """按物品规则的逆权重抽取一次掉落品级。"""
+
+        self._require_initialized()
+        source = random.Random(seed)
+        grade_ids = tuple(sorted(self._grades, key=lambda key: self._grades[key].order))
+        weights = tuple(self._grade_drop_weights[grade_id] for grade_id in grade_ids)
+        return self._grades[source.choices(grade_ids, weights=weights, k=1)[0]]
+
+    async def recovery_medicines(
+        self, user_id: str
+    ) -> tuple[RecoveryMedicineStack, ...]:
+        """返回纳戒内可供战斗自动使用的完整品级堆叠。"""
+
+        snapshot = await self.snapshot(user_id)
+        result: list[RecoveryMedicineStack] = []
+        for entry in snapshot.entries:
+            if entry.category != "物品" or entry.subcategory != "恢复丹":
+                continue
+            raw = self._data.entity("物品", entry.content_id)
+            effect = raw.get("使用效果")
+            if not isinstance(effect, Mapping):
+                continue
+            effect_type = str(effect.get("类型") or "")
+            if effect_type not in {"恢复血气", "恢复精神"}:
+                continue
+            base = effect.get("恢复百分比")
+            if isinstance(base, bool) or not isinstance(base, (int, float)):
+                raise JsonDataError(f"恢复丹 {entry.content_id} 缺少恢复百分比")
+            grade = self.grade(entry.grade_id)
+            result.append(
+                RecoveryMedicineStack(
+                    entry.instance_key,
+                    entry.content_id,
+                    grade.grade_id,
+                    entry.quantity,
+                    effect_type.removeprefix("恢复"),
+                    float(Decimal(str(base)) * grade.ability_multiplier),
+                )
+            )
+        return tuple(result)
 
     async def inventory_stacks(
         self, user_id: str, item_id: str
@@ -541,6 +586,11 @@ class AssetService:
         }
         self._grade_names = {
             _normalize(grade.name): grade_id for grade_id, grade in self._grades.items()
+        }
+        self._grade_drop_weights = {
+            _text(_mapping(raw, "品级[]").get("编号"), "品级.编号"): 1.0
+            / _positive_int(_mapping(raw, "品级[]").get("权重"), "品级.权重")
+            for raw in rows
         }
 
     def _load_categories(self, value: object) -> None:

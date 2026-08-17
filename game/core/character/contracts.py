@@ -154,8 +154,18 @@ class CharacterLawPlan:
     operation: StateMutation
 
 
+@dataclass(frozen=True)
+class CharacterBattlePlan:
+    health: float
+    spirit: float
+    spirit_stones_delta: int
+    weapon_experience_gained: int
+    operations: tuple[StateMutation, ...]
+
+
 __all__ = [
     "CharacterAlreadyExistsError",
+    "CharacterBattlePlan",
     "CharacterBreakthroughPlan",
     "CharacterCreateCommand",
     "CharacterCreationError",

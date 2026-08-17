@@ -84,7 +84,6 @@ class CombatService:
             medicine_definitions=medicine_definitions,
             seed=request.seed,
             action_limit=request.action_limit,
-            share_left_inventory=request.share_left_inventory,
             field=field,
             formations=tuple(
                 value
@@ -104,7 +103,6 @@ class CombatService:
         medicine_definitions: dict[str, Any],
         seed: int,
         action_limit: int,
-        share_left_inventory: bool = False,
         field: PreparedCombatField | None = None,
         formations: tuple[PreparedFormation, ...] = (),
     ) -> CombatResult:
@@ -116,7 +114,6 @@ class CombatService:
             medicine_definitions=medicine_definitions,
             seed=seed,
             action_limit=action_limit,
-            share_left_inventory=share_left_inventory,
             field=field,
             formations=formations,
         )
@@ -291,6 +288,7 @@ class CombatService:
             statuses=(*copy.deepcopy(value.statuses), *prepared_statuses),
             cooldowns=copy.deepcopy(dict(value.cooldowns)),
             inventory=copy.deepcopy(dict(value.inventory)),
+            inventory_owner_id=value.inventory_owner_id,
             auto_medicine=value.auto_medicine,
             medicine_threshold=value.medicine_threshold,
             skill_cursor=value.skill_cursor,
@@ -329,9 +327,9 @@ class CombatService:
 
     @staticmethod
     def _medicine_definitions(request: CombatRequest) -> dict[str, Any]:
-        definitions = {value.medicine_id: value for value in request.medicine_definitions}
+        definitions = {value.stack_key: value for value in request.medicine_definitions}
         if len(definitions) != len(request.medicine_definitions):
-            raise ValueError("恢复丹定义编号不能重复")
+            raise ValueError("恢复丹堆叠键不能重复")
         inventory_ids = {
             str(item_id)
             for combatant in (*request.left_team, *request.right_team)

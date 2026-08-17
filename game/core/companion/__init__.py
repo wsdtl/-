@@ -3,6 +3,7 @@
 from .contracts import (
     ActiveCompanion,
     ActiveCompanionInstance,
+    CompanionBattlePlan,
     CompanionBreakthroughPlan,
     CompanionCultivationError,
     CompanionDefinition,
@@ -30,6 +31,7 @@ from .service import CompanionService
 __all__ = [
     "ActiveCompanion",
     "ActiveCompanionInstance",
+    "CompanionBattlePlan",
     "CompanionBreakthroughPlan",
     "CompanionCultivationError",
     "CompanionDefinition",

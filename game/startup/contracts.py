@@ -20,6 +20,7 @@ class _CoreServices(Protocol):
     companion: _StateOwner
     character: _StateOwner
     asset: _StateOwner
+    exploration: _StateOwner
 
 
 class StartupContractError(ValueError):
@@ -38,6 +39,7 @@ def validate_startup_contracts(core: _CoreServices) -> None:
             "companion": core.companion.state_types,
             "character": core.character.state_types,
             "asset": core.asset.state_types,
+            "exploration": core.exploration.state_types,
         }
     )
     for rule_name in registered_guard_rules():

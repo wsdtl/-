@@ -35,15 +35,17 @@ LISTENER_EVENTS = (
 )
 
 
-def build_team(prefix: str, listeners: int = 0) -> tuple[RuntimeCombatantSnapshot, ...]:
+def build_team(
+    prefix: str, pair_count: int, listeners: int = 0
+) -> tuple[RuntimeCombatantSnapshot, ...]:
     values: list[RuntimeCombatantSnapshot] = []
     techniques = _listener_techniques(listeners)
-    for index in range(15):
+    for index in range(pair_count):
         values.append(
             RuntimeCombatantSnapshot(
                 id=f"{prefix}-玩家-{index + 1:02d}",
                 name=f"{prefix}玩家{index + 1:02d}",
-                kind="修士",
+                combatant_type="修士",
                 techniques=techniques,
                 attributes={
                     "血气上限": 240.0,
@@ -59,7 +61,7 @@ def build_team(prefix: str, listeners: int = 0) -> tuple[RuntimeCombatantSnapsho
             RuntimeCombatantSnapshot(
                 id=f"{prefix}-道侣-{index + 1:02d}",
                 name=f"{prefix}道侣{index + 1:02d}",
-                kind="道侣",
+                combatant_type="道侣",
                 techniques=techniques,
                 attributes={
                     "血气上限": 210.0,
@@ -113,13 +115,20 @@ def _listener_techniques(count: int) -> tuple[dict[str, object], ...]:
     )
 
 
-def run(rounds: int, warmup: int, action_limit: int, listeners: int) -> None:
+def run(
+    rounds: int,
+    warmup: int,
+    action_limit: int,
+    listeners: int,
+    left_users: int,
+    right_users: int,
+) -> None:
     data = JsonDataService(ROOT / "data")
     data.initialize()
     combat = CombatService(data)
     combat.initialize()
-    left = build_team("甲方", listeners)
-    right = build_team("乙方", listeners)
+    left = build_team("甲方", left_users, listeners)
+    right = build_team("乙方", right_users, listeners)
 
     for seed in range(warmup):
         combat._simulate_runtime_teams(
@@ -148,7 +157,10 @@ def run(rounds: int, warmup: int, action_limit: int, listeners: int) -> None:
 
     ordered = sorted(durations)
     p95 = ordered[min(len(ordered) - 1, max(0, int(len(ordered) * 0.95) - 1))]
-    print(f"参战规模: 15玩家+15道侣 vs 15玩家+15道侣（共{len(left) + len(right)}名）")
+    print(
+        f"参战规模: {left_users}玩家+{left_users}道侣 vs "
+        f"{right_users}玩家+{right_users}道侣（共{len(left) + len(right)}名）"
+    )
     print(
         f"监听规模: 每名 {listeners} 个，共 {listeners * (len(left) + len(right))} 个"
     )
@@ -172,7 +184,26 @@ if __name__ == "__main__":
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--actions", type=int, default=300)
     parser.add_argument("--listeners", type=int, default=0)
+    parser.add_argument("--left-users", type=int, default=15)
+    parser.add_argument("--right-users", type=int, default=15)
     args = parser.parse_args()
-    if args.rounds <= 0 or args.warmup < 0 or args.actions <= 0 or args.listeners < 0:
-        parser.error("rounds、actions 必须为正数，warmup、listeners 不能为负数")
-    run(args.rounds, args.warmup, args.actions, args.listeners)
+    if (
+        args.rounds <= 0
+        or args.warmup < 0
+        or args.actions <= 0
+        or args.listeners < 0
+        or args.left_users <= 0
+        or args.right_users <= 0
+    ):
+        parser.error(
+            "rounds、actions、left-users、right-users 必须为正数，"
+            "warmup、listeners 不能为负数"
+        )
+    run(
+        args.rounds,
+        args.warmup,
+        args.actions,
+        args.listeners,
+        args.left_users,
+        args.right_users,
+    )

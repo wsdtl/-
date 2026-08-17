@@ -127,13 +127,13 @@ def test_location_json_identity_and_feature_fields_are_strict() -> None:
 
     with pytest.raises(JsonDataError, match="字段没有对应功能要求"):
         _validate_location_data(
-            {**base, "单次遭遇敌人数": [1, 2]},
+            {**base, "单次遭遇敌人倍率": [1, 2]},
             "溪隐台",
             requirements,
         )
-    with pytest.raises(JsonDataError, match="单次遭遇敌人数"):
+    with pytest.raises(JsonDataError, match="单次遭遇敌人倍率"):
         _validate_location_data(
             {"坐标": [8, 8], "说明": "溪隐台", "可用功能": ["探险"]},
             "溪隐台",
-            {"探险": ((), ("单次遭遇敌人数",))},
+            {"探险": ((), ("单次遭遇敌人倍率",))},
         )

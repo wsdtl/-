@@ -24,6 +24,7 @@ from .contracts import (
     StateGuardResult,
     StateSlot,
     StateTransitionCommand,
+    StateTransitionPlan,
     StateTransitionResult,
 )
 
@@ -229,6 +230,34 @@ class PlayerStateService:
     ) -> StateTransitionResult:
         """校验并提交一个状态槽变化；调用方可用 expected_version 防止并发覆盖。"""
 
+        plan = await self.plan_transition(command)
+        receipt = await self._database.commit(
+            TransactionCommand(
+                user_id=command.user_id,
+                request_id=command.request_id,
+                business_type=f"玩家状态:{plan.state_type}变更",
+                operations=(plan.mutation,),
+                payload={
+                    "状态类型": plan.state_type,
+                    "前状态": plan.previous_state_id,
+                    "后状态": plan.current_state_id,
+                },
+            )
+        )
+        return StateTransitionResult(
+            user_id=command.user_id,
+            state_type=plan.state_type,
+            previous_state_id=plan.previous_state_id,
+            current_state_id=plan.current_state_id,
+            version=plan.mutation.expected_version + 1,
+            replayed=receipt.replayed,
+        )
+
+    async def plan_transition(
+        self, command: StateTransitionCommand
+    ) -> StateTransitionPlan:
+        """校验状态转换并只返回可并入跨领域事务的变更。"""
+
         self._require_initialized()
         state_type = _state_type(command.state_type)
         target_state_id = _text(command.target_state_id, "目标状态编号")
@@ -260,34 +289,45 @@ class PlayerStateService:
             "状态编号": target_state_id,
             "上下文": materialize(_mapping(command.context, "玩家状态上下文")),
         }
-        receipt = await self._database.commit(
-            TransactionCommand(
-                user_id=command.user_id,
-                request_id=command.request_id,
-                business_type=f"玩家状态:{state_type}变更",
-                operations=(
-                    StateMutation(
-                        command.user_id,
-                        STATE_TYPE,
-                        STATE_KEY,
-                        value,
-                        expected,
-                    ),
-                ),
-                payload={
-                    "状态类型": state_type,
-                    "前状态": current_slot.state_id,
-                    "后状态": target_state_id,
-                },
-            )
-        )
-        return StateTransitionResult(
+        return StateTransitionPlan(
             user_id=command.user_id,
             state_type=state_type,
             previous_state_id=current_slot.state_id,
             current_state_id=target_state_id,
-            version=expected + 1,
-            replayed=receipt.replayed,
+            mutation=StateMutation(
+                command.user_id,
+                STATE_TYPE,
+                STATE_KEY,
+                value,
+                expected,
+            ),
+        )
+
+    async def plan_finish_behavior(
+        self,
+        user_id: str,
+        *,
+        expected_version: int | None = None,
+    ) -> StateTransitionPlan:
+        """按当前行为的结束目标只生成状态变更。"""
+
+        snapshot = await self.current(user_id)
+        if snapshot is None:
+            raise PlayerStateCharacterMissingError("尚未创建人物")
+        current = snapshot.states["行为"]
+        target = self._states["行为"][current.state_id].get("结束后")
+        if target is None:
+            raise PlayerStateConflictError(f"当前行为{current.name}不能结束")
+        return await self.plan_transition(
+            StateTransitionCommand(
+                user_id=user_id,
+                request_id="plan-only",
+                state_type="行为",
+                target_state_id=str(target),
+                expected_version=(
+                    snapshot.version if expected_version is None else expected_version
+                ),
+            )
         )
 
     async def finish_behavior(

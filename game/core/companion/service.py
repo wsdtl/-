@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import random
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from types import MappingProxyType
 
+from game.core.combat import CombatantSpec, CombatBuildRef
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import DatabaseService, StateAddress, StateMutation
 from game.core.growth import GrowthService
@@ -14,6 +16,7 @@ from game.core.growth import GrowthService
 from .contracts import (
     ActiveCompanion,
     ActiveCompanionInstance,
+    CompanionBattlePlan,
     CompanionBreakthroughPlan,
     CompanionCultivationError,
     CompanionDefinition,
@@ -64,6 +67,8 @@ class CompanionService:
         self._by_location: Mapping[str, tuple[LocalCultivator, ...]] = MappingProxyType(
             {}
         )
+        self._attribute_definitions: Mapping[str, object] = {}
+        self._weapon_rule: Mapping[str, object] = {}
 
     def initialize(self) -> CompanionStatus:
         if self._initialized:
@@ -75,6 +80,12 @@ class CompanionService:
         if not self._growth.status().initialized:
             raise RuntimeError("成长核心必须先于道侣核心启动")
         self._rules = self._load_rules()
+        self._attribute_definitions = _mapping(
+            self._data.dataset("战斗定义").get("属性"), "战斗定义.属性"
+        )
+        self._weapon_rule = _mapping(
+            self._data.dataset("炼器规则").get("本命武器"), "炼器规则.本命武器"
+        )
         if (
             self._rules.qualification_growth_minimum <= 0
             or self._rules.qualification_growth_maximum
@@ -244,6 +255,7 @@ class CompanionService:
             "资质",
             "属性倍率",
             "突破记录",
+            "资源",
         }
         if set(value) != expected:
             raise CompanionStateError("道侣实例字段不完整")
@@ -260,6 +272,11 @@ class CompanionService:
         attributes = {
             str(key): _state_number(raw, f"道侣实例.属性.{key}")
             for key, raw in attributes_value.items()
+        }
+        resources_value = _state_mapping(value.get("资源"), "道侣实例.资源")
+        resources = {
+            name: _state_number(resources_value.get(name), f"道侣实例.资源.{name}")
+            for name in ("血气", "精神")
         }
         cultivation_value = _state_mapping(value.get("修行槽"), "道侣实例.修行槽")
         cultivation = {
@@ -317,6 +334,7 @@ class CompanionService:
                 )
             ),
             snapshot.version,
+            MappingProxyType(resources),
         )
 
     async def active_instance(self, user_id: str) -> ActiveCompanionInstance:
@@ -329,6 +347,55 @@ class CompanionService:
         if instance is None:
             raise CompanionStateError("当前同行道侣缺少培养实例")
         return ActiveCompanionInstance(active, instance)
+
+    async def combatant(self, user_id: str) -> CombatantSpec | None:
+        """返回当前同行道侣的战斗快照；没有同行道侣时返回空。"""
+
+        active = await self.active(user_id)
+        if active is None:
+            return None
+        instance = await self.instance(user_id, active.companion_id)
+        if instance is None:
+            raise CompanionStateError("当前同行道侣缺少培养实例")
+        definition = self.definition(instance.companion_id)
+        build = tuple(
+            CombatBuildRef(
+                section=category,
+                content_id=content_id,
+                instance_id=f"{user_id}:{instance.companion_id}:{category}:{index}",
+                born_order=index,
+            )
+            for category, content_ids in instance.cultivation.items()
+            for index, content_id in enumerate(content_ids, start=1)
+        ) + tuple(
+            CombatBuildRef(
+                section="器律",
+                content_id=content_id,
+                instance_id=f"{user_id}:{instance.companion_id}:器律:{index}",
+                born_order=index,
+            )
+            for index, content_id in enumerate(instance.weapon_laws, start=1)
+            if content_id
+        )
+        return CombatantSpec(
+            id=f"companion:{user_id}:{instance.companion_id}",
+            name=definition.name,
+            attributes=instance.attributes,
+            level=instance.level,
+            combatant_type="修士",
+            weapon_attack=(
+                float(self._weapon_rule["基础攻击"])
+                + float(self._weapon_rule["每级攻击"]) * (instance.weapon_level - 1)
+            ),
+            build=build,
+            health=float(instance.resources["血气"]),
+            spirit=float(instance.resources["精神"]),
+            auto_medicine=True,
+            owner_id=user_id,
+            controller_id=user_id,
+            inventory_owner_id=user_id,
+            gender=definition.gender,
+        )
 
     async def plan_growth(
         self,
@@ -381,6 +448,7 @@ class CompanionService:
             before.attribute_multipliers,
             before.breakthrough_records,
             before.version + 1,
+            before.resources,
         )
         return CompanionGrowthPlan(
             before.companion_id,
@@ -453,6 +521,7 @@ class CompanionService:
             before.attribute_multipliers,
             records,
             before.version + 1,
+            before.resources,
         )
         return CompanionBreakthroughPlan(
             before.companion_id,
@@ -502,6 +571,7 @@ class CompanionService:
             before.attribute_multipliers,
             before.breakthrough_records,
             before.version + 1,
+            before.resources,
         )
         return CompanionLawPlan(
             before.companion_id,
@@ -533,6 +603,53 @@ class CompanionService:
                 ACTIVE_KEY,
                 {"道侣编号": current.active.companion_id},
                 current.active.version,
+            ),
+        )
+
+    async def plan_battle_settlement(
+        self,
+        user_id: str,
+        *,
+        health: float,
+        spirit: float,
+        weapon_experience: int = 0,
+    ) -> CompanionBattlePlan:
+        """只结算当前同行道侣的战后资源与本命武器经验。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        gained = _request_nonnegative_int(weapon_experience, "道侣本命武器经验")
+        advance = self._growth.advance_weapon(
+            level=before.weapon_level,
+            experience=before.weapon_experience,
+            gained=gained,
+        )
+        health_after = _bounded_resource(
+            health, before.attributes.get("血气上限"), "道侣战后血气"
+        )
+        spirit_after = _bounded_resource(
+            spirit, before.attributes.get("精神上限"), "道侣战后精神"
+        )
+        after = replace(
+            before,
+            weapon_level=advance.level_after,
+            weapon_experience=advance.experience_after,
+            resources=MappingProxyType(
+                {"血气": health_after, "精神": spirit_after}
+            ),
+            version=before.version + 1,
+        )
+        return CompanionBattlePlan(
+            before.companion_id,
+            health_after,
+            spirit_after,
+            gained,
+            StateMutation(
+                _user_id(user_id),
+                INSTANCE_STATE,
+                before.companion_id,
+                _instance_value(after, self._growth),
+                before.version,
             ),
         )
 
@@ -721,10 +838,24 @@ class CompanionService:
             attribute: source.randint(*definition.attribute_multiplier_range)
             for attribute in definition.fluctuating_attributes
         }
-        attributes = {
+        overrides = {
             name: _scaled_number(raw, multipliers.get(name, 100))
             for name, raw in definition.attribute_overrides.items()
         }
+        attributes = {
+            name: _number(_mapping(raw, f"属性.{name}").get("默认值"), name)
+            for name, raw in self._attribute_definitions.items()
+        }
+        attributes.update(overrides)
+        attributes = _add_numbers(
+            attributes,
+            self._growth.cultivator_attribute_growth(
+                max(0, definition.level - 1),
+                multiplier=_qualification_multiplier_value(
+                    qualification, definition, self.rules()
+                ),
+            ),
+        )
         build = self._growth.random_companion_build(
             pools=definition.cultivation_pools,
             slots=self.rules().cultivation_slots,
@@ -751,6 +882,12 @@ class CompanionService:
             MappingProxyType(multipliers),
             (),
             1,
+            MappingProxyType(
+                {
+                    "血气": attributes["血气上限"],
+                    "精神": attributes["精神上限"],
+                }
+            ),
         )
 
     def _load_rules(self) -> CompanionRules:
@@ -951,6 +1088,7 @@ def _instance_value(
         "资质": instance.qualification,
         "属性倍率": dict(instance.attribute_multipliers),
         "突破记录": [dict(record) for record in instance.breakthrough_records],
+        "资源": dict(instance.resources),
     }
 
 
@@ -964,10 +1102,18 @@ def _qualification_multiplier(
     definition: CompanionDefinition,
     rules: CompanionRules,
 ) -> float:
+    return _qualification_multiplier_value(instance.qualification, definition, rules)
+
+
+def _qualification_multiplier_value(
+    qualification: int,
+    definition: CompanionDefinition,
+    rules: CompanionRules,
+) -> float:
     minimum, maximum = definition.qualification_range
     if minimum == maximum:
         return 1.0
-    progress = Decimal(instance.qualification - minimum) / Decimal(maximum - minimum)
+    progress = Decimal(qualification - minimum) / Decimal(maximum - minimum)
     result = rules.qualification_growth_minimum + progress * (
         rules.qualification_growth_maximum - rules.qualification_growth_minimum
     )
@@ -989,6 +1135,13 @@ def _request_nonnegative_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise CompanionCultivationError(f"{label}必须是非负整数")
     return value
+
+
+def _bounded_resource(value: object, maximum: object, label: str) -> int | float:
+    raw = _number(value, label)
+    upper = _number(maximum, f"{label}上限")
+    bounded = min(max(0.0, float(raw)), max(0.0, float(upper)))
+    return int(bounded) if bounded.is_integer() else round(bounded, 3)
 
 
 def _affection_json(value: Decimal) -> int | float:

@@ -17,6 +17,7 @@ from .contracts import (
     InventoryStack,
     LawReserveChangePlan,
     LawReserveStack,
+    RecoveryMedicineStack,
 )
 from .service import AssetService
 
@@ -38,4 +39,5 @@ __all__ = [
     "InventoryStack",
     "LawReserveChangePlan",
     "LawReserveStack",
+    "RecoveryMedicineStack",
 ]

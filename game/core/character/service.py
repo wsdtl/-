@@ -6,6 +6,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from game.core.asset import AssetService, AssetStateError
+from game.core.combat import CombatantSpec, CombatBuildRef
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -20,6 +21,7 @@ from game.core.player_state import PlayerStateService
 
 from .contracts import (
     CharacterAlreadyExistsError,
+    CharacterBattlePlan,
     CharacterBreakthroughPlan,
     CharacterCreateCommand,
     CharacterCreationResult,
@@ -216,6 +218,43 @@ class CharacterService:
             )
         return tuple(result)
 
+    async def combatant(self, user_id: str) -> CombatantSpec:
+        """把人物事实转换成战斗核心公共快照。"""
+
+        profile = await self.profile(user_id)
+        attributes = dict(profile.attributes)
+        resources = dict(profile.resources)
+        build = tuple(
+            CombatBuildRef(
+                section=value.category,
+                content_id=value.content_id,
+                instance_id=f"{profile.user_id}:{value.category}:{value.slot}",
+                born_order=value.slot,
+                power_multiplier=(
+                    float(self._asset.grade(value.grade).ability_multiplier)
+                    if value.grade
+                    else 1.0
+                ),
+            )
+            for value in (*profile.equipped_content, *profile.weapon.equipped_laws)
+        )
+        return CombatantSpec(
+            id=f"player:{profile.user_id}",
+            name=profile.name,
+            attributes=attributes,
+            level=profile.level,
+            combatant_type=profile.character_type,
+            weapon_attack=float(profile.weapon.attack),
+            build=build,
+            health=float(resources.get("血气", attributes.get("血气上限", 0))),
+            spirit=float(resources.get("精神", attributes.get("精神上限", 0))),
+            auto_medicine=profile.automatic_medicine,
+            owner_id=profile.user_id,
+            controller_id=profile.user_id,
+            inventory_owner_id=profile.user_id,
+            gender=profile.gender,
+        )
+
     async def create(self, command: CharacterCreateCommand) -> CharacterCreationResult:
         self._require_initialized()
         self._validate_command(command)
@@ -320,6 +359,72 @@ class CharacterService:
             cultivator_advance.level_after,
             weapon_advance.level_before,
             weapon_advance.level_after,
+            (
+                StateMutation(
+                    normalized_user_id,
+                    "character",
+                    "main",
+                    character,
+                    character_snapshot.version,
+                ),
+                StateMutation(
+                    normalized_user_id,
+                    "weapon",
+                    "main",
+                    weapon,
+                    weapon_snapshot.version,
+                ),
+            ),
+        )
+
+    async def plan_battle_settlement(
+        self,
+        user_id: str,
+        *,
+        health: float,
+        spirit: float,
+        spirit_stones_delta: int = 0,
+        weapon_experience: int = 0,
+    ) -> CharacterBattlePlan:
+        """只结算战后资源、灵石和本命武器经验。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        character_snapshot, weapon_snapshot = await self._growth_snapshots(
+            normalized_user_id
+        )
+        character = dict(_state_mapping(character_snapshot.value, "character/main"))
+        weapon = dict(_state_mapping(weapon_snapshot.value, "weapon/main"))
+        attributes = _state_mapping(character.get("属性"), "人物.属性")
+        health_after = _bounded_resource(
+            health, attributes.get("血气上限"), "战后血气"
+        )
+        spirit_after = _bounded_resource(
+            spirit, attributes.get("精神上限"), "战后精神"
+        )
+        stone_delta = _request_int(spirit_stones_delta, "灵石变化")
+        stones_after = _state_nonnegative_int(character.get("灵石"), "人物.灵石") + stone_delta
+        if stones_after < 0:
+            raise CharacterCultivationError("灵石不足")
+        gained = _nonnegative_request_int(weapon_experience, "本命武器经验")
+        try:
+            advance = self._growth.advance_weapon(
+                level=_state_positive_int(weapon.get("等级"), "本命武器.等级"),
+                experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
+                gained=gained,
+            )
+        except GrowthError as exc:
+            raise CharacterCultivationError(str(exc)) from exc
+        character["灵石"] = stones_after
+        character["资源"] = {"血气": health_after, "精神": spirit_after, "护盾": 0}
+        weapon["等级"] = advance.level_after
+        weapon["经验"] = advance.experience_after
+        weapon["器阶"] = advance.stage_after
+        return CharacterBattlePlan(
+            health_after,
+            spirit_after,
+            stone_delta,
+            gained,
             (
                 StateMutation(
                     normalized_user_id,
@@ -767,6 +872,19 @@ def _nonnegative_request_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise CharacterCultivationError(f"{label}必须是非负整数")
     return value
+
+
+def _request_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CharacterCultivationError(f"{label}必须是整数")
+    return value
+
+
+def _bounded_resource(value: object, maximum: object, label: str) -> int | float:
+    raw = _number(value, label)
+    upper = _number(maximum, f"{label}上限")
+    bounded = min(max(0.0, float(raw)), max(0.0, float(upper)))
+    return int(bounded) if bounded.is_integer() else round(bounded, 3)
 
 
 def _required_user_id(value: object) -> str:

@@ -23,7 +23,7 @@ from .contracts import (
 )
 from .journey import JourneyPlanner
 
-_LOCATION_FIELDS = frozenset({"坐标", "说明", "可用功能", "单次遭遇敌人数"})
+_LOCATION_FIELDS = frozenset({"坐标", "说明", "可用功能", "单次遭遇敌人倍率"})
 _REGION_FIELDS = frozenset({"类别", "坐标带", "说明"})
 _TERRAIN_ZONE_FIELDS = frozenset({"名称", "地形", "坐标带"})
 
@@ -40,6 +40,7 @@ class WorldService:
         self._region_by_xy: dict[tuple[int, int], str] = {}
         self._terrain_zones: dict[str, tuple[str, frozenset[tuple[int, int]]]] = {}
         self._terrain_by_xy: dict[tuple[int, int], tuple[str, str]] = {}
+        self._environment_by_terrain: dict[str, str] = {}
         self._location_regions: dict[str, str] = {}
         self._locations_by_xy: dict[
             tuple[int, int], tuple[str, Mapping[str, object]]
@@ -93,6 +94,16 @@ class WorldService:
 
         self._load_region_domains()
         self._load_terrain_domains()
+        self._environment_by_terrain = _environment_ids(self._data)
+        missing_environments = {
+            terrain
+            for _, terrain in self._terrain_by_xy.values()
+            if terrain not in self._environment_by_terrain
+        }
+        if missing_environments:
+            raise JsonDataError(
+                "地形缺少同名战场环境：" + "、".join(sorted(missing_environments))
+            )
         definitions = self._data.dataset("世界定义").get("地点功能")
         self._feature_contents, self._feature_requirements = _feature_definitions(
             definitions
@@ -232,13 +243,14 @@ class WorldService:
             xy=xy,
             region=region,
             terrain=terrain,
+            environment_id=self._environment_by_terrain[terrain],
             altitude=self._altitude(xy),
             available_functions=functions,
             plant_pool=plant_pool,
             mineral_pool=mineral_pool,
             companion_pool=companion_pool,
             enemy_pool=enemy_pool,
-            enemy_count=_numbers(raw.get("单次遭遇敌人数")),
+            enemy_multiplier=_numbers(raw.get("单次遭遇敌人倍率")),
         )
 
     def plan_journey(self, query: JourneyQuery) -> JourneyPlan:
@@ -765,6 +777,16 @@ def _numbers(value: object) -> tuple[int, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(int(item) for item in value)
+
+
+def _environment_ids(data: JsonDataService) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for environment_id, raw in data.entities("战场环境").items():
+        name = str(raw.get("名称") or "").strip()
+        if not name or name in result:
+            raise JsonDataError("战场环境名称不能为空或重复")
+        result[name] = environment_id
+    return result
 
 
 def _feature_definitions(

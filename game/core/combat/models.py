@@ -215,6 +215,7 @@ class Fighter:
     passives: list[dict[str, Any]] = dataclass_field(default_factory=list)
     cooldowns: dict[str, int] = dataclass_field(default_factory=dict)
     inventory: dict[str, int] = dataclass_field(default_factory=dict)
+    inventory_owner_id: str = ""
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
     consumed_items: dict[str, int] = dataclass_field(default_factory=dict)
@@ -330,6 +331,7 @@ class RuntimeCombatantSnapshot:
     statuses: tuple[Mapping[str, Any], ...] = ()
     cooldowns: Mapping[str, int] = dataclass_field(default_factory=dict)
     inventory: Mapping[str, int] = dataclass_field(default_factory=dict)
+    inventory_owner_id: str = ""
     auto_medicine: bool = False
     medicine_threshold: float = 0.3
     skill_cursor: int = 0
