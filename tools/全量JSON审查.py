@@ -16,9 +16,9 @@ DATA = ROOT / "data"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from game.core.combat import CombatService
 from game.core.data import JsonDataService, materialize
 from game.core.pool import PoolService
+from tools.combat_support import isolated_combat_service
 
 OBSOLETE_KEYS = frozenset(
     {
@@ -122,7 +122,8 @@ class Audit:
         except Exception as exc:  # noqa: BLE001
             self.add("资源池", "data", f"资源池微服务初始化失败：{exc}")
         try:
-            CombatService(data).initialize()
+            with isolated_combat_service(data):
+                pass
         except Exception as exc:  # noqa: BLE001
             self.add("战斗", "data", f"战斗核心微服务初始化失败：{exc}")
 

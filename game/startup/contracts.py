@@ -24,6 +24,7 @@ class _CoreServices(Protocol):
     retreat: _StateOwner
     gathering: _StateOwner
     team: _StateOwner
+    formation: _StateOwner
 
 
 class StartupContractError(ValueError):
@@ -46,6 +47,7 @@ def validate_startup_contracts(core: _CoreServices) -> None:
             "retreat": core.retreat.state_types,
             "gathering": core.gathering.state_types,
             "team": core.team.state_types,
+            "formation": core.formation.state_types,
         }
     )
     for rule_name in registered_guard_rules():

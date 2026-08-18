@@ -11,7 +11,7 @@ from game.core.character import CharacterService
 from game.core.combat import CombatService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
-from game.core.database import DatabaseService, StateAddress
+from game.core.database import DatabaseService, StateAddress, TransactionCommand
 from game.core.enemy import EnemyService
 from game.core.exploration import (
     ExplorationLeaderRequiredError,
@@ -20,6 +20,7 @@ from game.core.exploration import (
     ExplorationStartCommand,
 )
 from game.core.forging import ForgingService
+from game.core.formation import FormationService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
@@ -42,8 +43,6 @@ def _services(tmp_path: Path):
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
-    combat = CombatService(data)
-    combat.initialize()
     pool = PoolService(data)
     pool.initialize()
     growth = GrowthService(data, pool)
@@ -62,6 +61,10 @@ def _services(tmp_path: Path):
     asset.initialize()
     forging = ForgingService(data, database, asset, world, location)
     forging.initialize()
+    formation = FormationService(data, database, asset, world, location)
+    formation.initialize()
+    combat = CombatService(data, formation)
+    combat.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()
     item_catalog = ItemCatalogService(data)
@@ -82,6 +85,7 @@ def _services(tmp_path: Path):
         asset,
         player_state,
         enemy,
+        formation,
         combat,
     )
     exploration.initialize()
@@ -101,14 +105,39 @@ def _services(tmp_path: Path):
         exploration,
         team,
         exploration_feature,
+        formation,
     )
 
 
 def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> None:
-    database, player_state, character, asset, create, _, exploration, _, _ = _services(
-        tmp_path
-    )
+    (
+        database,
+        player_state,
+        character,
+        asset,
+        create,
+        _,
+        exploration,
+        _,
+        _,
+        formation,
+    ) = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
+    reserve = _run(
+        asset.plan_formation_reserve_acquisition("qq-1", "530001", "01")
+    )
+    _run(
+        database.commit(
+            TransactionCommand(
+                "qq-1",
+                "seed-formation",
+                "测试准备阵法",
+                (reserve.operation,),
+                {},
+            )
+        )
+    )
+    _run(formation.arm("qq-1", "arm-formation", reserve.stack.state_key))
     medicines_before = _run(asset.recovery_medicines("qq-1"))
     assert medicines_before
     started_at = datetime(2026, 8, 17, 10, 0, tzinfo=timezone.utc)
@@ -133,6 +162,9 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     assert state.states["行为"].context["探险编号"] == started.session_id
     battles = _run(database.list_for_user("qq-1", state_type="exploration_battle"))
     assert len(battles) == started.battle_count
+    assert len(battles[0].value["阵法"]) == 1
+    assert all(not battle.value["阵法"] for battle in battles[1:])
+    assert _run(formation.prepared("qq-1")) is None
     for battle in battles:
         assert battle.value["敌人数"] == (
             started.formal_unit_count * battle.value["敌人倍率"]
@@ -170,7 +202,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
 
     replay = _run(exploration.settle("qq-1", "settle-1", now=started.ends_at))
     assert replay.replayed is True
-    assert database.status().transaction_count == 3
+    assert database.status().transaction_count == 5
 
 
 def test_indivisible_loot_is_floored_per_surviving_user() -> None:
@@ -191,7 +223,7 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
 def test_team_leader_starts_one_real_exploration_for_all_players(
     tmp_path: Path,
 ) -> None:
-    database, player_state, _, _, create, _, exploration, team, feature = _services(
+    database, player_state, _, _, create, _, exploration, team, feature, _ = _services(
         tmp_path
     )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
@@ -232,7 +264,7 @@ def test_team_leader_starts_one_real_exploration_for_all_players(
 
 
 def test_world_exposes_enemy_multiplier_and_environment_id(tmp_path: Path) -> None:
-    _, _, _, _, _, world, _, _, _ = _services(tmp_path)
+    _, _, _, _, _, world, _, _, _, _ = _services(tmp_path)
     location = world.locate(LocationQuery(location_name="溪隐台"))
 
     assert location.enemy_multiplier == (1, 2)

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from game.core.data import JsonDataService, materialize
+from game.core.formation import FormationNodeRules
 
 from .executors import EXECUTOR_CATEGORIES
 from .schema import RuleSchemaValidator
@@ -15,6 +16,7 @@ def load_battle_foundation(
     data: JsonDataService,
     *,
     mechanisms: Mapping[str, Mapping[str, Any]] | None = None,
+    formation_rules: FormationNodeRules | None = None,
 ) -> dict[str, Any]:
     if not data.status().loaded:
         raise RuntimeError("JSON 数据微服务必须先于战斗微服务启动")
@@ -31,11 +33,7 @@ def load_battle_foundation(
                 environment_id: materialize(value)
                 for environment_id, value in data.entities("战场环境").items()
             },
-            "阵法": {
-                formation_id: materialize(value)
-                for formation_id, value in data.entities("阵法").items()
-            },
-            "阵法规则": materialize(data.dataset("阵法规则")["炼制"]),
+            "阵法规则": formation_rules,
         }
     )
     if mechanisms is None:
@@ -127,8 +125,7 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     damage_rules = _mapping(value.get("伤害规则"), "伤害规则")
     status_reactions = value.get("状态反应")
     environments = _mapping(value.get("战场环境") or {}, "战场环境")
-    formations = _mapping(value.get("阵法") or {}, "阵法")
-    formation_rules = _mapping(value.get("阵法规则") or {}, "阵法规则")
+    formation_rules = value.get("阵法规则")
     environment_rules = _mapping(value.get("环境规则"), "环境规则")
     _validate_action_rules(action_rules, attributes, resources)
     _validate_timing(timing)
@@ -158,8 +155,9 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     validator.validate_definitions("战斗定义.原子能力")
     validator.validate_mechanisms("战斗机制")
     _validate_battle_environments(environments, validator)
-    _validate_formations(formations)
-    _validate_formation_runtime_rules(formation_rules)
+    if not isinstance(formation_rules, FormationNodeRules):
+        raise TypeError("战斗核心缺少阵法节点运行契约")
+    _validate_formation_node_rules(formation_rules)
     _validate_status_reactions(status_reactions, validator)
     declared = {
         str(definition.get("执行器") or "") for definition in abilities.values()
@@ -245,169 +243,16 @@ def _validate_battle_environments(
                 )
 
 
-def _validate_formations(formations: Mapping[str, Any]) -> None:
-    if not formations:
-        raise ValueError("阵法不能为空")
-    names: set[str] = set()
-    for formation_id, raw in formations.items():
-        path = f"阵法[{formation_id}]"
-        value = _mapping(raw, path)
-        if set(value) != {"编号", "名称", "宏观监测", "阵法核心", "品级"}:
-            raise ValueError(f"{path}字段必须完整且不能包含额外字段")
-        if str(value.get("编号") or "") != formation_id:
-            raise ValueError(f"{path}.编号与数据索引不一致")
-        name = str(value.get("名称") or "").strip()
-        if not name or name in names:
-            raise ValueError(f"{path}.名称为空或重复")
-        names.add(name)
-        monitor = value.get("宏观监测")
-        if (
-            not isinstance(monitor, list)
-            or not monitor
-            or any(not str(item).strip() for item in monitor)
-        ):
-            raise ValueError(f"{path}.宏观监测必须是非空字符串数组")
-        grades = value.get("品级")
-        if not isinstance(grades, list) or [
-            str(item.get("品级") or "") for item in grades
-        ] != ["黄", "玄", "地", "天", "圣"]:
-            raise ValueError(f"{path}.品级必须按黄、玄、地、天、圣完整排列")
-        for index, grade_raw in enumerate(grades):
-            grade = _mapping(grade_raw, f"{path}.品级[{index}]")
-            saint = str(grade.get("品级") or "") == "圣"
-            required = {"品级", "地势阶段"} | (
-                {"最低消耗", "阵基", "阵眼", "节点", "圣品权重"}
-                if saint
-                else {"消耗", "阵基", "阵眼", "节点"}
-            )
-            if set(grade) != required:
-                raise ValueError(f"{path}.品级[{index}]字段不完整")
-            stages = grade["地势阶段"]
-            if not isinstance(stages, list) or len(stages) != 4:
-                raise ValueError(f"{path}.品级[{index}].地势阶段必须有四段")
-            for stage_index, stage_raw in enumerate(stages, start=1):
-                stage = _mapping(
-                    stage_raw, f"{path}.品级[{index}].地势阶段[{stage_index - 1}]"
-                )
-                if (
-                    set(stage)
-                    != {"阶段", "环境阶段阈值倍率", "行动周期倍率", "阵势倍率"}
-                    or stage.get("阶段") != stage_index
-                ):
-                    raise ValueError(f"{path}.品级[{index}]地势阶段顺序或字段错误")
-                if any(
-                    float(stage[key]) <= 0
-                    for key in ("环境阶段阈值倍率", "行动周期倍率", "阵势倍率")
-                ):
-                    raise ValueError(f"{path}.品级[{index}]存在非正阵势倍率")
-
-
-def _validate_formation_runtime_rules(value: Mapping[str, Any]) -> None:
-    expected_fields = {
-        "材料方向",
-        "固定品级",
-        "无上限品级",
-        "节点结算",
-        "圣品增长",
-    }
-    if set(value) != expected_fields:
-        raise ValueError("阵法规则字段必须完整且不能包含额外字段")
-    material_directions = _mapping(value["材料方向"], "阵法规则.材料方向")
-    if material_directions != {"阵基": "灵矿", "阵眼": "兽宝", "节点": "灵植"}:
-        raise ValueError("阵法三相必须分别使用灵矿、兽宝和灵植")
-    if _strings(value["固定品级"], "阵法规则.固定品级") != (
-        "黄",
-        "玄",
-        "地",
-        "天",
-    ):
-        raise ValueError("阵法固定品级必须按黄、玄、地、天排列")
-    if value["无上限品级"] != "圣":
-        raise ValueError("阵法无上限品级必须是圣")
-
-    node_rules = _mapping(value.get("节点结算"), "阵法规则.节点结算")
-    if set(node_rules) != {
-        "敌方阵法优先",
-        "无敌方阵法",
-        "冲击分配",
-        "目标不重复",
-        "最少目标数",
-    }:
-        raise ValueError("阵法节点结算字段必须完整")
-    target_rules = _mapping(node_rules["无敌方阵法"], "阵法规则.节点结算.无敌方阵法")
-    if target_rules != {
-        "目标类型": "正式参战者",
-        "目标数量字段": "节点",
-        "目标排序": ["参战位序"],
-    }:
-        raise ValueError("阵法节点必须按参战位序覆盖正式参战者")
+def _validate_formation_node_rules(value: FormationNodeRules) -> None:
     if (
-        node_rules["敌方阵法优先"] is not True
-        or node_rules["冲击分配"] != "均分"
-        or node_rules["目标不重复"] is not True
+        not value.enemy_formation_first
+        or value.target_count_field != "节点"
+        or value.target_sort != ("参战位序",)
+        or value.impact_distribution != "均分"
+        or not value.unique_targets
+        or value.minimum_targets < 1
     ):
-        raise ValueError("阵法节点结算方式不受战斗核心支持")
-    if (
-        isinstance(node_rules["最少目标数"], bool)
-        or not isinstance(node_rules["最少目标数"], int)
-        or node_rules["最少目标数"] < 1
-    ):
-        raise ValueError("阵法节点结算.最少目标数必须是正整数")
-
-    growth = _mapping(value["圣品增长"], "阵法规则.圣品增长")
-    if set(growth) != {
-        "算法",
-        "权重和",
-        "最低投入倍率",
-        "方向",
-        "投入存储",
-        "派生值存储",
-    }:
-        raise ValueError("圣品阵法增长字段必须完整")
-    if growth["算法"] != "加权几何乘势":
-        raise ValueError("战斗核心只支持圣品阵法加权几何乘势")
-    _positive_number(growth["权重和"], "阵法规则.圣品增长.权重和")
-    _positive_number(growth["最低投入倍率"], "阵法规则.圣品增长.最低投入倍率")
-    if growth["投入存储"] != {"类型": "十进制字符串"}:
-        raise ValueError("圣品阵法投入必须使用十进制字符串存储")
-    if not isinstance(growth["派生值存储"], bool):
-        raise TypeError("阵法规则.圣品增长.派生值存储必须是布尔值")
-    directions = growth["方向"]
-    if not isinstance(directions, list) or len(directions) != 3:
-        raise ValueError("圣品阵法增长必须完整声明阵基、阵眼和节点")
-    expected_materials = {"阵基": "灵矿", "阵眼": "兽宝", "节点": "灵植"}
-    expected_results = {"承载", "冲击", "数量", "传导"}
-    actual_results: set[str] = set()
-    seen_parts: set[str] = set()
-    for index, raw in enumerate(directions):
-        path = f"阵法规则.圣品增长.方向[{index}]"
-        direction = _mapping(raw, path)
-        if set(direction) != {"部位", "材料", "结果"}:
-            raise ValueError(f"{path}字段必须是部位、材料和结果")
-        part = str(direction["部位"])
-        if part in seen_parts or expected_materials.get(part) != direction["材料"]:
-            raise ValueError(f"{path}的部位或材料不匹配")
-        seen_parts.add(part)
-        results = direction["结果"]
-        if not isinstance(results, list) or not results:
-            raise ValueError(f"{path}.结果必须是非空数组")
-        for result_index, raw_result in enumerate(results):
-            result_path = f"{path}.结果[{result_index}]"
-            result = _mapping(raw_result, result_path)
-            unknown = set(result) - {"基础值", "运行值", "取整", "最小值"}
-            if unknown or not {"基础值", "运行值"} <= set(result):
-                raise ValueError(f"{result_path}字段不完整")
-            runtime_value = str(result["运行值"])
-            if runtime_value in actual_results:
-                raise ValueError(f"{result_path}.运行值重复")
-            actual_results.add(runtime_value)
-            rounding = result.get("取整")
-            if rounding is not None and rounding != "向下取整":
-                raise ValueError(f"{result_path}.取整方式不受支持")
-            if "最小值" in result:
-                _positive_number(result["最小值"], f"{result_path}.最小值")
-    if seen_parts != set(expected_materials) or actual_results != expected_results:
-        raise ValueError("圣品阵法增长没有完整产出承载、冲击、数量和传导")
+        raise ValueError("阵法节点运行契约不受战斗核心支持")
 
 
 def _validate_neutral_environment_node(value: Any, path: str) -> None:

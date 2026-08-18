@@ -8,6 +8,7 @@ from pathlib import Path
 from launch import C, OnEvent, config, logger
 
 from .config import game_config
+from .core.alchemy import AlchemyService
 from .core.asset import AssetService
 from .core.character import CharacterService
 from .core.combat import CombatService
@@ -17,6 +18,7 @@ from .core.database import DatabaseService
 from .core.enemy import EnemyService
 from .core.exploration import ExplorationService
 from .core.forging import ForgingService
+from .core.formation import FormationService
 from .core.gathering import GatheringService
 from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
@@ -27,6 +29,7 @@ from .core.retreat import RetreatService
 from .core.team import TeamService
 from .core.world import WorldService
 from .features.biguan import RetreatFeature
+from .features.buzhen import FormationArmFeature
 from .features.caikuang import OreGatheringFeature
 from .features.caiyao import HerbGatheringFeature
 from .features.chakan_juese import CharacterOverviewFeature
@@ -36,7 +39,9 @@ from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.duiwu import TeamFeature
+from .features.liandan import AlchemyFeature
 from .features.lianqi import ForgingFeature
+from .features.lianzhen import FormationCraftFeature
 from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
@@ -55,6 +60,8 @@ class CoreServices:
     pool: PoolService
     growth: GrowthService
     forging: ForgingService
+    alchemy: AlchemyService
+    formation: FormationService
     world: WorldService
     companion: CompanionService
     database: DatabaseService
@@ -89,6 +96,9 @@ class FeatureServices:
     caiyao: HerbGatheringFeature
     caikuang: OreGatheringFeature
     lianqi: ForgingFeature
+    liandan: AlchemyFeature
+    lianzhen: FormationCraftFeature
+    buzhen: FormationArmFeature
 
 
 @dataclass(frozen=True)
@@ -110,17 +120,6 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("documents", status.document_count),
             C.kv("entities", status.entity_count),
             C.kv("pools", status.pool_count),
-        )
-    )
-    combat = CombatService(data)
-    combat_status = combat.initialize()
-    logger.opt(colors=True).success(
-        C.join(
-            C.ok("战斗核心微服务已启动"),
-            C.kv("mechanisms", combat_status.mechanism_count),
-            C.kv("abilities", combat_status.ability_count),
-            C.kv("events", combat_status.event_count),
-            C.kv("environments", combat_status.environment_count),
         )
     )
     item_catalog = ItemCatalogService(data)
@@ -221,6 +220,37 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("artisans", forging_status.artisan_count),
         )
     )
+    alchemy = AlchemyService(data, database, asset, world, location)
+    alchemy_status = alchemy.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("炼丹核心微服务已启动"),
+            C.kv("recipes", alchemy_status.recipe_count),
+            C.kv("medicines", alchemy_status.medicine_count),
+            C.kv("alchemists", alchemy_status.alchemist_count),
+        )
+    )
+    formation = FormationService(data, database, asset, world, location)
+    formation_status = formation.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("阵法核心微服务已启动"),
+            C.kv("formations", formation_status.formation_count),
+            C.kv("masters", formation_status.master_count),
+        )
+    )
+    combat = CombatService(data, formation)
+    combat_status = combat.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("战斗核心微服务已启动"),
+            C.kv("mechanisms", combat_status.mechanism_count),
+            C.kv("abilities", combat_status.ability_count),
+            C.kv("events", combat_status.event_count),
+            C.kv("environments", combat_status.environment_count),
+            C.kv("formations", combat_status.formation_count),
+        )
+    )
     companion = CompanionService(data, database, growth, forging)
     companion_status = companion.initialize()
     logger.opt(colors=True).success(
@@ -260,6 +290,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         player_state,
         enemy,
+        formation,
         combat,
     )
     exploration_status = exploration.initialize()
@@ -314,6 +345,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         pool=pool,
         growth=growth,
         forging=forging,
+        alchemy=alchemy,
+        formation=formation,
         world=world,
         companion=companion,
         database=database,
@@ -406,6 +439,12 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     caikuang.initialize()
     lianqi = ForgingFeature(data, forging)
     lianqi.initialize()
+    liandan = AlchemyFeature(data, alchemy)
+    liandan.initialize()
+    lianzhen = FormationCraftFeature(data, formation)
+    lianzhen.initialize()
+    buzhen = FormationArmFeature(data, formation)
+    buzhen.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -423,6 +462,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         caiyao=caiyao,
         caikuang=caikuang,
         lianqi=lianqi,
+        liandan=liandan,
+        lianzhen=lianzhen,
+        buzhen=buzhen,
     )
     return GameServices(core=core, features=features)
 

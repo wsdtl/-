@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any
 
+from game.core.formation import FormationNodeRules
+
 if TYPE_CHECKING:
     from .engine import BattleEngine
 
@@ -31,9 +33,8 @@ class CombatCatalog:
     timing: Mapping[str, Any]
     status_reactions: tuple[Mapping[str, Any], ...]
     environments: Mapping[str, Mapping[str, Any]]
-    formations: Mapping[str, Mapping[str, Any]]
     environment_rules: Mapping[str, Any]
-    formation_rules: Mapping[str, Any]
+    formation_rules: FormationNodeRules
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> CombatCatalog:
@@ -57,9 +58,8 @@ class CombatCatalog:
             timing=dict(source.get("时序") or {}),
             status_reactions=tuple(copy.deepcopy(source.get("状态反应") or ())),
             environments=dict(source.get("战场环境") or {}),
-            formations=dict(source.get("阵法") or {}),
             environment_rules=dict(source.get("环境规则") or {}),
-            formation_rules=dict(source.get("阵法规则") or {}),
+            formation_rules=source["阵法规则"],
         )
 
     def require_mechanism(self, key: str) -> Mapping[str, Any]:

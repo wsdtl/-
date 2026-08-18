@@ -20,6 +20,7 @@ from game.core.combat import (
     CombatantResult,
     CombatantSpec,
     CombatFieldSpec,
+    CombatFormationSpec,
     CombatMedicineSpec,
     CombatRequest,
     CombatResult,
@@ -35,6 +36,7 @@ from game.core.database import (
     TransactionCommand,
 )
 from game.core.enemy import EnemyInstance, EnemyService
+from game.core.formation import FormationService
 from game.core.location import LocationService
 from game.core.player_state import (
     PlayerStateService,
@@ -82,6 +84,7 @@ class ExplorationService:
         asset: AssetService,
         player_state: PlayerStateService,
         enemy: EnemyService,
+        formation: FormationService,
         combat: CombatService,
     ) -> None:
         self._data = data
@@ -93,6 +96,7 @@ class ExplorationService:
         self._asset = asset
         self._player_state = player_state
         self._enemy = enemy
+        self._formation = formation
         self._combat = combat
         self._initialized = False
         self._rules: Mapping[str, object] = {}
@@ -142,6 +146,21 @@ class ExplorationService:
             raise ExplorationConflictError("当前位置不能进行普通探险")
         if len(location.enemy_multiplier) != 2:
             raise ExplorationStateError("地点缺少单次遭遇敌人倍率")
+
+        formation_plan = await self._formation.activation_plan(owner, position=0)
+        formation_spec = (
+            CombatFormationSpec(
+                formation_id=formation_plan.prepared.formation_id,
+                grade=formation_plan.prepared.grade_name,
+                position=formation_plan.profile.position,
+                materials={
+                    key: float(value)
+                    for key, value in formation_plan.prepared.materials
+                },
+            )
+            if formation_plan is not None
+            else None
+        )
 
         transition_plans = []
         combatants: list[CombatantSpec] = []
@@ -230,6 +249,7 @@ class ExplorationService:
                         altitude=location.altitude,
                         terrain=location.terrain,
                     ),
+                    left_formation=formation_spec if battle_index == 1 else None,
                 )
             )
             enemy_by_id = {value.combatant.id: value for value in enemies}
@@ -337,6 +357,16 @@ class ExplorationService:
             "种子": seed,
             "战败敌人": defeated_total,
             "用户结果": normalized_results,
+            "首战阵法": (
+                {
+                    "阵藏条目": formation_plan.prepared.reserve_key,
+                    "阵法编号": formation_plan.prepared.formation_id,
+                    "名称": formation_plan.prepared.name,
+                    "品级": formation_plan.prepared.grade_id,
+                }
+                if formation_plan is not None
+                else None
+            ),
         }
         operations: list[StateMutation] = [
             StateMutation(owner, SESSION_STATE, session_id, session_value, 0)
@@ -347,6 +377,8 @@ class ExplorationService:
             for user_id in participants
             for operation in inventory_plans[user_id].operations
         )
+        if formation_plan is not None:
+            operations.append(formation_plan.operation)
         for user_id in participants:
             previous = await self._database.get(
                 StateAddress(user_id, LATEST_STATE, LATEST_KEY)
@@ -740,6 +772,21 @@ def _battle_value(
                 "目标编号": event.target_id,
             }
             for event in result.events
+        ],
+        "阵法": [
+            {
+                "编号": formation.formation_id,
+                "名称": formation.name,
+                "品级": formation.grade,
+                "方位": formation.position,
+                "承载": formation.capacity,
+                "剩余承载": formation.remaining_capacity,
+                "冲击": formation.impact,
+                "节点": formation.nodes,
+                "轮转": formation.rotations,
+                "崩解": formation.collapsed,
+            }
+            for formation in result.formations
         ],
     }
 

@@ -21,9 +21,9 @@ from game.core.combat import (
     CombatMedicineSpec,
     CombatReportSpec,
     CombatRequest,
-    CombatService,
 )
 from game.core.data import JsonDataService
+from tools.combat_support import isolated_combat_service
 
 
 def _build(content_ids: tuple[str, str, str, str]) -> tuple[CombatBuildRef, ...]:
@@ -192,9 +192,9 @@ def _assert_report(result) -> None:
 def main() -> None:
     data = JsonDataService(ROOT / "data")
     data.initialize()
-    combat = CombatService(data)
-    status = combat.initialize()
-    result = asyncio.run(combat.execute(_request()))
+    with isolated_combat_service(data) as combat:
+        status = combat.status()
+        result = asyncio.run(combat.execute(_request()))
     _assert_report(result)
     categories = Counter(value["category"] for value in result.report["events"])
     print(

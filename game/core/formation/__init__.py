@@ -1,0 +1,47 @@
+"""阵法核心微服务。"""
+
+from .contracts import (
+    FormationActivationPlan,
+    FormationArmResult,
+    FormationBattleProfile,
+    FormationConflictError,
+    FormationDefinition,
+    FormationEntry,
+    FormationError,
+    FormationMaster,
+    FormationMaterial,
+    FormationMaterialError,
+    FormationNodeRules,
+    FormationOverview,
+    FormationPrepared,
+    FormationPreview,
+    FormationRequirement,
+    FormationResult,
+    FormationStageProfile,
+    FormationStatus,
+    FormationUnavailableError,
+)
+from .service import FormationService
+
+__all__ = [
+    "FormationActivationPlan",
+    "FormationArmResult",
+    "FormationBattleProfile",
+    "FormationConflictError",
+    "FormationDefinition",
+    "FormationEntry",
+    "FormationError",
+    "FormationMaster",
+    "FormationMaterial",
+    "FormationMaterialError",
+    "FormationNodeRules",
+    "FormationOverview",
+    "FormationPrepared",
+    "FormationPreview",
+    "FormationRequirement",
+    "FormationResult",
+    "FormationService",
+    "FormationStageProfile",
+    "FormationStatus",
+    "FormationUnavailableError",
+]

@@ -3,15 +3,30 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from game.core.asset import AssetService
 from game.core.combat import CombatantSpec, CombatRequest, CombatService
 from game.core.data import JsonDataService
+from game.core.database import DatabaseService
+from game.core.formation import FormationService
+from game.core.location import LocationService
+from game.core.world import WorldService
 
 
-def test_defeated_combatant_loses_all_spirit() -> None:
+def test_defeated_combatant_loses_all_spirit(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     data = JsonDataService(root / "data")
     data.initialize()
-    combat = CombatService(data)
+    world = WorldService(data)
+    world.initialize()
+    database = DatabaseService(tmp_path / "game.db")
+    database.initialize()
+    location = LocationService(data, database, world)
+    location.initialize()
+    asset = AssetService(data, database)
+    asset.initialize()
+    formation = FormationService(data, database, asset, world, location)
+    formation.initialize()
+    combat = CombatService(data, formation)
     combat.initialize()
     result = asyncio.run(
         combat.execute(

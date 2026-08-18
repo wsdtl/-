@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from game.core.combat import CombatService
 from game.core.combat.models import RuntimeCombatantSnapshot
 from game.core.data import JsonDataService
+from tools.combat_support import isolated_combat_service
 
 
 LISTENER_EVENTS = (
@@ -125,35 +125,33 @@ def run(
 ) -> None:
     data = JsonDataService(ROOT / "data")
     data.initialize()
-    combat = CombatService(data)
-    combat.initialize()
     left = build_team("甲方", left_users, listeners)
     right = build_team("乙方", right_users, listeners)
+    with isolated_combat_service(data) as combat:
+        for seed in range(warmup):
+            combat._simulate_runtime_teams(
+                left=left,
+                right=right,
+                medicine_definitions={},
+                seed=seed,
+                action_limit=action_limit,
+            )
 
-    for seed in range(warmup):
-        combat._simulate_runtime_teams(
-            left=left,
-            right=right,
-            medicine_definitions={},
-            seed=seed,
-            action_limit=action_limit,
-        )
-
-    durations: list[float] = []
-    actions: list[int] = []
-    events: list[int] = []
-    for seed in range(rounds):
-        started = time.perf_counter()
-        outcome = combat._simulate_runtime_teams(
-            left=left,
-            right=right,
-            medicine_definitions={},
-            seed=seed,
-            action_limit=action_limit,
-        )
-        durations.append((time.perf_counter() - started) * 1000)
-        actions.append(outcome.actions)
-        events.append(len(outcome.events))
+        durations: list[float] = []
+        actions: list[int] = []
+        events: list[int] = []
+        for seed in range(rounds):
+            started = time.perf_counter()
+            outcome = combat._simulate_runtime_teams(
+                left=left,
+                right=right,
+                medicine_definitions={},
+                seed=seed,
+                action_limit=action_limit,
+            )
+            durations.append((time.perf_counter() - started) * 1000)
+            actions.append(outcome.actions)
+            events.append(len(outcome.events))
 
     ordered = sorted(durations)
     p95 = ordered[min(len(ordered) - 1, max(0, int(len(ordered) * 0.95) - 1))]

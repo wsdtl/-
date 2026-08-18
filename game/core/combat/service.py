@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import math
 from dataclasses import replace
 from typing import Any
 
 from game.core.data import JsonDataService, materialize
+from game.core.formation import FormationService
 
 from .catalog import BattleReportCatalog
 from .contracts import (
@@ -37,15 +37,21 @@ from .report import RuntimeBattleReportParticipant, build_battle_report
 class CombatService:
     """消费 JSON 数据微服务，统一提供战斗执行与战报生成。"""
 
-    def __init__(self, data: JsonDataService) -> None:
+    def __init__(self, data: JsonDataService, formation: FormationService) -> None:
         self._data = data
+        self._formation = formation
         self._engine: BattleEngine | None = None
         self._report_catalog: BattleReportCatalog | None = None
 
     def initialize(self) -> CombatStatus:
         if self._engine is not None:
             raise RuntimeError("战斗核心已经初始化")
-        foundation = load_battle_foundation(self._data)
+        if not self._formation.status().initialized:
+            raise RuntimeError("阵法核心必须先于战斗核心启动")
+        foundation = load_battle_foundation(
+            self._data,
+            formation_rules=self._formation.node_rules(),
+        )
         report_dataset = materialize(self._data.dataset("战斗展示"))
         report_catalog = BattleReportCatalog.from_mapping(report_dataset["战报"])
         self._engine = BattleEngine(foundation)
@@ -63,7 +69,7 @@ class CombatService:
             ability_count=len(engine.catalog.abilities),
             event_count=len(engine.catalog.events),
             environment_count=len(engine.catalog.environments),
-            formation_count=len(engine.catalog.formations),
+            formation_count=self._formation.status().formation_count,
         )
 
     async def execute(self, request: CombatRequest) -> CombatResult:
@@ -123,87 +129,30 @@ class CombatService:
     ) -> PreparedFormation | None:
         if spec is None:
             return None
-        formation_id = str(spec.formation_id or "").strip()
-        try:
-            raw = self._require_engine().catalog.formations[formation_id]
-        except KeyError as exc:
-            raise ValueError(f"战斗核心未登记阵法：{formation_id or '<空>'}") from exc
-        grade_name = str(spec.grade or "黄").strip()
-        grades = {str(value["品级"]): value for value in raw["品级"]}
-        if grade_name not in grades:
-            raise ValueError(f"阵法品级不存在：{formation_id} / {grade_name}")
-        grade = grades[grade_name]
-        if grade_name == "圣":
-            minimum = {str(k): float(v) for k, v in grade["最低消耗"].items()}
-            actual = {str(k): float(v) for k, v in dict(spec.materials).items()}
-            growth = self._require_engine().catalog.formation_rules["圣品增长"]
-            directions = tuple(growth["方向"])
-            materials = {str(value["材料"]) for value in directions}
-            unknown_materials = set(actual) - materials
-            if unknown_materials:
-                raise ValueError(
-                    f"圣品阵法包含未知材料：{formation_id} / "
-                    + "、".join(sorted(unknown_materials))
-                )
-            if any(actual.get(key, 0) < value for key, value in minimum.items()):
-                raise ValueError(f"圣品阵法材料不足：{formation_id}")
-            weights = {str(k): float(v) for k, v in grade["圣品权重"].items()}
-            if not math.isclose(
-                sum(weights.values()),
-                float(growth["权重和"]),
-                rel_tol=0,
-                abs_tol=1e-9,
-            ):
-                raise ValueError(f"圣品阵法权重和错误：{formation_id}")
-            minimum_multiplier = float(growth["最低投入倍率"])
-            total = 1.0
-            for direction in directions:
-                material = str(direction["材料"])
-                part = str(direction["部位"])
-                total *= (
-                    max(
-                        minimum_multiplier,
-                        actual.get(material, 0) / minimum[material],
-                    )
-                    ** weights[part]
-                )
-            derived: dict[str, float] = {}
-            for direction in directions:
-                part = str(direction["部位"])
-                for output in direction["结果"]:
-                    value = float(grade[part][str(output["基础值"])]) * total
-                    if output.get("取整") == "向下取整":
-                        value = float(math.floor(value))
-                    if "最小值" in output:
-                        value = max(float(output["最小值"]), value)
-                    derived[str(output["运行值"])] = value
-            capacity = derived["承载"]
-            impact = derived["冲击"]
-            nodes = int(derived["数量"])
-            transmission = derived["传导"]
-        else:
-            capacity = float(grade["阵基"]["承载"])
-            impact = float(grade["阵眼"]["冲击"])
-            nodes = int(grade["节点"]["数量"])
-            transmission = float(grade["节点"]["传导"])
+        profile = self._formation.battle_profile(
+            spec.formation_id,
+            spec.grade,
+            spec.materials,
+            position=spec.position,
+        )
         stages = tuple(
             PreparedFormationStage(
-                threshold_multiplier=float(value["环境阶段阈值倍率"]),
-                cycle_multiplier=float(value["行动周期倍率"]),
-                impact_multiplier=float(value["阵势倍率"]),
+                threshold_multiplier=value.threshold_multiplier,
+                cycle_multiplier=value.cycle_multiplier,
+                impact_multiplier=value.impact_multiplier,
             )
-            for value in grade["地势阶段"]
+            for value in profile.stages
         )
         return PreparedFormation(
-            formation_id,
-            str(raw["名称"]),
-            grade_name,
+            profile.formation_id,
+            profile.name,
+            profile.grade_name,
             side,
-            int(spec.position),
-            capacity,
-            impact,
-            nodes,
-            transmission,
+            profile.position,
+            profile.capacity,
+            profile.impact,
+            profile.nodes,
+            profile.transmission,
             stages,
         )
 

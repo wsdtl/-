@@ -49,6 +49,7 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "修行",
         "行动",
         "世界",
+        "战斗",
         "炼制",
         "资源",
     )
@@ -85,8 +86,13 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "地图",
         "位置",
         "附近",
+        "布阵",
         "炼器",
         "开炉",
+        "炼丹",
+        "开丹炉",
+        "阵法",
+        "炼阵",
         "纳戒",
         "查看物品",
     ]

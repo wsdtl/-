@@ -519,8 +519,7 @@ class BattleEngine(MechanismRuntime):
         ]
         if not due:
             return
-        node_rules = self.catalog.formation_rules["节点结算"]
-        target_rules = node_rules["无敌方阵法"]
+        node_rules = self.catalog.formation_rules
         stage_index = context.field.stage_index if context.field is not None else 0
         prepared: list[
             tuple[RuntimeFormation, float, tuple[Fighter | RuntimeFormation, ...]]
@@ -552,7 +551,7 @@ class BattleEngine(MechanismRuntime):
                 for value in active
                 if value.side != formation.side and value.active
             ]
-            if node_rules["敌方阵法优先"] and enemy_formations:
+            if node_rules.enemy_formation_first and enemy_formations:
                 targets: tuple[Fighter | RuntimeFormation, ...] = (
                     min(
                         enemy_formations,
@@ -573,8 +572,8 @@ class BattleEngine(MechanismRuntime):
                 ]
                 if not alive:
                     continue
-                minimum = int(node_rules["最少目标数"])
-                count_field = str(target_rules["目标数量字段"])
+                minimum = node_rules.minimum_targets
+                count_field = node_rules.target_count_field
                 available_count = {
                     "节点": formation.definition.nodes,
                 }[count_field]
@@ -600,7 +599,9 @@ class BattleEngine(MechanismRuntime):
         impact_events: list[tuple[Fighter, Fighter, float, Mapping[str, Any]]] = []
         for formation, impact, targets in prepared:
             split_impact = (
-                impact / len(targets) if node_rules["冲击分配"] == "均分" else impact
+                impact / len(targets)
+                if node_rules.impact_distribution == "均分"
+                else impact
             )
             for target in targets:
                 if isinstance(target, RuntimeFormation):

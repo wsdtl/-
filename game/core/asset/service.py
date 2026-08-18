@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import (
@@ -27,6 +28,9 @@ from .contracts import (
     CultivationAcquisitionPlan,
     CultivationAcquisitionResult,
     CultivationOwnership,
+    FormationReserveAcquisitionPlan,
+    FormationReserveConsumptionPlan,
+    FormationReserveStack,
     InventoryAdjustment,
     InventoryChange,
     InventoryChangeError,
@@ -509,6 +513,173 @@ class AssetService:
                 normalized_law_id,
                 {"编号": normalized_law_id, "数量": after},
                 version,
+            ),
+        )
+
+    async def plan_formation_reserve_acquisition(
+        self,
+        user_id: str,
+        formation_id: str,
+        grade_id: str,
+        *,
+        materials: Mapping[str, str] | None = None,
+    ) -> FormationReserveAcquisitionPlan:
+        """为炼阵事务生成固定品阵法增量或独立圣品实例。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_formation_id = _required_text(formation_id, "阵法编号")
+        formation = self._data.entity("阵法", normalized_formation_id)
+        name = _required_entity_text(
+            formation, "名称", f"阵法 {normalized_formation_id}"
+        )
+        grade = self.grade(grade_id)
+        if grade.grade_id == "05":
+            values = {
+                key: _required_text(value, f"圣品阵法.投入.{key}")
+                for key, value in (materials or {}).items()
+            }
+            if set(values) != {"兽宝", "灵矿", "灵植"}:
+                raise AssetStateError("圣品阵法必须完整保存兽宝、灵矿和灵植投入")
+            state_key = uuid4().hex
+            stack = FormationReserveStack(
+                state_key,
+                normalized_formation_id,
+                name,
+                grade.grade_id,
+                grade.name,
+                1,
+                tuple((key, values[key]) for key in ("兽宝", "灵矿", "灵植")),
+                0,
+            )
+            return FormationReserveAcquisitionPlan(
+                stack,
+                0,
+                1,
+                StateMutation(
+                    normalized_user_id,
+                    "formation_reserve",
+                    state_key,
+                    {
+                        "阵法编号": normalized_formation_id,
+                        "品级": grade.grade_id,
+                        "投入": values,
+                    },
+                    0,
+                ),
+            )
+        if materials:
+            raise AssetStateError("天地玄黄阵法不能保存额外材料投入")
+        state_key = f"{normalized_formation_id}:{grade.grade_id}"
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "formation_reserve", state_key)
+        )
+        before = 0
+        version = 0
+        if snapshot is not None:
+            value = _mapping(snapshot.value, f"formation_reserve/{state_key}")
+            if _text(value.get("阵法编号"), "阵藏.阵法编号") != normalized_formation_id:
+                raise AssetStateError("阵藏状态键与阵法编号不一致")
+            stored_grade = self.grade(_text(value.get("品级"), "阵藏.品级"))
+            if stored_grade.grade_id != grade.grade_id:
+                raise AssetStateError("阵藏状态键与品级不一致")
+            before = _positive_int(value.get("数量"), "阵藏.数量")
+            version = snapshot.version
+        after = before + 1
+        stack = FormationReserveStack(
+            state_key,
+            normalized_formation_id,
+            name,
+            grade.grade_id,
+            grade.name,
+            after,
+            (),
+            version,
+        )
+        return FormationReserveAcquisitionPlan(
+            stack,
+            before,
+            after,
+            StateMutation(
+                normalized_user_id,
+                "formation_reserve",
+                state_key,
+                {
+                    "阵法编号": normalized_formation_id,
+                    "品级": grade.grade_id,
+                    "数量": after,
+                },
+                version,
+            ),
+        )
+
+    async def formation_reserve_stack(
+        self, user_id: str, state_key: str
+    ) -> FormationReserveStack:
+        """按阵藏条目键读取固定品堆叠或圣品独立实例。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_key = _required_text(state_key, "阵藏条目")
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "formation_reserve", normalized_key)
+        )
+        if snapshot is None:
+            raise AssetStateError("阵藏中没有该阵法")
+        value = _mapping(snapshot.value, f"formation_reserve/{normalized_key}")
+        formation_id = _text(value.get("阵法编号"), "阵藏.阵法编号")
+        formation = self._data.entity("阵法", formation_id)
+        name = _required_entity_text(formation, "名称", f"阵法 {formation_id}")
+        grade = self.grade(_text(value.get("品级"), "阵藏.品级"))
+        if grade.grade_id == "05":
+            raw_materials = _mapping(value.get("投入"), "圣品阵法.投入")
+            materials = tuple(
+                (
+                    key,
+                    _required_text(raw_materials.get(key), f"圣品阵法.投入.{key}"),
+                )
+                for key in ("兽宝", "灵矿", "灵植")
+            )
+            quantity = 1
+        else:
+            if normalized_key != f"{formation_id}:{grade.grade_id}":
+                raise AssetStateError("固定品阵藏状态键与内容不一致")
+            materials = ()
+            quantity = _positive_int(value.get("数量"), "阵藏.数量")
+        return FormationReserveStack(
+            normalized_key,
+            formation_id,
+            name,
+            grade.grade_id,
+            grade.name,
+            quantity,
+            materials,
+            snapshot.version,
+        )
+
+    async def plan_formation_reserve_consumption(
+        self, user_id: str, state_key: str
+    ) -> FormationReserveConsumptionPlan:
+        """为布阵事务生成一份阵藏扣除。"""
+
+        stack = await self.formation_reserve_stack(user_id, state_key)
+        after = stack.quantity - 1
+        value = None
+        if after:
+            value = {
+                "阵法编号": stack.formation_id,
+                "品级": stack.grade_id,
+                "数量": after,
+            }
+        return FormationReserveConsumptionPlan(
+            stack,
+            after,
+            StateMutation(
+                _required_text(user_id, "user_id"),
+                "formation_reserve",
+                stack.state_key,
+                value,
+                stack.version,
             ),
         )
 

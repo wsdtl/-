@@ -175,6 +175,33 @@ class LawReserveAcquisitionPlan:
     operation: StateMutation
 
 
+@dataclass(frozen=True)
+class FormationReserveStack:
+    state_key: str
+    formation_id: str
+    name: str
+    grade_id: str
+    grade_name: str
+    quantity: int
+    materials: tuple[tuple[str, str], ...]
+    version: int
+
+
+@dataclass(frozen=True)
+class FormationReserveAcquisitionPlan:
+    stack: FormationReserveStack
+    quantity_before: int
+    quantity_after: int
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class FormationReserveConsumptionPlan:
+    stack: FormationReserveStack
+    quantity_after: int
+    operation: StateMutation
+
+
 __all__ = [
     "AssetCategory",
     "AssetEntry",
@@ -188,6 +215,9 @@ __all__ = [
     "CultivationAcquisitionPlan",
     "CultivationAcquisitionResult",
     "CultivationOwnership",
+    "FormationReserveAcquisitionPlan",
+    "FormationReserveConsumptionPlan",
+    "FormationReserveStack",
     "InventoryAdjustment",
     "InventoryChange",
     "InventoryChangeError",
