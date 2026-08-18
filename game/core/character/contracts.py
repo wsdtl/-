@@ -126,6 +126,16 @@ class CharacterGrowthPlan:
 
 
 @dataclass(frozen=True)
+class CharacterRetreatPlan:
+    experience_gained: int
+    level_before: int
+    level_after: int
+    health: float
+    spirit: float
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
 class CharacterEquipPlan:
     category: str
     slot: int
@@ -178,6 +188,7 @@ __all__ = [
     "CharacterNotFoundError",
     "CharacterProfile",
     "CharacterPublicProfile",
+    "CharacterRetreatPlan",
     "CharacterStateError",
     "CharacterStatus",
     "EquippedContent",

@@ -23,7 +23,12 @@ def text(copy: ExplorationCopy, section: str, key: str, **values: object) -> str
 
 
 def error(copy: ExplorationCopy, message: str):
-    return M.document().section(text(copy, "错误", "标题"), icon="notice").line(message).build()
+    return (
+        M.document()
+        .section(text(copy, "错误", "标题"), icon="notice")
+        .line(message)
+        .build()
+    )
 
 
 def started(
@@ -79,7 +84,11 @@ def progress(
             (text(copy, "进度", "累计物品"), value.item_quantity),
         )
         .line(
-            text(copy, "进度", "已经结束")
+            text(
+                copy,
+                "进度",
+                ("已经结束" if value.can_settle else "等待领队"),
+            )
             if value.ended
             else text(copy, "进度", "尚未结束")
         )
@@ -168,7 +177,11 @@ def _duration(seconds: int) -> str:
 
 
 def _resource(value: float) -> str:
-    return str(int(value)) if value.is_integer() else f"{value:.3f}".rstrip("0").rstrip(".")
+    return (
+        str(int(value))
+        if value.is_integer()
+        else f"{value:.3f}".rstrip("0").rstrip(".")
+    )
 
 
 __all__ = ["error", "progress", "settlement_page", "started", "text"]

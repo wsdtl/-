@@ -33,6 +33,7 @@ from .contracts import (
     CharacterNotFoundError,
     CharacterProfile,
     CharacterPublicProfile,
+    CharacterRetreatPlan,
     CharacterStateError,
     CharacterStatus,
     EquippedContent,
@@ -396,14 +397,12 @@ class CharacterService:
         character = dict(_state_mapping(character_snapshot.value, "character/main"))
         weapon = dict(_state_mapping(weapon_snapshot.value, "weapon/main"))
         attributes = _state_mapping(character.get("属性"), "人物.属性")
-        health_after = _bounded_resource(
-            health, attributes.get("血气上限"), "战后血气"
-        )
-        spirit_after = _bounded_resource(
-            spirit, attributes.get("精神上限"), "战后精神"
-        )
+        health_after = _bounded_resource(health, attributes.get("血气上限"), "战后血气")
+        spirit_after = _bounded_resource(spirit, attributes.get("精神上限"), "战后精神")
         stone_delta = _request_int(spirit_stones_delta, "灵石变化")
-        stones_after = _state_nonnegative_int(character.get("灵石"), "人物.灵石") + stone_delta
+        stones_after = (
+            _state_nonnegative_int(character.get("灵石"), "人物.灵石") + stone_delta
+        )
         if stones_after < 0:
             raise CharacterCultivationError("灵石不足")
         gained = _nonnegative_request_int(weapon_experience, "本命武器经验")
@@ -443,6 +442,77 @@ class CharacterService:
             ),
         )
 
+    async def plan_retreat_settlement(
+        self,
+        user_id: str,
+        *,
+        experience: int,
+        health_recovery_ratio: float,
+        spirit_recovery_ratio: float,
+    ) -> CharacterRetreatPlan:
+        """合并闭关经验与资源恢复，只修改人物主体。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        gained = _nonnegative_request_int(experience, "闭关人物经验")
+        health_ratio = _request_ratio(health_recovery_ratio, "闭关血气恢复比例")
+        spirit_ratio = _request_ratio(spirit_recovery_ratio, "闭关精神恢复比例")
+        try:
+            advance = self._growth.advance_cultivator(
+                level=_state_positive_int(character.get("等级"), "人物.等级"),
+                experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
+                realm_id=_state_text(character.get("境界"), "人物.境界"),
+                gained=gained,
+            )
+        except GrowthError as exc:
+            raise CharacterCultivationError(str(exc)) from exc
+        attributes = _add_numbers(
+            _state_mapping(character.get("属性"), "人物.属性"),
+            self._growth.cultivator_attribute_growth(advance.levels_gained),
+        )
+        resources = dict(_state_mapping(character.get("资源"), "人物.资源"))
+        health_maximum = _number(attributes.get("血气上限"), "血气上限")
+        spirit_maximum = _number(attributes.get("精神上限"), "精神上限")
+        health = _bounded_resource(
+            _number(resources.get("血气"), "人物.血气") + health_maximum * health_ratio,
+            health_maximum,
+            "闭关后血气",
+        )
+        spirit = _bounded_resource(
+            _number(resources.get("精神"), "人物.精神") + spirit_maximum * spirit_ratio,
+            spirit_maximum,
+            "闭关后精神",
+        )
+        resources.update({"血气": health, "精神": spirit})
+        character.update(
+            {
+                "等级": advance.level_after,
+                "经验": advance.experience_after,
+                "属性": attributes,
+                "资源": resources,
+            }
+        )
+        return CharacterRetreatPlan(
+            gained,
+            advance.level_before,
+            advance.level_after,
+            health,
+            spirit,
+            StateMutation(
+                normalized_user_id,
+                "character",
+                "main",
+                character,
+                snapshot.version,
+            ),
+        )
+
     async def plan_equip(
         self,
         user_id: str,
@@ -476,7 +546,9 @@ class CharacterService:
         if snapshot is None:
             raise CharacterStateError("人物缺少修行槽状态")
         cultivation = dict(_state_mapping(snapshot.value, "cultivation/main"))
-        slots = list(_state_slots(cultivation.get(normalized_category), normalized_category))
+        slots = list(
+            _state_slots(cultivation.get(normalized_category), normalized_category)
+        )
         if slot > len(slots):
             raise CharacterCultivationError(
                 f"{normalized_category}槽位只有{len(slots)}个"
@@ -501,8 +573,12 @@ class CharacterService:
             raise CharacterCultivationError(
                 f"该构筑触发相冲机制：{'、'.join(sorted(conflict))}"
             )
-        replaced_id = "" if replaced is None else _state_text(
-            _state_mapping(replaced, "原修行槽").get("编号"), "原修行槽.编号"
+        replaced_id = (
+            ""
+            if replaced is None
+            else _state_text(
+                _state_mapping(replaced, "原修行槽").get("编号"), "原修行槽.编号"
+            )
         )
         return CharacterEquipPlan(
             normalized_category,
@@ -541,7 +617,9 @@ class CharacterService:
                 f"达到{current_realm.maximum_level}级后才能突破{current_realm.name}"
             )
         next_realm = self._growth.next_realm(current_realm_id)
-        medicine, permanent = self._breakthrough_medicine(medicine_id, next_realm.realm_id)
+        medicine, permanent = self._breakthrough_medicine(
+            medicine_id, next_realm.realm_id
+        )
         records = list(_state_records(character.get("突破记录"), "人物.突破记录"))
         if any(record.get("目标境界") == next_realm.realm_id for record in records):
             raise CharacterCultivationError("该境界已经完成突破")
@@ -657,7 +735,10 @@ class CharacterService:
         if self._data.entity_record("物品", normalized).number_category != "丹药":
             raise CharacterCultivationError("只能使用突破丹突破境界")
         effect = _mapping(medicine.get("使用效果"), "突破丹.使用效果")
-        if effect.get("类型") != "境界突破" or effect.get("目标境界") != target_realm_id:
+        if (
+            effect.get("类型") != "境界突破"
+            or effect.get("目标境界") != target_realm_id
+        ):
             raise CharacterCultivationError("该突破丹不对应下一境界")
         permanent = _mapping(effect.get("永久属性", {}), "突破丹.永久属性")
         return medicine, {
@@ -984,6 +1065,16 @@ def _number(value: object, label: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise JsonDataError(f"{label}必须是数值")
     return value
+
+
+def _request_ratio(value: object, label: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0 <= value <= 1
+    ):
+        raise CharacterCultivationError(f"{label}必须在0至1之间")
+    return float(value)
 
 
 def _initial_items(role_rule: Mapping[str, object]) -> tuple[tuple[str, str, int], ...]:

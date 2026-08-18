@@ -87,8 +87,14 @@ class ExplorationFeature:
     def start_actions(self) -> tuple[ExplorationAction, ...]:
         return actions(self._buttons, "开始", set())
 
-    def progress_actions(self, ended: bool) -> tuple[ExplorationAction, ...]:
-        return actions(self._buttons, "进度", {"可以结算"} if ended else set())
+    def progress_actions(
+        self, ended: bool, can_settle: bool
+    ) -> tuple[ExplorationAction, ...]:
+        return actions(
+            self._buttons,
+            "进度",
+            {"可以结算"} if ended and can_settle else set(),
+        )
 
     def settlement_actions(
         self, page: int, total_pages: int

@@ -170,6 +170,17 @@ class CompanionGrowthPlan:
 
 
 @dataclass(frozen=True)
+class CompanionRetreatPlan:
+    companion_id: str
+    experience_gained: int
+    level_before: int
+    level_after: int
+    health: float
+    spirit: float
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
 class CompanionBreakthroughPlan:
     companion_id: str
     realm_before: str
@@ -241,6 +252,7 @@ __all__ = [
     "CompanionLawPlan",
     "CompanionNotFoundError",
     "CompanionRelation",
+    "CompanionRetreatPlan",
     "CompanionReward",
     "CompanionRules",
     "CompanionStateError",

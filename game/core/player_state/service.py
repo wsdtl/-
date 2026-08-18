@@ -290,10 +290,46 @@ class PlayerStateService:
             allowed_names = "或".join(
                 self._states[state_type][state_id]["名称"] for state_id in allowed
             )
-            failures.append(f"{state_type}为{current_slot.name}，需要{allowed_names}")
+            failures.append(
+                self._guard_failure_reason(
+                    user_id,
+                    state_type,
+                    current_slot,
+                    allowed_names,
+                )
+            )
         if failures:
             return StateGuardResult(False, "；".join(failures), current_names)
         return StateGuardResult(True, current_states=current_names)
+
+    def _guard_failure_reason(
+        self,
+        user_id: str,
+        state_type: str,
+        slot: StateSlot,
+        allowed_names: str,
+    ) -> str:
+        if state_type != "行为":
+            return f"{state_type}为{slot.name}，需要{allowed_names}"
+        activity = self._states[state_type][slot.state_id].get("活动提示")
+        if not isinstance(activity, Mapping):
+            return f"{state_type}为{slot.name}，需要{allowed_names}"
+        activity_name = str(activity.get("活动") or "").strip()
+        progress_command = str(activity.get("进度命令") or "").strip()
+        owner = str(slot.context.get("发起者") or "").strip()
+        participant_count = slot.context.get("参与人数", 1)
+        grouped = (
+            isinstance(participant_count, int)
+            and not isinstance(participant_count, bool)
+            and participant_count > 1
+        )
+        if owner and owner != user_id:
+            current = f"正在跟随领队{activity_name}"
+        elif grouped:
+            current = f"正在带领同行修士{activity_name}"
+        else:
+            current = f"正在{activity_name}"
+        return f"{current}。当前不能执行该行动，可使用“{progress_command}”查看进度"
 
     async def transition(
         self, command: StateTransitionCommand
@@ -490,6 +526,18 @@ class PlayerStateService:
                         raise PlayerStateRuleError(f"{name}.可中断必须是布尔值")
                     if not isinstance(state.get("附近出现"), bool):
                         raise PlayerStateRuleError(f"{name}.附近出现必须是布尔值")
+                    activity = state.get("活动提示")
+                    if activity is not None:
+                        activity_rule = _mapping(activity, f"{name}.活动提示")
+                        if set(activity_rule) != {"活动", "进度命令"}:
+                            raise PlayerStateRuleError(
+                                f"{name}.活动提示必须只包含活动和进度命令"
+                            )
+                        _text(activity_rule.get("活动"), f"{name}.活动提示.活动")
+                        _text(
+                            activity_rule.get("进度命令"),
+                            f"{name}.活动提示.进度命令",
+                        )
                 if not isinstance(state.get("附近公开"), bool):
                     raise PlayerStateRuleError(f"{name}.附近公开必须是布尔值")
 

@@ -45,6 +45,7 @@ from game.core.world import LocationQuery, WorldService
 from .contracts import (
     ExplorationCharacterSummary,
     ExplorationConflictError,
+    ExplorationLeaderRequiredError,
     ExplorationNotFinishedError,
     ExplorationProgress,
     ExplorationSettlement,
@@ -157,7 +158,11 @@ class ExplorationService:
                         request_id=command.request_id,
                         state_type="行为",
                         target_state_id=EXPLORING_STATE_ID,
-                        context={"探险编号": session_id, "发起者": owner},
+                        context={
+                            "探险编号": session_id,
+                            "发起者": owner,
+                            "参与人数": len(participants),
+                        },
                     )
                 )
             )
@@ -426,6 +431,7 @@ class ExplorationService:
                 _nonnegative_int(value.get("分配物品"), "战斗.分配物品")
                 for value in battles
             ),
+            can_settle=_user_id(user_id) == owner,
         )
 
     async def settle(
@@ -441,6 +447,8 @@ class ExplorationService:
         )
         if existing is not None:
             return self._settlement(existing.value, replayed=True)
+        if _user_id(user_id) != owner:
+            raise ExplorationLeaderRequiredError("本次探险由领队统一结算")
         settled_at = _utc(now)
         ends_at = _parse_time(session.get("结束时间"), "探险.结束时间")
         if settled_at < ends_at:

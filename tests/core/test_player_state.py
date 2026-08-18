@@ -91,7 +91,7 @@ def test_guard_requires_all_declared_types_but_ors_within_type(tmp_path: Path) -
     )
     blocked = _run(player_state.authorize("qq-1", "自主空闲或休息"))
     assert blocked.allowed is False
-    assert "行为为闭关中" in blocked.reason
+    assert blocked.reason == "正在闭关。当前不能执行该行动，可使用“闭关进度”查看进度"
 
 
 def test_state_transition_uses_json_edges_and_versions(tmp_path: Path) -> None:

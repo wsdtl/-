@@ -86,7 +86,7 @@ def test_position_is_created_atomically_and_not_repeated_in_character(
     assert "位置" not in character.value
     assert current.xy == view.location.xy == (15, 17)
     assert view.location.location_name == "溪隐台"
-    assert view.location.available_functions == ("修士",)
+    assert view.location.available_functions == ("闭关", "修士", "探险")
     assert view.local_cultivators
     assert all(value.realm_name == "灵动" for value in view.local_cultivators)
 
@@ -225,13 +225,18 @@ def test_position_copy_overview_and_buttons_are_json_driven(tmp_path: Path) -> N
         )
     ) == (
         "附近 修士",
+        "探险",
+        "闭关",
         "附近",
         "地图",
     )
-    assert position.open_location_functions(("修士", "闭关", "交易")) == ("修士",)
+    assert position.open_location_functions(("修士", "闭关", "交易")) == (
+        "修士",
+        "闭关",
+    )
     assert tuple(
         action.command for action in _run(position.current_location_actions("qq-1"))
-    ) == ("附近 修士", "附近", "地图")
+    ) == ("附近 修士", "探险", "闭关", "附近", "地图")
     assert tuple(action.command for action in position.nearby_overview_actions()) == (
         "附近 修士",
         "附近 地点",

@@ -1,9 +1,9 @@
-"""普通探险命令。"""
+"""闭关命令。"""
 
 from __future__ import annotations
 
 from game.app import current_game_services
-from game.features.tanxian import ExplorationFeatureError
+from game.features.biguan import RetreatFeatureError
 
 from ...command import GameCommand, HelpSpec
 from . import reply
@@ -11,70 +11,71 @@ from . import reply
 
 @GameCommand.fullmatch(
     scope="专属",
-    cmd="探险",
+    cmd="闭关",
     guard_rule="自主空闲",
     help=HelpSpec(
         category="行动",
-        summary="在当前地点开始一次普通探险",
-        usage=("探险",),
-        side_effect="预先完成全部战斗，扣除预计丹药并进入探险中",
-        order=30,
+        summary="在当前地点与同行修士共同闭关",
+        usage=("闭关",),
+        side_effect="锁定当前参与者并预先确定六轮闭关结果",
+        order=33,
     ),
 )
-async def start_exploration(*, user_id: str, message_context, manager, **_) -> None:
-    feature = current_game_services().features.tanxian
+async def start_retreat(*, user_id: str, message_context, manager, **_) -> None:
+    feature = current_game_services().features.biguan
     try:
         result = await feature.start(user_id, message_context.request_id)
         await manager.send(
-            reply.started(feature.copy(), result, feature.start_actions())
+            reply.started(feature.copy(), result, feature.started_actions())
         )
-    except ExplorationFeatureError as exc:
+    except RetreatFeatureError as exc:
         await manager.send(reply.error(feature.copy(), str(exc)))
 
 
 @GameCommand.fullmatch(
     scope="专属",
-    cmd="探险进度",
+    cmd="闭关进度",
     guard_rule="已创建",
     help=HelpSpec(
         category="行动",
-        summary="查看当前或最近一次探险已经解封的累计进度",
-        usage=("探险进度",),
-        side_effect="只读查询，不提前发放奖励",
-        order=31,
+        summary="查看当前或最近一次闭关已经完成的整轮结果",
+        usage=("闭关进度",),
+        side_effect="只读查询，不提前写入经验、恢复或功法",
+        order=34,
     ),
 )
-async def exploration_progress(*, user_id: str, manager, **_) -> None:
-    feature = current_game_services().features.tanxian
+async def retreat_progress(*, user_id: str, manager, **_) -> None:
+    feature = current_game_services().features.biguan
     try:
         result = await feature.progress(user_id)
         await manager.send(
             reply.progress(
                 feature.copy(),
+                feature,
                 result,
-                feature.progress_actions(result.ended, result.can_settle),
+                feature.progress_actions(result.can_end),
             )
         )
-    except ExplorationFeatureError as exc:
+    except RetreatFeatureError as exc:
         await manager.send(reply.error(feature.copy(), str(exc)))
 
 
 @GameCommand.command(
     scope="专属",
-    cmd="探险结算",
+    cmd="出关",
     guard_rule="已创建",
     help=HelpSpec(
         category="行动",
-        summary="探险结束后结算全部结果并按页查看",
-        usage=("探险结算", "探险结算 页码"),
-        side_effect="首次调用发放全部奖励并结束探险状态",
-        order=32,
+        summary="按已经完成的整轮结果带领全体出关",
+        usage=("出关", "出关 页码"),
+        side_effect="首次调用统一发放结果并结束全体闭关状态",
+        order=35,
     ),
 )
-async def settle_exploration(
+async def end_retreat(
     *, user_id: str, message: str, message_context, manager, **_
 ) -> None:
-    feature = current_game_services().features.tanxian
+    feature = current_game_services().features.biguan
     page_text = str(message or "").strip()
     try:
         page = 1 if not page_text else int(page_text)
@@ -87,7 +88,7 @@ async def settle_exploration(
         result = await feature.settle(user_id, message_context.request_id)
         total_pages = 1 + len(result.users)
         if page < 1 or page > total_pages:
-            raise ExplorationFeatureError(f"页码必须在1至{total_pages}之间")
+            raise RetreatFeatureError(f"页码必须在1至{total_pages}之间")
         await manager.send(
             reply.settlement_page(
                 feature.copy(),
@@ -97,7 +98,7 @@ async def settle_exploration(
                 feature.settlement_actions(page, total_pages),
             )
         )
-    except ExplorationFeatureError as exc:
+    except RetreatFeatureError as exc:
         await manager.send(reply.error(feature.copy(), str(exc)))
 
 

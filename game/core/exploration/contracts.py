@@ -22,6 +22,10 @@ class ExplorationNotFinishedError(ExplorationError):
     """探险尚未到实际结束时间。"""
 
 
+class ExplorationLeaderRequiredError(ExplorationError):
+    """集体探险只能由领队完成结算。"""
+
+
 @dataclass(frozen=True)
 class ExplorationStatus:
     initialized: bool
@@ -63,6 +67,7 @@ class ExplorationProgress:
     defeated_enemies: int
     spirit_stones: int
     item_quantity: int
+    can_settle: bool
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,7 @@ __all__ = [
     "ExplorationCharacterSummary",
     "ExplorationConflictError",
     "ExplorationError",
+    "ExplorationLeaderRequiredError",
     "ExplorationNotFinishedError",
     "ExplorationProgress",
     "ExplorationSettlement",

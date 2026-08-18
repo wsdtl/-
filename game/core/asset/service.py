@@ -23,6 +23,9 @@ from .contracts import (
     AssetStateError,
     AssetStatus,
     AssetSubcategory,
+    CultivationAcquisition,
+    CultivationAcquisitionPlan,
+    CultivationAcquisitionResult,
     CultivationOwnership,
     InventoryAdjustment,
     InventoryChange,
@@ -219,7 +222,11 @@ class AssetService:
         for item_id, grade_id, quantity in items:
             normalized_item_id = _required_text(item_id, "初始物品.编号")
             normalized_grade_id = self.grade(grade_id).grade_id
-            if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            if (
+                isinstance(quantity, bool)
+                or not isinstance(quantity, int)
+                or quantity < 1
+            ):
                 raise InventoryChangeError("初始物品数量必须是正整数")
             _entity_name(self._data, "物品", normalized_item_id)
             key = (normalized_item_id, normalized_grade_id)
@@ -360,9 +367,69 @@ class AssetService:
             snapshot.version,
         )
 
-    async def law_reserve_stack(
-        self, user_id: str, law_id: str
-    ) -> LawReserveStack:
+    async def plan_cultivation_acquisitions(
+        self,
+        user_id: str,
+        acquisitions: Sequence[CultivationAcquisition],
+    ) -> CultivationAcquisitionPlan:
+        """把功法、真意或气机取得结果转换为唯一所有权变更。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized: list[tuple[str, str, AssetGrade]] = []
+        for acquisition in acquisitions:
+            category = _required_text(acquisition.category, "修行取得.类别")
+            if category not in _CULTIVATION_CATEGORIES:
+                raise AssetStateError(f"不能收入道藏的类别：{category}")
+            content_id = _required_text(acquisition.content_id, "修行取得.编号")
+            record = self._data.entity_record(category, content_id)
+            if record.number_category != category:
+                raise AssetStateError("修行取得编号类别不匹配")
+            normalized.append((category, content_id, self.grade(acquisition.grade_id)))
+        if not normalized:
+            return CultivationAcquisitionPlan((), ())
+
+        keys = tuple(
+            dict.fromkeys(
+                f"{content_id}:{grade.grade_id}" for _, content_id, grade in normalized
+            )
+        )
+        snapshots = await self._database.get_many(
+            tuple(
+                StateAddress(normalized_user_id, "cultivation_library", key)
+                for key in keys
+            )
+        )
+        existing = {snapshot.address.state_key for snapshot in snapshots}
+        added: set[str] = set()
+        operations: list[StateMutation] = []
+        results: list[CultivationAcquisitionResult] = []
+        for category, content_id, grade in normalized:
+            key = f"{content_id}:{grade.grade_id}"
+            acquired = key not in existing and key not in added
+            if acquired:
+                added.add(key)
+                operations.append(
+                    StateMutation(
+                        normalized_user_id,
+                        "cultivation_library",
+                        key,
+                        {"编号": content_id, "品级": grade.grade_id},
+                        0,
+                    )
+                )
+            results.append(
+                CultivationAcquisitionResult(
+                    category,
+                    content_id,
+                    _entity_name(self._data, category, content_id),
+                    grade,
+                    acquired,
+                )
+            )
+        return CultivationAcquisitionPlan(tuple(results), tuple(operations))
+
+    async def law_reserve_stack(self, user_id: str, law_id: str) -> LawReserveStack:
         """取得玩家器藏中的一类待覆炼器律。"""
 
         self._require_initialized()

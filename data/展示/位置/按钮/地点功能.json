@@ -6,5 +6,21 @@
     "命令": "附近 修士",
     "行为": "callback",
     "样式": "primary"
+  },
+  {
+    "功能": "探险",
+    "编号": "location.exploration",
+    "名称": "探险",
+    "命令": "探险",
+    "行为": "callback",
+    "样式": "primary"
+  },
+  {
+    "功能": "闭关",
+    "编号": "location.retreat",
+    "名称": "闭关",
+    "命令": "闭关",
+    "行为": "callback",
+    "样式": "primary"
   }
 ]

@@ -32,6 +32,7 @@ from .contracts import (
     CompanionLawPlan,
     CompanionNotFoundError,
     CompanionRelation,
+    CompanionRetreatPlan,
     CompanionReward,
     CompanionRules,
     CompanionStateError,
@@ -302,9 +303,7 @@ class CompanionService:
         for law_id in weapon_laws:
             if law_id is not None:
                 self._data.entity("器律", law_id)
-        weapon_level = _state_positive_int(
-            weapon.get("等级"), "道侣实例.本命武器.等级"
-        )
+        weapon_level = _state_positive_int(weapon.get("等级"), "道侣实例.本命武器.等级")
         stage_name, open_slots = self._growth.weapon_stage(weapon_level)
         if _state_text(weapon.get("器阶"), "道侣实例.本命武器.器阶") != stage_name:
             raise CompanionStateError("道侣本命武器器阶与等级不一致")
@@ -319,9 +318,7 @@ class CompanionService:
             MappingProxyType(cultivation),
             _state_text(weapon.get("名称"), "道侣实例.本命武器.名称"),
             weapon_level,
-            _state_nonnegative_int(
-                weapon.get("经验"), "道侣实例.本命武器.经验"
-            ),
+            _state_nonnegative_int(weapon.get("经验"), "道侣实例.本命武器.经验"),
             weapon_laws,
             _state_positive_int(value.get("资质"), "道侣实例.资质"),
             MappingProxyType(multipliers),
@@ -418,9 +415,7 @@ class CompanionService:
             weapon = self._growth.advance_weapon(
                 level=before.weapon_level,
                 experience=before.weapon_experience,
-                gained=_request_nonnegative_int(
-                    weapon_experience, "道侣本命武器经验"
-                ),
+                gained=_request_nonnegative_int(weapon_experience, "道侣本命武器经验"),
             )
         except ValueError as exc:
             raise CompanionCultivationError(str(exc)) from exc
@@ -634,9 +629,7 @@ class CompanionService:
             before,
             weapon_level=advance.level_after,
             weapon_experience=advance.experience_after,
-            resources=MappingProxyType(
-                {"血气": health_after, "精神": spirit_after}
-            ),
+            resources=MappingProxyType({"血气": health_after, "精神": spirit_after}),
             version=before.version + 1,
         )
         return CompanionBattlePlan(
@@ -644,6 +637,81 @@ class CompanionService:
             health_after,
             spirit_after,
             gained,
+            StateMutation(
+                _user_id(user_id),
+                INSTANCE_STATE,
+                before.companion_id,
+                _instance_value(after, self._growth),
+                before.version,
+            ),
+        )
+
+    async def plan_retreat_settlement(
+        self,
+        user_id: str,
+        *,
+        companion_id: str,
+        experience: int,
+        health_recovery_ratio: float,
+        spirit_recovery_ratio: float,
+    ) -> CompanionRetreatPlan:
+        """为开始时锁定的同行道侣合并闭关经验与恢复。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        expected_id = _text(companion_id, "闭关道侣编号")
+        if before.companion_id != expected_id:
+            raise CompanionCultivationError("同行道侣已经发生变化")
+        gained = _request_nonnegative_int(experience, "闭关道侣经验")
+        health_ratio = _request_ratio(health_recovery_ratio, "闭关血气恢复比例")
+        spirit_ratio = _request_ratio(spirit_recovery_ratio, "闭关精神恢复比例")
+        try:
+            advance = self._growth.advance_cultivator(
+                level=before.level,
+                experience=before.experience,
+                realm_id=before.realm_id,
+                gained=gained,
+            )
+        except ValueError as exc:
+            raise CompanionCultivationError(str(exc)) from exc
+        definition = self.definition(before.companion_id)
+        multiplier = _qualification_multiplier(before, definition, self.rules())
+        attributes = _add_numbers(
+            before.attributes,
+            self._growth.cultivator_attribute_growth(
+                advance.levels_gained,
+                multiplier=multiplier,
+            ),
+        )
+        health_maximum = _state_number(attributes.get("血气上限"), "道侣.血气上限")
+        spirit_maximum = _state_number(attributes.get("精神上限"), "道侣.精神上限")
+        health = _bounded_resource(
+            _state_number(before.resources.get("血气"), "道侣.血气")
+            + health_maximum * health_ratio,
+            health_maximum,
+            "闭关后道侣血气",
+        )
+        spirit = _bounded_resource(
+            _state_number(before.resources.get("精神"), "道侣.精神")
+            + spirit_maximum * spirit_ratio,
+            spirit_maximum,
+            "闭关后道侣精神",
+        )
+        after = replace(
+            before,
+            level=advance.level_after,
+            experience=advance.experience_after,
+            attributes=MappingProxyType(attributes),
+            resources=MappingProxyType({"血气": health, "精神": spirit}),
+            version=before.version + 1,
+        )
+        return CompanionRetreatPlan(
+            before.companion_id,
+            gained,
+            advance.level_before,
+            advance.level_after,
+            health,
+            spirit,
             StateMutation(
                 _user_id(user_id),
                 INSTANCE_STATE,
@@ -661,7 +729,10 @@ class CompanionService:
         if self._data.entity_record("物品", normalized).number_category != "丹药":
             raise CompanionCultivationError("只能使用突破丹突破境界")
         effect = _mapping(medicine.get("使用效果"), "突破丹.使用效果")
-        if effect.get("类型") != "境界突破" or effect.get("目标境界") != target_realm_id:
+        if (
+            effect.get("类型") != "境界突破"
+            or effect.get("目标境界") != target_realm_id
+        ):
             raise CompanionCultivationError("该突破丹不对应道侣的下一境界")
         permanent = _mapping(effect.get("永久属性", {}), "突破丹.永久属性")
         return medicine, {
@@ -898,9 +969,7 @@ class CompanionService:
         invitation = _mapping(value.get("邀约"), "道侣.邀约")
         reward = _mapping(value.get("圆满回礼"), "道侣.圆满回礼")
         slots_value = _mapping(value.get("修行槽位"), "道侣.修行槽位")
-        qualification_growth = _mapping(
-            value.get("资质成长修正"), "道侣.资质成长修正"
-        )
+        qualification_growth = _mapping(value.get("资质成长修正"), "道侣.资质成长修正")
         return CompanionRules(
             _positive_affection(value.get("赠礼每件好感"), "道侣.赠礼每件好感"),
             _positive_int(value.get("同行上限"), "道侣.同行上限"),
@@ -983,7 +1052,9 @@ class CompanionService:
         attributes = _mapping(value.get("属性覆盖"), "道侣.属性覆盖")
         cultivation_pools = MappingProxyType(
             {
-                category: _text(value.get(f"{category}池"), f"道侣 {companion_id}.{category}池")
+                category: _text(
+                    value.get(f"{category}池"), f"道侣 {companion_id}.{category}池"
+                )
                 for category in ("功法", "真意", "气机")
             }
         )
@@ -1041,9 +1112,7 @@ class CompanionService:
             ),
             _text(weapon.get("名称"), f"道侣 {companion_id}.本命武器.名称"),
             _positive_int(weapon.get("等级"), f"道侣 {companion_id}.本命武器.等级"),
-            _nonnegative_int(
-                weapon.get("经验"), f"道侣 {companion_id}.本命武器.经验"
-            ),
+            _nonnegative_int(weapon.get("经验"), f"道侣 {companion_id}.本命武器.经验"),
             weapon_laws,
         )
 
@@ -1135,6 +1204,16 @@ def _request_nonnegative_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise CompanionCultivationError(f"{label}必须是非负整数")
     return value
+
+
+def _request_ratio(value: object, label: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0 <= value <= 1
+    ):
+        raise CompanionCultivationError(f"{label}必须在0至1之间")
+    return float(value)
 
 
 def _bounded_resource(value: object, maximum: object, label: str) -> int | float:

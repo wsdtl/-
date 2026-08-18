@@ -128,6 +128,28 @@ class CultivationOwnership:
 
 
 @dataclass(frozen=True)
+class CultivationAcquisition:
+    category: str
+    content_id: str
+    grade_id: str
+
+
+@dataclass(frozen=True)
+class CultivationAcquisitionResult:
+    category: str
+    content_id: str
+    name: str
+    grade: AssetGrade
+    acquired: bool
+
+
+@dataclass(frozen=True)
+class CultivationAcquisitionPlan:
+    results: tuple[CultivationAcquisitionResult, ...]
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
 class LawReserveStack:
     law_id: str
     name: str
@@ -152,6 +174,9 @@ __all__ = [
     "AssetStateError",
     "AssetStatus",
     "AssetSubcategory",
+    "CultivationAcquisition",
+    "CultivationAcquisitionPlan",
+    "CultivationAcquisitionResult",
     "CultivationOwnership",
     "InventoryAdjustment",
     "InventoryChange",

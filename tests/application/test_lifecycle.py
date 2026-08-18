@@ -49,6 +49,11 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
                 "exploration_latest",
                 "exploration_settlement",
             ),
+            retreat=_StateOwner(
+                "retreat_session",
+                "retreat_latest",
+                "retreat_settlement",
+            ),
             team=_StateOwner("team", "team_invite"),
         )
     )
@@ -84,8 +89,10 @@ def test_real_composition_root_builds_location_and_position_services(
     assert services.core.location.status().initialized is True
     assert services.core.companion.status().companion_count == 264
     assert services.core.team.status().maximum_players == 3
+    assert services.core.retreat.status().maximum_rounds == 6
     assert services.features.weizhi is not None
     assert services.features.duiwu is not None
+    assert services.features.biguan is not None
     services.core.database.close()
 
 

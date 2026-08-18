@@ -14,6 +14,7 @@ from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateAddress
 from game.core.enemy import EnemyService
 from game.core.exploration import (
+    ExplorationLeaderRequiredError,
     ExplorationNotFinishedError,
     ExplorationService,
     ExplorationStartCommand,
@@ -194,7 +195,7 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
 def test_team_leader_starts_one_real_exploration_for_all_players(
     tmp_path: Path,
 ) -> None:
-    database, player_state, _, _, create, _, _, team, feature = _services(tmp_path)
+    database, player_state, _, _, create, _, exploration, team, feature = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     _run(create.create(CreateCharacterRequest("qq-2", "create-2", "白川", "男")))
     _run(team.invite("qq-1", "qq-2", "invite-2"))
@@ -218,6 +219,21 @@ def test_team_leader_starts_one_real_exploration_for_all_players(
         )
         assert latest is not None
         assert latest.value["探险编号"] == started.session_id
+
+    member_progress = _run(feature.progress("qq-2", now=started.ends_at))
+    assert member_progress.can_settle is False
+    with pytest.raises(ExplorationLeaderRequiredError, match="领队统一"):
+        _run(
+            exploration.settle(
+                "qq-2",
+                "member-settle",
+                now=started.ends_at,
+            )
+        )
+    _run(exploration.settle("qq-1", "leader-settle", now=started.ends_at))
+    assert _run(
+        exploration.settle("qq-2", "member-view", now=started.ends_at)
+    ).replayed is True
 
 
 def test_world_exposes_enemy_multiplier_and_environment_id(tmp_path: Path) -> None:

@@ -21,8 +21,10 @@ from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
+from .core.retreat import RetreatService
 from .core.team import TeamService
 from .core.world import WorldService
+from .features.biguan import RetreatFeature
 from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
@@ -57,6 +59,7 @@ class CoreServices:
     asset: AssetService
     enemy: EnemyService
     exploration: ExplorationService
+    retreat: RetreatService
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,7 @@ class FeatureServices:
     daolv_peiyang: CompanionCultivationFeature
     tanxian: ExplorationFeature
     duiwu: TeamFeature
+    biguan: RetreatFeature
 
 
 @dataclass(frozen=True)
@@ -247,6 +251,25 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("maximum_battles", exploration_status.maximum_battles),
         )
     )
+    retreat = RetreatService(
+        data,
+        database,
+        world,
+        location,
+        character,
+        companion,
+        asset,
+        player_state,
+        pool,
+    )
+    retreat_status = retreat.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("闭关核心微服务已启动"),
+            C.kv("seconds_per_round", retreat_status.seconds_per_round),
+            C.kv("maximum_rounds", retreat_status.maximum_rounds),
+        )
+    )
     core = CoreServices(
         data=data,
         item_catalog=item_catalog,
@@ -263,6 +286,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset=asset,
         enemy=enemy,
         exploration=exploration,
+        retreat=retreat,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -333,6 +357,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     duiwu.initialize()
     tanxian = ExplorationFeature(data, exploration, item_catalog, asset, team)
     tanxian.initialize()
+    biguan = RetreatFeature(data, retreat, asset, team)
+    biguan.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -346,6 +372,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         daolv_peiyang=daolv_peiyang,
         tanxian=tanxian,
         duiwu=duiwu,
+        biguan=biguan,
     )
     return GameServices(core=core, features=features)
 
