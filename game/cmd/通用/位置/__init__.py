@@ -28,7 +28,11 @@ async def show_position(*, user_id: str, manager, **_) -> None:
         reply.current(
             feature.copy(),
             result,
-            feature.position_actions(result.location.available_functions),
+            feature.position_actions(
+                result.location.available_functions,
+                plant_pool=result.location.plant_pool,
+                mineral_pool=result.location.mineral_pool,
+            ),
         )
     )
 

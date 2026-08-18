@@ -300,4 +300,12 @@ def test_companion_command_repeats_current_location_actions(
         f"交谈 {definition.companion_id}",
         f"赠予 {definition.companion_id}",
     )
-    assert commands[-5:] == ("附近 修士", "探险", "闭关", "附近", "地图")
+    assert commands[-7:] == (
+        "附近 修士",
+        "探险",
+        "闭关",
+        "采药",
+        "采矿",
+        "附近",
+        "地图",
+    )

@@ -59,7 +59,11 @@ async def travel(
         reply.success(
             result,
             functions,
-            position.position_actions(functions),
+            position.position_actions(
+                functions,
+                plant_pool=result.plan.destination.plant_pool,
+                mineral_pool=result.plan.destination.mineral_pool,
+            ),
         )
     )
 

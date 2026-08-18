@@ -16,6 +16,7 @@ from .core.data import JsonDataService
 from .core.database import DatabaseService
 from .core.enemy import EnemyService
 from .core.exploration import ExplorationService
+from .core.gathering import GatheringService
 from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
@@ -25,6 +26,8 @@ from .core.retreat import RetreatService
 from .core.team import TeamService
 from .core.world import WorldService
 from .features.biguan import RetreatFeature
+from .features.caikuang import OreGatheringFeature
+from .features.caiyao import HerbGatheringFeature
 from .features.chakan_juese import CharacterOverviewFeature
 from .features.chakan_wupin import ItemInspectionFeature
 from .features.chuangjian_renwu import CreateCharacterFeature
@@ -60,6 +63,7 @@ class CoreServices:
     enemy: EnemyService
     exploration: ExplorationService
     retreat: RetreatService
+    gathering: GatheringService
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,8 @@ class FeatureServices:
     tanxian: ExplorationFeature
     duiwu: TeamFeature
     biguan: RetreatFeature
+    caiyao: HerbGatheringFeature
+    caikuang: OreGatheringFeature
 
 
 @dataclass(frozen=True)
@@ -270,6 +276,24 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("maximum_rounds", retreat_status.maximum_rounds),
         )
     )
+    gathering = GatheringService(
+        data,
+        database,
+        world,
+        location,
+        character,
+        companion,
+        asset,
+        player_state,
+        pool,
+    )
+    gathering_status = gathering.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("采集核心微服务已启动"),
+            C.kv("modes", len(gathering_status.modes)),
+        )
+    )
     core = CoreServices(
         data=data,
         item_catalog=item_catalog,
@@ -287,6 +311,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         enemy=enemy,
         exploration=exploration,
         retreat=retreat,
+        gathering=gathering,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -359,6 +384,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     tanxian.initialize()
     biguan = RetreatFeature(data, retreat, asset, team)
     biguan.initialize()
+    caiyao = HerbGatheringFeature(data, gathering, asset, team)
+    caiyao.initialize()
+    caikuang = OreGatheringFeature(data, gathering, asset, team)
+    caikuang.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -373,6 +402,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         tanxian=tanxian,
         duiwu=duiwu,
         biguan=biguan,
+        caiyao=caiyao,
+        caikuang=caikuang,
     )
     return GameServices(core=core, features=features)
 

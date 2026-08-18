@@ -42,7 +42,15 @@ def load_position_presentation(
 
     _require_keys(
         dataset,
-        {"距离与方向", "文本", "图标", "位置", "附近", "地点功能"},
+        {
+            "距离与方向",
+            "文本",
+            "图标",
+            "位置",
+            "附近",
+            "地点功能",
+            "地形功能",
+        },
         "位置展示数据集",
     )
     distance_and_direction = _mapping(
@@ -60,6 +68,11 @@ def load_position_presentation(
         "展示/位置/按钮/地点功能.json",
         function_buttons=True,
     )
+    terrain_buttons = _button_templates(
+        dataset["地形功能"],
+        "展示/位置/按钮/地形功能.json",
+        function_buttons=True,
+    )
     position_buttons = _button_templates(
         dataset["位置"],
         "展示/位置/按钮/位置.json",
@@ -69,7 +82,7 @@ def load_position_presentation(
         dataset["附近"],
         "展示/位置/按钮/附近.json",
     )
-    buttons = function_buttons + position_buttons + nearby_buttons
+    buttons = function_buttons + terrain_buttons + position_buttons + nearby_buttons
     identities = tuple((item.page, item.action_id) for item in buttons)
     if len(identities) != len(set(identities)):
         raise JsonDataError("位置展示存在重复的页面按钮编号")

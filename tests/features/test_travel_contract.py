@@ -100,8 +100,10 @@ def test_travel_command_renders_journey_destination_and_available_functions(
             return ("修士",)
 
         @staticmethod
-        def position_actions(functions):
+        def position_actions(functions, *, plant_pool, mineral_pool):
             assert functions == ("修士",)
+            assert plant_pool == ("灵植-高地",)
+            assert mineral_pool == ("灵矿-高地",)
             return (
                 PositionAction(
                     "location.cultivators",

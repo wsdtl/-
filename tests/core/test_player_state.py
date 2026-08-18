@@ -54,7 +54,7 @@ def test_initial_snapshot_contains_three_independent_slots(tmp_path: Path) -> No
 
     current = _run(player_state.current("qq-1"))
 
-    assert player_state.status().state_count == 9
+    assert player_state.status().state_count == 11
     assert player_state.status().guard_rule_count == 7
     assert current is not None
     assert {key: value.state_id for key, value in current.states.items()} == {

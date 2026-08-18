@@ -22,6 +22,7 @@ class _CoreServices(Protocol):
     asset: _StateOwner
     exploration: _StateOwner
     retreat: _StateOwner
+    gathering: _StateOwner
     team: _StateOwner
 
 
@@ -43,6 +44,7 @@ def validate_startup_contracts(core: _CoreServices) -> None:
             "asset": core.asset.state_types,
             "exploration": core.exploration.state_types,
             "retreat": core.retreat.state_types,
+            "gathering": core.gathering.state_types,
             "team": core.team.state_types,
         }
     )

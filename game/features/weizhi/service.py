@@ -97,9 +97,19 @@ class PositionFeature:
             raise RuntimeError("位置展示文案尚未初始化")
         return self._copy
 
-    def position_actions(self, functions: Sequence[str]) -> tuple[PositionAction, ...]:
+    def position_actions(
+        self,
+        functions: Sequence[str],
+        *,
+        plant_pool: Sequence[str] = (),
+        mineral_pool: Sequence[str] = (),
+    ) -> tuple[PositionAction, ...]:
         self._require_initialized()
-        return self.location_actions(functions) + self._actions_for("位置")
+        return (
+            self.location_actions(functions)
+            + self.terrain_actions(plant_pool, mineral_pool)
+            + self._actions_for("位置")
+        )
 
     def open_location_functions(self, functions: Sequence[str]) -> tuple[str, ...]:
         """只返回已经建立玩家入口的地点功能。"""
@@ -118,6 +128,25 @@ class PositionFeature:
             if template.page == "地点功能" and template.function in available
         )
 
+    def terrain_actions(
+        self,
+        plant_pool: Sequence[str],
+        mineral_pool: Sequence[str],
+    ) -> tuple[PositionAction, ...]:
+        """按世界核心返回的地形资源池生成采药、采矿按钮。"""
+
+        self._require_initialized()
+        available = set()
+        if plant_pool:
+            available.add("灵植池")
+        if mineral_pool:
+            available.add("灵矿池")
+        return tuple(
+            render_action(template, {})
+            for template in self._buttons
+            if template.page == "地点功能" and template.function in available
+        )
+
     async def current_location_actions(
         self, user_id: str
     ) -> tuple[PositionAction, ...]:
@@ -126,7 +155,11 @@ class PositionFeature:
         self._require_initialized()
         current = await self._location.current(user_id)
         location = self._world.locate(LocationQuery(xy=current.xy))
-        return self.position_actions(location.available_functions)
+        return self.position_actions(
+            location.available_functions,
+            plant_pool=location.plant_pool,
+            mineral_pool=location.mineral_pool,
+        )
 
     def nearby_overview_actions(
         self, locations: Sequence[NearbyWorldLocation] = ()
