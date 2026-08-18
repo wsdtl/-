@@ -22,6 +22,7 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogError, ItemCatalogService
 
@@ -48,6 +49,7 @@ class CharacterCultivationFeature:
         assets: AssetService,
         items: ItemCatalogService,
         growth: GrowthService,
+        forging: ForgingService,
         database: DatabaseService,
     ) -> None:
         self._data = data
@@ -55,6 +57,7 @@ class CharacterCultivationFeature:
         self._assets = assets
         self._items = items
         self._growth = growth
+        self._forging = forging
         self._database = database
         self._initialized = False
         self._copy: Mapping[str, object] = {}
@@ -67,6 +70,7 @@ class CharacterCultivationFeature:
             (self._assets.status().initialized, "资产核心"),
             (self._items.status().initialized, "物品核心"),
             (self._growth.status().initialized, "成长核心"),
+            (self._forging.status().initialized, "炼器核心"),
             (self._database.status().initialized, "数据库核心"),
         ):
             if not ready:
@@ -93,7 +97,7 @@ class CharacterCultivationFeature:
             return CharacterCultivationView(
                 profile,
                 self._growth.experience_required(profile.level),
-                self._growth.experience_required(profile.weapon.level, weapon=True),
+                self._forging.weapon_experience_required(profile.weapon.level),
             )
         except (CharacterStateError, ValueError) as exc:
             raise CharacterCultivationFeatureError(str(exc)) from exc
@@ -125,7 +129,9 @@ class CharacterCultivationFeature:
             )
             profile = await self._character.profile(request.user_id)
         except StateConflictError as exc:
-            raise CharacterCultivationConflictError("人物修行槽已经变化，请重试") from exc
+            raise CharacterCultivationConflictError(
+                "人物修行槽已经变化，请重试"
+            ) from exc
         except IdempotencyConflictError as exc:
             raise CharacterCultivationConflictError("请求编号已经用于其他操作") from exc
         except (AssetStateError, CharacterCultivationError, CharacterStateError) as exc:
@@ -140,7 +146,9 @@ class CharacterCultivationFeature:
         self._require_initialized()
         medicine = self._resolve_item(request.medicine, "丹药")
         try:
-            stack = await self._lowest_inventory_stack(request.user_id, medicine.item_id)
+            stack = await self._lowest_inventory_stack(
+                request.user_id, medicine.item_id
+            )
             character_plan = await self._character.plan_breakthrough(
                 request.user_id, medicine_id=medicine.item_id
             )
@@ -159,7 +167,9 @@ class CharacterCultivationFeature:
             )
             profile = await self._character.profile(request.user_id)
         except StateConflictError as exc:
-            raise CharacterCultivationConflictError("人物或纳戒已经变化，请重试") from exc
+            raise CharacterCultivationConflictError(
+                "人物或纳戒已经变化，请重试"
+            ) from exc
         except IdempotencyConflictError as exc:
             raise CharacterCultivationConflictError("请求编号已经用于其他操作") from exc
         except (
@@ -194,7 +204,9 @@ class CharacterCultivationFeature:
             )
             profile = await self._character.profile(request.user_id)
         except StateConflictError as exc:
-            raise CharacterCultivationConflictError("本命武器或器藏已经变化，请重试") from exc
+            raise CharacterCultivationConflictError(
+                "本命武器或器藏已经变化，请重试"
+            ) from exc
         except IdempotencyConflictError as exc:
             raise CharacterCultivationConflictError("请求编号已经用于其他操作") from exc
         except (AssetStateError, CharacterCultivationError, CharacterStateError) as exc:

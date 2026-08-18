@@ -49,6 +49,7 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "修行",
         "行动",
         "世界",
+        "炼制",
         "资源",
     )
     assert [entry.command for entry in help_registry.entries()] == [
@@ -84,6 +85,8 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "地图",
         "位置",
         "附近",
+        "炼器",
+        "开炉",
         "纳戒",
         "查看物品",
     ]

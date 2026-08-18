@@ -19,6 +19,7 @@ from game.core.exploration import (
     ExplorationService,
     ExplorationStartCommand,
 )
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
@@ -57,17 +58,19 @@ def _services(tmp_path: Path):
     team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database, growth)
-    companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
+    companion.initialize()
     item_catalog = ItemCatalogService(data)
     item_catalog.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
-    enemy = EnemyService(data, pool, growth, asset)
+    enemy = EnemyService(data, pool, growth, asset, forging)
     enemy.initialize()
     exploration = ExplorationService(
         data,
@@ -102,8 +105,8 @@ def _services(tmp_path: Path):
 
 
 def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> None:
-    database, player_state, character, asset, create, _, exploration, _, _ = (
-        _services(tmp_path)
+    database, player_state, character, asset, create, _, exploration, _, _ = _services(
+        tmp_path
     )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     medicines_before = _run(asset.recovery_medicines("qq-1"))
@@ -123,9 +126,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     )
 
     assert 1 <= started.battle_count <= 15
-    assert started.ends_at == started_at + timedelta(
-        seconds=started.battle_count * 120
-    )
+    assert started.ends_at == started_at + timedelta(seconds=started.battle_count * 120)
     state = _run(player_state.current("qq-1"))
     assert state is not None
     assert state.states["行为"].name == "探险中"
@@ -140,13 +141,10 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     medicines_after = _run(asset.recovery_medicines("qq-1"))
     remaining = {stack.stack_key: stack.quantity for stack in medicines_after}
     deducted = sum(
-        stack.quantity - remaining.get(stack.stack_key, 0)
-        for stack in medicines_before
+        stack.quantity - remaining.get(stack.stack_key, 0) for stack in medicines_before
     )
     session = _run(database.list_for_user("qq-1", state_type="exploration_session"))[0]
-    recorded = sum(
-        row["数量"] for row in session.value["用户结果"]["qq-1"]["消耗"]
-    )
+    recorded = sum(row["数量"] for row in session.value["用户结果"]["qq-1"]["消耗"])
     assert deducted == recorded
 
     initial = _run(exploration.progress("qq-1", now=started_at))
@@ -163,9 +161,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     complete = _run(exploration.progress("qq-1", now=started.ends_at))
     assert complete.unlocked_battles == started.battle_count
     assert complete.ended is True
-    settlement = _run(
-        exploration.settle("qq-1", "settle-1", now=started.ends_at)
-    )
+    settlement = _run(exploration.settle("qq-1", "settle-1", now=started.ends_at))
     assert len(settlement.users) == 1
     assert settlement.users[0].character_name == "林远"
     assert len(settlement.users[0].characters) == 1
@@ -195,7 +191,9 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
 def test_team_leader_starts_one_real_exploration_for_all_players(
     tmp_path: Path,
 ) -> None:
-    database, player_state, _, _, create, _, exploration, team, feature = _services(tmp_path)
+    database, player_state, _, _, create, _, exploration, team, feature = _services(
+        tmp_path
+    )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     _run(create.create(CreateCharacterRequest("qq-2", "create-2", "白川", "男")))
     _run(team.invite("qq-1", "qq-2", "invite-2"))
@@ -205,18 +203,14 @@ def test_team_leader_starts_one_real_exploration_for_all_players(
 
     assert started.participant_count == 2
     session = _run(
-        database.get(
-            StateAddress("qq-1", "exploration_session", started.session_id)
-        )
+        database.get(StateAddress("qq-1", "exploration_session", started.session_id))
     )
     assert session is not None
     assert session.value["参与用户"] == ("qq-1", "qq-2")
     for user_id in ("qq-1", "qq-2"):
         state = _run(player_state.current(user_id))
         assert state is not None and state.states["行为"].name == "探险中"
-        latest = _run(
-            database.get(StateAddress(user_id, "exploration_latest", "main"))
-        )
+        latest = _run(database.get(StateAddress(user_id, "exploration_latest", "main")))
         assert latest is not None
         assert latest.value["探险编号"] == started.session_id
 
@@ -231,9 +225,10 @@ def test_team_leader_starts_one_real_exploration_for_all_players(
             )
         )
     _run(exploration.settle("qq-1", "leader-settle", now=started.ends_at))
-    assert _run(
-        exploration.settle("qq-2", "member-view", now=started.ends_at)
-    ).replayed is True
+    assert (
+        _run(exploration.settle("qq-2", "member-view", now=started.ends_at)).replayed
+        is True
+    )
 
 
 def test_world_exposes_enemy_multiplier_and_environment_id(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ from types import MappingProxyType
 from game.core.asset import AssetService
 from game.core.combat import CombatantSpec, CombatBuildRef
 from game.core.data import JsonDataError, JsonDataService
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.pool import EXPAND_DEDUPLICATED, PoolRequest, PoolService
 
@@ -24,16 +25,19 @@ class EnemyService:
         pool: PoolService,
         growth: GrowthService,
         asset: AssetService,
+        forging: ForgingService,
     ) -> None:
         self._data = data
         self._pool = pool
         self._growth = growth
         self._asset = asset
+        self._forging = forging
         self._initialized = False
         self._definitions: Mapping[str, Mapping[str, object]] = MappingProxyType({})
         self._role_rules: Mapping[str, Mapping[str, object]] = MappingProxyType({})
-        self._attribute_definitions: Mapping[str, Mapping[str, object]] = MappingProxyType({})
-        self._weapon_rule: Mapping[str, object] = MappingProxyType({})
+        self._attribute_definitions: Mapping[str, Mapping[str, object]] = (
+            MappingProxyType({})
+        )
         self._genders: tuple[str, ...] = ()
 
     def initialize(self) -> EnemyStatus:
@@ -54,9 +58,8 @@ class EnemyService:
                 ).items()
             }
         )
-        self._weapon_rule = MappingProxyType(
-            dict(_mapping(self._data.dataset("炼器规则").get("本命武器"), "本命武器"))
-        )
+        if not self._forging.status().initialized:
+            raise RuntimeError("炼器核心必须先于敌人核心启动")
         gender = _mapping(self._data.dataset("角色定义").get("性别"), "性别")
         self._genders = _texts(gender.get("取值"), "性别.取值")
         definitions = {
@@ -92,7 +95,10 @@ class EnemyService:
         while remaining and len(selected) < count:
             name = source.choices(
                 remaining,
-                weights=[_positive_int(self._definitions[item].get("权重"), f"{item}.权重") for item in remaining],
+                weights=[
+                    _positive_int(self._definitions[item].get("权重"), f"{item}.权重")
+                    for item in remaining
+                ],
                 k=1,
             )[0]
             selected.append(name)
@@ -101,7 +107,12 @@ class EnemyService:
             selected.append(
                 source.choices(
                     candidates,
-                    weights=[_positive_int(self._definitions[item].get("权重"), f"{item}.权重") for item in candidates],
+                    weights=[
+                        _positive_int(
+                            self._definitions[item].get("权重"), f"{item}.权重"
+                        )
+                        for item in candidates
+                    ],
                     k=1,
                 )[0]
             )
@@ -129,7 +140,9 @@ class EnemyService:
         attributes.update(
             {
                 str(key): _number(value, f"{name}.属性覆盖.{key}")
-                for key, value in _mapping(raw.get("属性覆盖"), f"{name}.属性覆盖").items()
+                for key, value in _mapping(
+                    raw.get("属性覆盖"), f"{name}.属性覆盖"
+                ).items()
             }
         )
         if role_name == "灵兽":
@@ -152,7 +165,9 @@ class EnemyService:
         fluctuation = _mapping(raw.get("实力波动"), f"{name}.实力波动")
         low, high = _range(fluctuation.get("倍率"), f"{name}.实力波动.倍率")
         for attribute in _texts(fluctuation.get("属性"), f"{name}.实力波动.属性"):
-            attributes[attribute] = float(attributes[attribute]) * source.randint(low, high) / 100
+            attributes[attribute] = (
+                float(attributes[attribute]) * source.randint(low, high) / 100
+            )
         attributes = {
             key: _clamp_attribute(key, value, self._attribute_definitions)
             for key, value in attributes.items()
@@ -164,7 +179,12 @@ class EnemyService:
         slots = _mapping(tier.get("修行槽位"), f"{role_name}.修行槽位")
         build = self._growth.random_companion_build(
             pools=pools,
-            slots={category: _positive_int(slots.get(category), f"{role_name}.{category}槽") for category in pools},
+            slots={
+                category: _positive_int(
+                    slots.get(category), f"{role_name}.{category}槽"
+                )
+                for category in pools
+            },
             seed=source.getrandbits(64),
         )
         build_refs = [
@@ -187,13 +207,21 @@ class EnemyService:
         if role_name == "敌方修士":
             gender = source.choice(self._genders)
             weapon = _mapping(raw.get("本命武器"), f"{name}.本命武器")
-            weapon_attack = _number(weapon.get("攻击"), f"{name}.本命武器.攻击") + _number(
-                self._weapon_rule.get("每级攻击"), "本命武器.每级攻击"
-            ) * max(0, level - 1)
-            open_slots = self._growth.weapon_stage(level)[1]
+            weapon_attack = self._forging.weapon_attack(
+                level,
+                base_attack=_number(weapon.get("攻击"), f"{name}.本命武器.攻击"),
+            )
+            open_slots = self._forging.weapon_stage(level).open_law_slots
             laws = list(
                 self._data.pool_members(
-                    tuple(_texts(_mapping(role.get("本命武器"), "敌方修士.本命武器").get("器律池"), "敌方修士.器律池")),
+                    tuple(
+                        _texts(
+                            _mapping(role.get("本命武器"), "敌方修士.本命武器").get(
+                                "器律池"
+                            ),
+                            "敌方修士.器律池",
+                        )
+                    ),
                     "器律",
                 )
             )
@@ -219,7 +247,9 @@ class EnemyService:
             spirit=float(attributes["精神上限"]),
             gender=gender,
         )
-        return EnemyInstance(name, combatant, self._reward(name, raw, role_name, source))
+        return EnemyInstance(
+            name, combatant, self._reward(name, raw, role_name, source)
+        )
 
     def _reward(
         self,

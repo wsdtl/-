@@ -94,6 +94,12 @@ class TransactionReceipt:
 
 
 @dataclass(frozen=True)
+class CommittedTransaction:
+    receipt: TransactionReceipt
+    payload: JsonObject
+
+
+@dataclass(frozen=True)
 class LocationRecord:
     user_id: str
     xy: tuple[int, int]
@@ -109,6 +115,7 @@ class NearbyLocationRecord:
 
 
 __all__ = [
+    "CommittedTransaction",
     "DatabaseError",
     "DatabaseStatus",
     "IdempotencyConflictError",

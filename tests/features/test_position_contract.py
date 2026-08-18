@@ -9,6 +9,7 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.location import LocationMoveCommand, LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
@@ -44,12 +45,14 @@ def _services(tmp_path: Path):
     team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database, growth)
-    companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
+    companion.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
@@ -130,7 +133,9 @@ def test_nearby_cultivators_only_publish_team_status_and_player_count(
     by_name = {value.name: value for value in visible.cultivators}
     assert by_name["林远"].states[-1] == "组队中（2人）"
     assert by_name["白川"].states[-1] == "组队中（2人）"
-    assert all("qq-" not in state for value in by_name.values() for state in value.states)
+    assert all(
+        "qq-" not in state for value in by_name.values() for state in value.states
+    )
 
 
 def test_nearby_cultivators_use_surface_altitude_for_distance(
@@ -160,7 +165,13 @@ def test_all_companions_resolve_to_exact_world_locations(tmp_path: Path) -> None
     world.initialize()
     database = DatabaseService(tmp_path / "companions.db")
     database.initialize()
-    companion = CompanionService(data, database, growth)
+    location = LocationService(data, database, world)
+    location.initialize()
+    asset = AssetService(data, database)
+    asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
     status = companion.initialize()
 
     resolved = []

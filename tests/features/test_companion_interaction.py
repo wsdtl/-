@@ -12,6 +12,7 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, TransactionCommand
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
@@ -56,14 +57,16 @@ def _services(tmp_path: Path):
     team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database, growth)
-    companion.initialize()
     item_catalog = ItemCatalogService(data)
     item_catalog.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
+    companion.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)

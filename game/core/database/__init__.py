@@ -1,6 +1,7 @@
 """核心数据库公共微服务。"""
 
 from .contracts import (
+    CommittedTransaction,
     DatabaseError,
     DatabaseStatus,
     IdempotencyConflictError,
@@ -18,6 +19,7 @@ from .contracts import (
 from .service import DatabaseService
 
 __all__ = [
+    "CommittedTransaction",
     "DatabaseError",
     "DatabaseService",
     "DatabaseStatus",

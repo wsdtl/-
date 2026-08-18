@@ -11,6 +11,7 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
@@ -53,8 +54,10 @@ def _features(
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)

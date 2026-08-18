@@ -165,6 +165,16 @@ class LawReserveChangePlan:
     operation: StateMutation
 
 
+@dataclass(frozen=True)
+class LawReserveAcquisitionPlan:
+    law_id: str
+    name: str
+    stage: str
+    quantity_before: int
+    quantity_after: int
+    operation: StateMutation
+
+
 __all__ = [
     "AssetCategory",
     "AssetEntry",
@@ -183,6 +193,7 @@ __all__ = [
     "InventoryChangeError",
     "InventoryMutationPlan",
     "InventoryStack",
+    "LawReserveAcquisitionPlan",
     "LawReserveChangePlan",
     "LawReserveStack",
     "RecoveryMedicineStack",

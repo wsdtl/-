@@ -14,6 +14,7 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
@@ -55,22 +56,24 @@ def _services(tmp_path: Path):
     location.initialize()
     assets = AssetService(data, database)
     assets.initialize()
+    forging = ForgingService(data, database, assets, world, location)
+    forging.initialize()
     items = ItemCatalogService(data)
     items.initialize()
-    companion = CompanionService(data, database, growth)
+    companion = CompanionService(data, database, growth, forging)
     companion.initialize()
     character = CharacterService(
-        data, database, player_state, location, assets, growth
+        data, database, player_state, location, assets, growth, forging
     )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
     character_feature = CharacterCultivationFeature(
-        data, character, assets, items, growth, database
+        data, character, assets, items, growth, forging, database
     )
     character_feature.initialize()
     companion_feature = CompanionCultivationFeature(
-        data, companion, assets, items, growth, database
+        data, companion, assets, items, growth, forging, database
     )
     companion_feature.initialize()
     return (
@@ -107,9 +110,7 @@ def test_character_breakthrough_consumes_medicine_and_settles_saved_experience(
     state["等级"] = 5
     state["经验"] = growth.experience_required(5)
     grant = _run(
-        assets.plan_inventory_changes(
-            "qq-1", (InventoryAdjustment("140001", "01", 1),)
-        )
+        assets.plan_inventory_changes("qq-1", (InventoryAdjustment("140001", "01", 1),))
     )
     _run(
         database.commit(
@@ -117,11 +118,7 @@ def test_character_breakthrough_consumes_medicine_and_settles_saved_experience(
                 "qq-1",
                 "prepare-breakthrough",
                 "测试准备",
-                (
-                    StateMutation(
-                        "qq-1", "character", "main", state, snapshot.version
-                    ),
-                )
+                (StateMutation("qq-1", "character", "main", state, snapshot.version),)
                 + grant.operations,
                 {},
             )
@@ -275,16 +272,10 @@ def test_character_equip_and_law_forging_use_shared_reserves(tmp_path: Path) -> 
 
     equipped = _run(
         feature.equip(
-            CharacterEquipRequest(
-                "qq-1", "equip-1", "功法", technique_id, "01", 1
-            )
+            CharacterEquipRequest("qq-1", "equip-1", "功法", technique_id, "01", 1)
         )
     )
-    forged = _run(
-        feature.forge_law(
-            CharacterLawRequest("qq-1", "forge-1", law_id, 1)
-        )
-    )
+    forged = _run(feature.forge_law(CharacterLawRequest("qq-1", "forge-1", law_id, 1)))
 
     assert equipped.content_name == technique["名称"]
     assert forged.law_name == law["名称"]

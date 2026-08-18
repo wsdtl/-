@@ -32,6 +32,7 @@ from .contracts import (
     InventoryChangeError,
     InventoryMutationPlan,
     InventoryStack,
+    LawReserveAcquisitionPlan,
     LawReserveChangePlan,
     LawReserveStack,
     RecoveryMedicineStack,
@@ -468,6 +469,46 @@ class AssetService:
                 stack.law_id,
                 {"编号": stack.law_id, "数量": after} if after else None,
                 stack.version,
+            ),
+        )
+
+    async def plan_law_reserve_acquisition(
+        self, user_id: str, law_id: str, quantity: int = 1
+    ) -> LawReserveAcquisitionPlan:
+        """为炼器事务生成一类器律的器藏增量。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_law_id = _required_text(law_id, "器律编号")
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            raise AssetStateError("器律取得数量必须是正整数")
+        law = self._data.entity("器律", normalized_law_id)
+        name = _required_entity_text(law, "名称", f"器律 {normalized_law_id}")
+        stage = _required_entity_text(law, "器阶", f"器律 {normalized_law_id}")
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "law_reserve", normalized_law_id)
+        )
+        before = 0
+        version = 0
+        if snapshot is not None:
+            value = _mapping(snapshot.value, "器藏实例")
+            if _text(value.get("编号"), "器藏实例.编号") != normalized_law_id:
+                raise AssetStateError("器藏状态键与编号不一致")
+            before = _positive_int(value.get("数量"), "器藏实例.数量")
+            version = snapshot.version
+        after = before + quantity
+        return LawReserveAcquisitionPlan(
+            normalized_law_id,
+            name,
+            stage,
+            before,
+            after,
+            StateMutation(
+                normalized_user_id,
+                "law_reserve",
+                normalized_law_id,
+                {"编号": normalized_law_id, "数量": after},
+                version,
             ),
         )
 

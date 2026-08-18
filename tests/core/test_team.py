@@ -11,6 +11,7 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
@@ -50,8 +51,10 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
@@ -65,9 +68,7 @@ def _services(tmp_path: Path):
 
 def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
     _run(
-        create.create(
-            CreateCharacterRequest(user_id, f"create-{user_id}", name, "男")
-        )
+        create.create(CreateCharacterRequest(user_id, f"create-{user_id}", name, "男"))
     )
 
 
@@ -109,8 +110,7 @@ def test_team_invitation_order_public_count_and_group_travel(tmp_path: Path) -> 
     result = _run(travel.travel(TravelRequest("qq-1", "travel-team", "天衡城")))
     assert result.participant_user_ids == ("qq-1", "qq-2", "qq-3")
     locations = tuple(
-        _run(location.current(user_id)).xy
-        for user_id in result.participant_user_ids
+        _run(location.current(user_id)).xy for user_id in result.participant_user_ids
     )
     assert locations == (result.plan.destination.xy,) * 3
 

@@ -11,6 +11,7 @@ from types import MappingProxyType
 from game.core.combat import CombatantSpec, CombatBuildRef
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import DatabaseService, StateAddress, StateMutation
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 
 from .contracts import (
@@ -57,10 +58,12 @@ class CompanionService:
         data: JsonDataService,
         database: DatabaseService,
         growth: GrowthService,
+        forging: ForgingService,
     ) -> None:
         self._data = data
         self._database = database
         self._growth = growth
+        self._forging = forging
         self._initialized = False
         self._rules: CompanionRules | None = None
         self._definitions: Mapping[str, CompanionDefinition] = MappingProxyType({})
@@ -69,7 +72,6 @@ class CompanionService:
             {}
         )
         self._attribute_definitions: Mapping[str, object] = {}
-        self._weapon_rule: Mapping[str, object] = {}
 
     def initialize(self) -> CompanionStatus:
         if self._initialized:
@@ -80,12 +82,11 @@ class CompanionService:
             raise RuntimeError("核心数据库必须先于道侣核心启动")
         if not self._growth.status().initialized:
             raise RuntimeError("成长核心必须先于道侣核心启动")
+        if not self._forging.status().initialized:
+            raise RuntimeError("炼器核心必须先于道侣核心启动")
         self._rules = self._load_rules()
         self._attribute_definitions = _mapping(
             self._data.dataset("战斗定义").get("属性"), "战斗定义.属性"
-        )
-        self._weapon_rule = _mapping(
-            self._data.dataset("炼器规则").get("本命武器"), "炼器规则.本命武器"
         )
         if (
             self._rules.qualification_growth_minimum <= 0
@@ -304,7 +305,8 @@ class CompanionService:
             if law_id is not None:
                 self._data.entity("器律", law_id)
         weapon_level = _state_positive_int(weapon.get("等级"), "道侣实例.本命武器.等级")
-        stage_name, open_slots = self._growth.weapon_stage(weapon_level)
+        stage = self._forging.weapon_stage(weapon_level)
+        stage_name, open_slots = stage.name, stage.open_law_slots
         if _state_text(weapon.get("器阶"), "道侣实例.本命武器.器阶") != stage_name:
             raise CompanionStateError("道侣本命武器器阶与等级不一致")
         if len(weapon_laws) > open_slots:
@@ -380,10 +382,7 @@ class CompanionService:
             attributes=instance.attributes,
             level=instance.level,
             combatant_type="修士",
-            weapon_attack=(
-                float(self._weapon_rule["基础攻击"])
-                + float(self._weapon_rule["每级攻击"]) * (instance.weapon_level - 1)
-            ),
+            weapon_attack=self._forging.weapon_attack(instance.weapon_level),
             build=build,
             health=float(instance.resources["血气"]),
             spirit=float(instance.resources["精神"]),
@@ -412,7 +411,7 @@ class CompanionService:
                 realm_id=before.realm_id,
                 gained=_request_nonnegative_int(experience, "道侣经验"),
             )
-            weapon = self._growth.advance_weapon(
+            weapon = self._forging.advance_weapon(
                 level=before.weapon_level,
                 experience=before.weapon_experience,
                 gained=_request_nonnegative_int(weapon_experience, "道侣本命武器经验"),
@@ -539,12 +538,12 @@ class CompanionService:
         law = self._data.entity("器律", str(law_id or "").strip())
         law_name = _text(law.get("名称"), "器律.名称")
         law_stage = _text(law.get("器阶"), "器律.器阶")
-        _, open_slots = self._growth.weapon_stage(before.weapon_level)
+        open_slots = self._forging.weapon_stage(before.weapon_level).open_law_slots
         if slot > open_slots:
             raise CompanionCultivationError(
                 f"当前道侣本命武器只开放{open_slots}个器律孔"
             )
-        if not self._growth.law_allowed(before.weapon_level, law_stage):
+        if not self._forging.law_allowed(before.weapon_level, law_stage):
             raise CompanionCultivationError("该器律的器阶高于道侣本命武器")
         laws = list(before.weapon_laws)
         laws.extend([None] * (slot - len(laws)))
@@ -589,7 +588,7 @@ class CompanionService:
                 normalized_user_id,
                 INSTANCE_STATE,
                 after.companion_id,
-                _instance_value(after, self._growth),
+                _instance_value(after, self._forging),
                 current.instance.version,
             ),
             StateMutation(
@@ -614,7 +613,7 @@ class CompanionService:
         current = await self.active_instance(user_id)
         before = current.instance
         gained = _request_nonnegative_int(weapon_experience, "道侣本命武器经验")
-        advance = self._growth.advance_weapon(
+        advance = self._forging.advance_weapon(
             level=before.weapon_level,
             experience=before.weapon_experience,
             gained=gained,
@@ -641,7 +640,7 @@ class CompanionService:
                 _user_id(user_id),
                 INSTANCE_STATE,
                 before.companion_id,
-                _instance_value(after, self._growth),
+                _instance_value(after, self._forging),
                 before.version,
             ),
         )
@@ -716,7 +715,7 @@ class CompanionService:
                 _user_id(user_id),
                 INSTANCE_STATE,
                 before.companion_id,
-                _instance_value(after, self._growth),
+                _instance_value(after, self._forging),
                 before.version,
             ),
         )
@@ -856,7 +855,7 @@ class CompanionService:
                     _user_id(user_id),
                     INSTANCE_STATE,
                     definition.companion_id,
-                    _instance_value(instance, self._growth),
+                    _instance_value(instance, self._forging),
                     0,
                 )
             )
@@ -1135,9 +1134,9 @@ def _relation_value(relation: CompanionRelation) -> dict[str, object]:
 
 def _instance_value(
     instance: CompanionInstance,
-    growth: GrowthService,
+    forging: ForgingService,
 ) -> dict[str, object]:
-    stage_name, _ = growth.weapon_stage(instance.weapon_level)
+    stage_name = forging.weapon_stage(instance.weapon_level).name
     return {
         "境界": instance.realm_id,
         "等级": instance.level,

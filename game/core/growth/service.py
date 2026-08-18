@@ -16,22 +16,19 @@ from .contracts import (
     GrowthStatus,
     RandomCultivationBuild,
     RealmDefinition,
-    WeaponAdvance,
 )
 
 _CATEGORIES = ("功法", "真意", "气机")
 
 
 class GrowthService:
-    """为人物和道侣提供同一套等级、境界、武器与构筑计算。"""
+    """为人物和道侣提供同一套等级、境界与构筑计算。"""
 
     def __init__(self, data: JsonDataService, pool: PoolService) -> None:
         self._data = data
         self._pool = pool
         self._initialized = False
         self._cultivator_rule: Mapping[str, object] = {}
-        self._weapon_rule: Mapping[str, object] = {}
-        self._weapon_stages: tuple[Mapping[str, object], ...] = ()
         self._realms: dict[str, RealmDefinition] = {}
         self._conflicts: tuple[frozenset[str], ...] = ()
         self._attempt_limit = 0
@@ -45,13 +42,6 @@ class GrowthService:
             raise RuntimeError("资源池微服务必须先于成长核心启动")
         rules = self._data.dataset("角色规则")
         self._cultivator_rule = _mapping(rules.get("修士修炼"), "修士修炼.json")
-        forging = self._data.dataset("炼器规则")
-        self._weapon_rule = _mapping(forging.get("本命武器"), "本命武器.json")
-        weapon_stage_rule = _mapping(forging.get("器则"), "器则.json")
-        self._weapon_stages = tuple(
-            _mapping(value, "器则.器阶[]")
-            for value in _sequence(weapon_stage_rule.get("器阶"), "器则.器阶")
-        )
         self._realms = {
             realm_id: RealmDefinition(
                 realm_id,
@@ -64,11 +54,11 @@ class GrowthService:
         }
         build_rules = self._data.dataset("构筑规则")
         generation = _mapping(build_rules.get("生成"), "构筑/生成.json")
-        self._attempt_limit = _positive_int(
-            generation.get("尝试上限"), "构筑.尝试上限"
-        )
+        self._attempt_limit = _positive_int(generation.get("尝试上限"), "构筑.尝试上限")
         self._conflicts = tuple(
-            frozenset(_strings(_mapping(row, "构筑/相冲.json[]").get("机制"), "相冲.机制"))
+            frozenset(
+                _strings(_mapping(row, "构筑/相冲.json[]").get("机制"), "相冲.机制")
+            )
             for row in _sequence(build_rules.get("相冲"), "构筑/相冲.json")
         )
         self._validate_static_rules()
@@ -80,7 +70,6 @@ class GrowthService:
             self._initialized,
             len(self._realms),
             int(self._cultivator_rule.get("等级上限") or 0),
-            int(self._weapon_rule.get("等级上限") or 0),
         )
 
     def realm(self, realm_id: str) -> RealmDefinition:
@@ -96,15 +85,18 @@ class GrowthService:
             raise GrowthError(f"{current.name}已经是最高境界")
         return self.realm(current.next_realm_id)
 
-    def experience_required(self, level: int, *, weapon: bool = False) -> int:
+    def experience_required(self, level: int) -> int:
         self._require_initialized()
-        rule = self._weapon_rule if weapon else self._cultivator_rule
-        maximum = _positive_int(rule.get("等级上限"), "成长.等级上限")
-        if isinstance(level, bool) or not isinstance(level, int) or not 1 <= level <= maximum:
+        maximum = _positive_int(self._cultivator_rule.get("等级上限"), "成长.等级上限")
+        if (
+            isinstance(level, bool)
+            or not isinstance(level, int)
+            or not 1 <= level <= maximum
+        ):
             raise GrowthError(f"等级必须在1至{maximum}之间")
         if level >= maximum:
             return 0
-        curve = _mapping(rule.get("经验"), "成长.经验")
+        curve = _mapping(self._cultivator_rule.get("经验"), "成长.经验")
         base = math.floor(
             _number(curve.get("幂次基数"), "经验.幂次基数")
             * level ** _number(curve.get("等级幂次"), "经验.等级幂次")
@@ -118,7 +110,9 @@ class GrowthService:
         progress = max(0.0, (level - start) / span)
         multiplier = 1.0
         for prefix in ("中段", "高段", "终段"):
-            multiplier += _number(late.get(f"{prefix}系数"), f"经验.后段.{prefix}系数") * (
+            multiplier += _number(
+                late.get(f"{prefix}系数"), f"经验.后段.{prefix}系数"
+            ) * (
                 progress
                 ** _number(late.get(f"{prefix}幂次"), f"经验.后段.{prefix}幂次")
             )
@@ -139,44 +133,7 @@ class GrowthService:
             experience=experience,
             gained=gained,
             maximum_level=current_realm.maximum_level,
-            weapon=False,
         )
-
-    def advance_weapon(
-        self, *, level: int, experience: int, gained: int
-    ) -> WeaponAdvance:
-        self._require_initialized()
-        before_stage, before_slots = self.weapon_stage(level)
-        result = self._advance(
-            level=level,
-            experience=experience,
-            gained=gained,
-            maximum_level=_positive_int(self._weapon_rule.get("等级上限"), "武器等级上限"),
-            weapon=True,
-        )
-        after_stage, after_slots = self.weapon_stage(result.level_after)
-        return WeaponAdvance(
-            result.level_before,
-            result.level_after,
-            result.experience_before,
-            result.experience_after,
-            result.experience_gained,
-            before_stage,
-            after_stage,
-            before_slots,
-            after_slots,
-        )
-
-    def weapon_stage(self, level: int) -> tuple[str, int]:
-        self._require_initialized()
-        for stage in self._weapon_stages:
-            bounds = _integer_pair(stage.get("等级范围"), "器阶.等级范围")
-            if bounds[0] <= level <= bounds[1]:
-                return (
-                    _text(stage.get("名称"), "器阶.名称"),
-                    _nonnegative_int(stage.get("开放器律孔"), "器阶.开放器律孔"),
-                )
-        raise GrowthError(f"本命武器等级没有对应器阶：{level}")
 
     def cultivator_attribute_growth(
         self, levels: int, *, multiplier: float = 1.0
@@ -186,30 +143,25 @@ class GrowthService:
         self._require_initialized()
         if isinstance(levels, bool) or not isinstance(levels, int) or levels < 0:
             raise GrowthError("升级次数必须是非负整数")
-        if isinstance(multiplier, bool) or not isinstance(multiplier, (int, float)) or multiplier <= 0:
+        if (
+            isinstance(multiplier, bool)
+            or not isinstance(multiplier, (int, float))
+            or multiplier <= 0
+        ):
             raise GrowthError("成长倍率必须大于0")
         growth = _mapping(
-            _mapping(self._cultivator_rule.get("属性成长"), "修士修炼.属性成长").get("每级"),
+            _mapping(self._cultivator_rule.get("属性成长"), "修士修炼.属性成长").get(
+                "每级"
+            ),
             "修士修炼.属性成长.每级",
         )
         result: dict[str, int | float] = {}
         for attribute, raw in growth.items():
             value = _number(raw, f"每级成长.{attribute}") * levels * multiplier
-            result[str(attribute)] = int(value) if value.is_integer() else round(value, 4)
+            result[str(attribute)] = (
+                int(value) if value.is_integer() else round(value, 4)
+            )
         return result
-
-    def law_allowed(self, weapon_level: int, law_stage: str) -> bool:
-        """低阶器律可以保留或覆入更高阶本命武器。"""
-
-        current_name, _ = self.weapon_stage(weapon_level)
-        order = {
-            _text(stage.get("名称"), "器阶.名称"): index
-            for index, stage in enumerate(self._weapon_stages)
-        }
-        normalized = str(law_stage or "").strip()
-        if normalized not in order:
-            raise GrowthError(f"未知器律器阶：{normalized or '<空>'}")
-        return order[normalized] <= order[current_name]
 
     def random_companion_build(
         self,
@@ -266,16 +218,18 @@ class GrowthService:
         experience: int,
         gained: int,
         maximum_level: int,
-        weapon: bool,
     ) -> ExperienceAdvance:
-        if any(isinstance(value, bool) or not isinstance(value, int) for value in (level, experience, gained)):
+        if any(
+            isinstance(value, bool) or not isinstance(value, int)
+            for value in (level, experience, gained)
+        ):
             raise GrowthError("等级和经验必须是整数")
         if level < 1 or experience < 0 or gained < 0:
             raise GrowthError("等级必须为正，经验不能为负")
         current_level = level
         current_experience = experience + gained
         while current_level < maximum_level:
-            required = self.experience_required(current_level, weapon=weapon)
+            required = self.experience_required(current_level)
             if current_experience < required:
                 break
             current_experience -= required
@@ -298,7 +252,9 @@ class GrowthService:
             current = pending.pop()
             if isinstance(current, Mapping):
                 pending.extend(current.values())
-            elif isinstance(current, Sequence) and not isinstance(current, (str, bytes)):
+            elif isinstance(current, Sequence) and not isinstance(
+                current, (str, bytes)
+            ):
                 pending.extend(current)
             elif isinstance(current, str) and len(current) == 6 and current.isdecimal():
                 try:
@@ -311,9 +267,8 @@ class GrowthService:
 
     def _validate_static_rules(self) -> None:
         maximum = _positive_int(self._cultivator_rule.get("等级上限"), "修士等级上限")
-        weapon_maximum = _positive_int(self._weapon_rule.get("等级上限"), "武器等级上限")
-        if maximum != 100 or weapon_maximum != 100:
-            raise JsonDataError("当前成长契约要求人物和本命武器等级上限均为100")
+        if maximum != 100:
+            raise JsonDataError("当前成长契约要求人物等级上限为100")
         if not self._realms:
             raise JsonDataError("境界定义不能为空")
         for realm in self._realms.values():
@@ -360,19 +315,6 @@ def _positive_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise JsonDataError(f"{label}必须是正整数")
     return value
-
-
-def _nonnegative_int(value: object, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise JsonDataError(f"{label}必须是非负整数")
-    return value
-
-
-def _integer_pair(value: object, label: str) -> tuple[int, int]:
-    values = _sequence(value, label)
-    if len(values) != 2 or any(isinstance(raw, bool) or not isinstance(raw, int) for raw in values):
-        raise JsonDataError(f"{label}必须是两个整数")
-    return int(values[0]), int(values[1])
 
 
 __all__ = ["GrowthService"]

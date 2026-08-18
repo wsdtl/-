@@ -1,4 +1,4 @@
-"""人物、道侣与本命武器共用成长核心。"""
+"""人物与道侣共用的修士成长核心。"""
 
 from .contracts import (
     ExperienceAdvance,
@@ -6,7 +6,6 @@ from .contracts import (
     GrowthStatus,
     RandomCultivationBuild,
     RealmDefinition,
-    WeaponAdvance,
 )
 from .service import GrowthService
 
@@ -17,5 +16,4 @@ __all__ = [
     "GrowthStatus",
     "RandomCultivationBuild",
     "RealmDefinition",
-    "WeaponAdvance",
 ]

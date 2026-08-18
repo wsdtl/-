@@ -11,6 +11,7 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, TransactionCommand
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
@@ -51,12 +52,14 @@ def _services(tmp_path: Path):
     team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database, growth)
-    companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
+    companion.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     retreat = RetreatService(
@@ -93,9 +96,7 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
         tmp_path
     )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
-    damage = _run(
-        character.plan_battle_settlement("qq-1", health=0, spirit=0)
-    )
+    damage = _run(character.plan_battle_settlement("qq-1", health=0, spirit=0))
     _run(
         database.commit(
             TransactionCommand(
@@ -125,9 +126,7 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
         retreat.progress("qq-1", now=started_at + timedelta(seconds=299))
     )
     assert before_round.completed_rounds == 0
-    one_round = _run(
-        retreat.progress("qq-1", now=started_at + timedelta(seconds=300))
-    )
+    one_round = _run(retreat.progress("qq-1", now=started_at + timedelta(seconds=300)))
     assert one_round.completed_rounds == 1
     assert one_round.can_end is True
 

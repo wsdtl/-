@@ -13,6 +13,7 @@ from types import MappingProxyType
 from uuid import uuid4
 
 from .contracts import (
+    CommittedTransaction,
     DatabaseError,
     IdempotencyConflictError,
     LocationMutation,
@@ -257,6 +258,33 @@ class SQLiteStateStore:
                     for row in rows
                 )
         return tuple(result)
+
+    def committed_transaction(
+        self, user_id: str, request_id: str
+    ) -> CommittedTransaction | None:
+        """只读取得一次已经提交的幂等事务。"""
+
+        self._require_initialized()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT transaction_id, business_type, changes_json, committed_at
+                FROM committed_transaction
+                WHERE user_id = ? AND request_id = ?
+                """,
+                (user_id, request_id),
+            ).fetchone()
+        if row is None:
+            return None
+        stored = json.loads(str(row[2]))
+        payload = stored.get("payload")
+        if not isinstance(payload, dict):
+            raise DatabaseError("已提交事务缺少对象载荷")
+        command = TransactionCommand(user_id, request_id, str(row[1]), (), {})
+        return CommittedTransaction(
+            _receipt_from_row(command, row, replayed=True),
+            _freeze_json(payload),
+        )
 
     def commit(self, command: TransactionCommand) -> TransactionReceipt:
         self._require_initialized()

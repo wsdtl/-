@@ -1,4 +1,4 @@
-"""人物、道侣与本命武器共用的成长计算契约。"""
+"""人物与道侣共用的修士成长计算契约。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ class GrowthStatus:
     initialized: bool
     realm_count: int
     maximum_level: int
-    weapon_maximum_level: int
 
 
 @dataclass(frozen=True)
@@ -38,19 +37,6 @@ class ExperienceAdvance:
 
 
 @dataclass(frozen=True)
-class WeaponAdvance:
-    level_before: int
-    level_after: int
-    experience_before: int
-    experience_after: int
-    experience_gained: int
-    stage_before: str
-    stage_after: str
-    open_slots_before: int
-    open_slots_after: int
-
-
-@dataclass(frozen=True)
 class RandomCultivationBuild:
     seed: int
     techniques: tuple[str, ...]
@@ -64,5 +50,4 @@ __all__ = [
     "GrowthStatus",
     "RandomCultivationBuild",
     "RealmDefinition",
-    "WeaponAdvance",
 ]

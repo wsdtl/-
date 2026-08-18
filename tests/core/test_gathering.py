@@ -11,6 +11,7 @@ from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateMutation, TransactionCommand
+from game.core.forging import ForgingService
 from game.core.gathering import (
     GatheringConflictError,
     GatheringLeaderRequiredError,
@@ -53,12 +54,14 @@ def _services(tmp_path: Path):
     team.initialize()
     location = LocationService(data, database, world)
     location.initialize()
-    companion = CompanionService(data, database, growth)
-    companion.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    forging = ForgingService(data, database, asset, world, location)
+    forging.initialize()
+    companion = CompanionService(data, database, growth, forging)
+    companion.initialize()
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
     gathering = GatheringService(
@@ -108,9 +111,7 @@ def _create(
 def test_herb_gathering_unlocks_full_rounds_and_settles_inventory(
     tmp_path: Path,
 ) -> None:
-    database, player_state, _, _, asset, gathering, _, _, create = _services(
-        tmp_path
-    )
+    database, player_state, _, _, asset, gathering, _, _, create = _services(tmp_path)
     _create(create, "qq-1", "林远")
     started_at = datetime(2026, 8, 18, 10, 0, tzinfo=timezone.utc)
 
@@ -167,14 +168,17 @@ def test_herb_gathering_unlocks_full_rounds_and_settles_inventory(
     assert sum(item.quantity for item in settlement.users[0].items) == 3
     for item in settlement.users[0].items:
         stacks = _run(asset.inventory_stacks("qq-1", item.item_id))
-        assert sum(
-            stack.quantity for stack in stacks if stack.grade.grade_id == item.grade_id
-        ) == item.quantity
+        assert (
+            sum(
+                stack.quantity
+                for stack in stacks
+                if stack.grade.grade_id == item.grade_id
+            )
+            == item.quantity
+        )
     state = _run(player_state.current("qq-1"))
     assert state is not None and state.states["行为"].name == "空闲"
-    assert _run(
-        gathering.settle("采药", "qq-1", "finish-herb")
-    ).replayed is True
+    assert _run(gathering.settle("采药", "qq-1", "finish-herb")).replayed is True
     assert database.status().transaction_count >= 3
 
 
@@ -229,7 +233,10 @@ def test_team_mining_is_led_once_and_settled_per_user(tmp_path: Path) -> None:
         )
     )
     assert result.total_quantity == 2
-    assert [sum(item.quantity for item in user.items) for user in result.users] == [1, 1]
+    assert [sum(item.quantity for item in user.items) for user in result.users] == [
+        1,
+        1,
+    ]
     for user_id in ("qq-1", "qq-2"):
         state = _run(player_state.current(user_id))
         assert state is not None and state.states["行为"].name == "空闲"
@@ -239,9 +246,7 @@ def test_living_active_companion_adds_one_gathering_unit(tmp_path: Path) -> None
     database, _, _, companion, _, gathering, _, _, create = _services(tmp_path)
     _create(create, "qq-1", "林远", "男")
     definition = next(
-        value
-        for value in companion.local_cultivators("溪隐台")
-        if value.gender == "女"
+        value for value in companion.local_cultivators("溪隐台") if value.gender == "女"
     )
     _run(
         database.commit(

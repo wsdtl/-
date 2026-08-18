@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 
 from .contracts import (
+    CommittedTransaction,
     DatabaseStatus,
     LocationRecord,
     NearbyLocationRecord,
@@ -91,6 +92,16 @@ class DatabaseService:
     async def commit(self, command: TransactionCommand) -> TransactionReceipt:
         self._require_initialized()
         return await asyncio.to_thread(self._store.commit, command)
+
+    async def committed_transaction(
+        self, user_id: str, request_id: str
+    ) -> CommittedTransaction | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.committed_transaction,
+            user_id,
+            request_id,
+        )
 
     def close(self) -> None:
         self._initialized = False

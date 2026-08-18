@@ -16,6 +16,7 @@ from .core.data import JsonDataService
 from .core.database import DatabaseService
 from .core.enemy import EnemyService
 from .core.exploration import ExplorationService
+from .core.forging import ForgingService
 from .core.gathering import GatheringService
 from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
@@ -35,6 +36,7 @@ from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.duiwu import TeamFeature
+from .features.lianqi import ForgingFeature
 from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
@@ -52,6 +54,7 @@ class CoreServices:
     combat: CombatService
     pool: PoolService
     growth: GrowthService
+    forging: ForgingService
     world: WorldService
     companion: CompanionService
     database: DatabaseService
@@ -85,6 +88,7 @@ class FeatureServices:
     biguan: RetreatFeature
     caiyao: HerbGatheringFeature
     caikuang: OreGatheringFeature
+    lianqi: ForgingFeature
 
 
 @dataclass(frozen=True)
@@ -143,7 +147,6 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.ok("角色成长核心微服务已启动"),
             C.kv("realms", growth_status.realm_count),
             C.kv("max_level", growth_status.maximum_level),
-            C.kv("weapon_max_level", growth_status.weapon_maximum_level),
         )
     )
     world = WorldService(data)
@@ -198,15 +201,6 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_size", location_status.nearby_page_size),
         )
     )
-    companion = CompanionService(data, database, growth)
-    companion_status = companion.initialize()
-    logger.opt(colors=True).success(
-        C.join(
-            C.ok("世界道侣核心微服务已启动"),
-            C.kv("companions", companion_status.companion_count),
-            C.kv("locations", companion_status.location_count),
-        )
-    )
     asset = AssetService(data, database)
     asset_status = asset.initialize()
     logger.opt(colors=True).success(
@@ -217,8 +211,27 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_limit", asset_status.page_limit),
         )
     )
+    forging = ForgingService(data, database, asset, world, location)
+    forging_status = forging.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("炼器核心微服务已启动"),
+            C.kv("laws", forging_status.law_count),
+            C.kv("methods", forging_status.method_count),
+            C.kv("artisans", forging_status.artisan_count),
+        )
+    )
+    companion = CompanionService(data, database, growth, forging)
+    companion_status = companion.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("世界道侣核心微服务已启动"),
+            C.kv("companions", companion_status.companion_count),
+            C.kv("locations", companion_status.location_count),
+        )
+    )
     character = CharacterService(
-        data, database, player_state, location, asset, growth
+        data, database, player_state, location, asset, growth, forging
     )
     character_service_status = character.initialize()
     logger.opt(colors=True).success(
@@ -229,7 +242,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
-    enemy = EnemyService(data, pool, growth, asset)
+    enemy = EnemyService(data, pool, growth, asset, forging)
     enemy_status = enemy.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -300,6 +313,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         combat=combat,
         pool=pool,
         growth=growth,
+        forging=forging,
         world=world,
         companion=companion,
         database=database,
@@ -366,6 +380,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         item_catalog,
         growth,
+        forging,
         database,
     )
     renwu_peiyang.initialize()
@@ -375,6 +390,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         item_catalog,
         growth,
+        forging,
         database,
     )
     daolv_peiyang.initialize()
@@ -388,6 +404,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     caiyao.initialize()
     caikuang = OreGatheringFeature(data, gathering, asset, team)
     caikuang.initialize()
+    lianqi = ForgingFeature(data, forging)
+    lianqi.initialize()
     features = FeatureServices(
         chuangjian_renwu=create_character,
         chakan_juese=chakan_juese,
@@ -404,6 +422,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         biguan=biguan,
         caiyao=caiyao,
         caikuang=caikuang,
+        lianqi=lianqi,
     )
     return GameServices(core=core, features=features)
 

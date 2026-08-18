@@ -15,6 +15,7 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.forging import ForgingError, ForgingService
 from game.core.growth import GrowthError, GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
@@ -55,6 +56,7 @@ class CharacterService:
         location: LocationService,
         asset: AssetService,
         growth: GrowthService,
+        forging: ForgingService,
     ) -> None:
         self._data = data
         self._database = database
@@ -62,12 +64,11 @@ class CharacterService:
         self._location = location
         self._asset = asset
         self._growth = growth
+        self._forging = forging
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
         self._grade_values: frozenset[str] = frozenset()
-        self._weapon_rule: Mapping[str, object] = {}
-        self._weapon_stage_rule: Mapping[str, object] = {}
         self._attributes: Mapping[str, object] = {}
 
     def initialize(self) -> CharacterStatus:
@@ -85,6 +86,8 @@ class CharacterService:
             raise RuntimeError("玩家资产服务必须先于角色服务启动")
         if not self._growth.status().initialized:
             raise RuntimeError("成长核心必须先于角色服务启动")
+        if not self._forging.status().initialized:
+            raise RuntimeError("炼器核心必须先于角色服务启动")
 
         role_rules = self._data.dataset("角色规则")
         role_rule = role_rules.get("人物")
@@ -100,14 +103,7 @@ class CharacterService:
         if not isinstance(grade_rows, Sequence) or isinstance(grade_rows, (str, bytes)):
             raise JsonDataError("基础定义缺少品级.json")
         creation = _mapping(role_rule.get("创建"), "人物.json.创建")
-        weapon_creation = _mapping(
-            creation.get("初始本命武器"),
-            "人物.json.创建.初始本命武器",
-        )
-        weapon_rule_name = str(weapon_creation.get("规则") or "").strip()
-        weapon_rules = self._data.dataset("炼器规则")
-        weapon_rule = weapon_rules.get(weapon_rule_name)
-        weapon_stage_rule = weapon_rules.get("器则")
+        _mapping(creation.get("初始本命武器"), "人物.json.创建.初始本命武器")
         attributes = self._data.dataset("战斗定义").get("属性")
         self._role_rule = role_rule
         self._gender_values = _strings(genders)
@@ -115,8 +111,6 @@ class CharacterService:
             str(_mapping(raw, "品级.json").get("编号") or "").strip()
             for raw in grade_rows
         )
-        self._weapon_rule = _mapping(weapon_rule, "炼器规则.本命武器")
-        self._weapon_stage_rule = _mapping(weapon_stage_rule, "炼器规则.器则")
         self._attributes = _mapping(attributes, "战斗定义.属性")
         self._validate_static_rules()
         self._initialized = True
@@ -339,12 +333,12 @@ class CharacterService:
                 realm_id=_state_text(character.get("境界"), "人物.境界"),
                 gained=_nonnegative_request_int(experience, "人物经验"),
             )
-            weapon_advance = self._growth.advance_weapon(
+            weapon_advance = self._forging.advance_weapon(
                 level=_state_positive_int(weapon.get("等级"), "本命武器.等级"),
                 experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
                 gained=_nonnegative_request_int(weapon_experience, "本命武器经验"),
             )
-        except GrowthError as exc:
+        except (GrowthError, ForgingError) as exc:
             raise CharacterCultivationError(str(exc)) from exc
         character["等级"] = cultivator_advance.level_after
         character["经验"] = cultivator_advance.experience_after
@@ -407,12 +401,12 @@ class CharacterService:
             raise CharacterCultivationError("灵石不足")
         gained = _nonnegative_request_int(weapon_experience, "本命武器经验")
         try:
-            advance = self._growth.advance_weapon(
+            advance = self._forging.advance_weapon(
                 level=_state_positive_int(weapon.get("等级"), "本命武器.等级"),
                 experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
                 gained=gained,
             )
-        except GrowthError as exc:
+        except ForgingError as exc:
             raise CharacterCultivationError(str(exc)) from exc
         character["灵石"] = stones_after
         character["资源"] = {"血气": health_after, "精神": spirit_after, "护盾": 0}
@@ -689,10 +683,10 @@ class CharacterService:
             raise CharacterStateError("人物缺少本命武器状态")
         weapon = dict(_state_mapping(snapshot.value, "weapon/main"))
         level = _state_positive_int(weapon.get("等级"), "本命武器.等级")
-        _, open_slots = self._growth.weapon_stage(level)
+        open_slots = self._forging.weapon_stage(level).open_law_slots
         if slot > open_slots:
             raise CharacterCultivationError(f"当前本命武器只开放{open_slots}个器律孔")
-        if not self._growth.law_allowed(level, law_stage):
+        if not self._forging.law_allowed(level, law_stage):
             raise CharacterCultivationError("该器律的器阶高于当前本命武器")
         laws = list(_state_law_slots(weapon.get("器律"), "本命武器.器律"))
         laws.extend([None] * (slot - len(laws)))
@@ -770,8 +764,6 @@ class CharacterService:
                 raise JsonDataError(f"人物初始物品使用未知品级：{item_id} -> {grade}")
         if not self._attributes:
             raise JsonDataError("战斗定义.属性不能为空")
-        _number(self._weapon_rule.get("基础攻击"), "本命武器.基础攻击")
-        _number(self._weapon_rule.get("每级攻击"), "本命武器.每级攻击")
 
     def _cultivation_profile(
         self, cultivation: Mapping[str, object]
@@ -806,16 +798,14 @@ class CharacterService:
 
     def _weapon_profile(self, weapon: Mapping[str, object]) -> WeaponProfile:
         level = _state_positive_int(weapon.get("等级"), "本命武器.等级")
-        stage = _stage_for_level(self._weapon_stage_rule, level)
-        stage_name = _state_text(stage.get("名称"), "器则.器阶.名称")
+        stage = self._forging.weapon_stage(level)
+        stage_name = stage.name
         stored_stage = _state_text(weapon.get("器阶"), "本命武器.器阶")
         if stored_stage != stage_name:
             raise CharacterStateError(
                 f"本命武器器阶与等级不符：{stored_stage} != {stage_name}"
             )
-        open_slots = _state_nonnegative_int(
-            stage.get("开放器律孔"), "器则.器阶.开放器律孔"
-        )
+        open_slots = stage.open_law_slots
         raw_laws = weapon.get("器律")
         if not isinstance(raw_laws, Sequence) or isinstance(raw_laws, (str, bytes)):
             raise CharacterStateError("本命武器.器律必须是编号数组")
@@ -835,11 +825,7 @@ class CharacterService:
             name=_state_text(weapon.get("名称"), "本命武器.名称"),
             level=level,
             experience=_state_nonnegative_int(weapon.get("经验"), "本命武器.经验"),
-            attack=(
-                _number(self._weapon_rule.get("基础攻击"), "本命武器.基础攻击")
-                + _number(self._weapon_rule.get("每级攻击"), "本命武器.每级攻击")
-                * (level - 1)
-            ),
+            attack=self._forging.weapon_attack(level),
             stage=stage_name,
             open_law_slots=open_slots,
             equipped_laws=tuple(equipped_laws),
@@ -904,13 +890,13 @@ class CharacterService:
         weapon_creation = _mapping(
             creation.get("初始本命武器"), "人物.json.创建.初始本命武器"
         )
-        level = _positive_int(self._weapon_rule.get("初始等级"), "本命武器初始等级")
-        stage = _stage_for_level(self._weapon_stage_rule, level)
+        level = self._forging.initial_weapon_level()
+        stage = self._forging.weapon_stage(level)
         return {
             "名称": str(weapon_creation.get("名称") or "无名器胚"),
             "等级": level,
             "经验": 0,
-            "器阶": str(stage.get("名称") or "凡器"),
+            "器阶": stage.name,
             "器律": [],
         }
 
@@ -1099,22 +1085,6 @@ def _initial_items(role_rule: Mapping[str, object]) -> tuple[tuple[str, str, int
     if len({(item_id, grade) for item_id, grade, _ in result}) != len(result):
         raise JsonDataError("人物.json.物品不能重复同一编号和品级")
     return tuple(result)
-
-
-def _stage_for_level(rule: Mapping[str, object], level: int) -> Mapping[str, object]:
-    stages = rule.get("器阶")
-    if not isinstance(stages, Sequence) or isinstance(stages, (str, bytes)):
-        raise JsonDataError("本命武器.json.器阶必须是字典列表")
-    for raw in stages:
-        stage = _mapping(raw, "本命武器.json.器阶")
-        bounds = stage.get("等级范围")
-        if (
-            isinstance(bounds, Sequence)
-            and len(bounds) == 2
-            and bounds[0] <= level <= bounds[1]
-        ):
-            return stage
-    raise JsonDataError(f"本命武器等级没有对应器阶：{level}")
 
 
 def _in_range(value: int, lower: object, upper: object) -> bool:

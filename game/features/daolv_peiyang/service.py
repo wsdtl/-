@@ -22,6 +22,7 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogError, ItemCatalogService
 
@@ -46,6 +47,7 @@ class CompanionCultivationFeature:
         assets: AssetService,
         items: ItemCatalogService,
         growth: GrowthService,
+        forging: ForgingService,
         database: DatabaseService,
     ) -> None:
         self._data = data
@@ -53,6 +55,7 @@ class CompanionCultivationFeature:
         self._assets = assets
         self._items = items
         self._growth = growth
+        self._forging = forging
         self._database = database
         self._initialized = False
         self._copy: Mapping[str, object] = {}
@@ -65,6 +68,7 @@ class CompanionCultivationFeature:
             (self._assets.status().initialized, "资产核心"),
             (self._items.status().initialized, "物品核心"),
             (self._growth.status().initialized, "成长核心"),
+            (self._forging.status().initialized, "炼器核心"),
             (self._database.status().initialized, "数据库核心"),
         ):
             if not ready:
@@ -89,9 +93,11 @@ class CompanionCultivationFeature:
             active = await self._companion.active_instance(user_id)
             definition = self._companion.definition(active.instance.companion_id)
             realm = self._growth.realm(active.instance.realm_id)
-            weapon_stage, open_law_slots = self._growth.weapon_stage(
+            weapon_stage_definition = self._forging.weapon_stage(
                 active.instance.weapon_level
             )
+            weapon_stage = weapon_stage_definition.name
+            open_law_slots = weapon_stage_definition.open_law_slots
             return CompanionCultivationView(
                 definition,
                 active.instance,
@@ -113,15 +119,11 @@ class CompanionCultivationFeature:
                         slot,
                         str(self._data.entity("器律", law_id).get("名称")),
                     )
-                    for slot, law_id in enumerate(
-                        active.instance.weapon_laws, start=1
-                    )
+                    for slot, law_id in enumerate(active.instance.weapon_laws, start=1)
                     if law_id is not None
                 ),
                 self._growth.experience_required(active.instance.level),
-                self._growth.experience_required(
-                    active.instance.weapon_level, weapon=True
-                ),
+                self._forging.weapon_experience_required(active.instance.weapon_level),
             )
         except (CompanionStateError, CompanionCultivationError, ValueError) as exc:
             raise CompanionCultivationFeatureError(str(exc)) from exc
@@ -132,7 +134,9 @@ class CompanionCultivationFeature:
         self._require_initialized()
         medicine = self._resolve_item(request.medicine, "丹药")
         try:
-            stack = await self._lowest_inventory_stack(request.user_id, medicine.item_id)
+            stack = await self._lowest_inventory_stack(
+                request.user_id, medicine.item_id
+            )
             plan = await self._companion.plan_breakthrough(
                 request.user_id, medicine_id=medicine.item_id
             )
@@ -151,7 +155,9 @@ class CompanionCultivationFeature:
             )
             view = await self.inspect(request.user_id)
         except StateConflictError as exc:
-            raise CompanionCultivationConflictError("道侣或纳戒已经变化，请重试") from exc
+            raise CompanionCultivationConflictError(
+                "道侣或纳戒已经变化，请重试"
+            ) from exc
         except IdempotencyConflictError as exc:
             raise CompanionCultivationConflictError("请求编号已经用于其他操作") from exc
         except (
@@ -179,12 +185,18 @@ class CompanionCultivationFeature:
                     request.request_id,
                     "道侣覆炼",
                     plan.operations + (reserve_plan.operation,),
-                    {"道侣编号": plan.companion_id, "器律编号": law_id, "孔位": request.slot},
+                    {
+                        "道侣编号": plan.companion_id,
+                        "器律编号": law_id,
+                        "孔位": request.slot,
+                    },
                 )
             )
             view = await self.inspect(request.user_id)
         except StateConflictError as exc:
-            raise CompanionCultivationConflictError("道侣本命武器或器藏已经变化，请重试") from exc
+            raise CompanionCultivationConflictError(
+                "道侣本命武器或器藏已经变化，请重试"
+            ) from exc
         except IdempotencyConflictError as exc:
             raise CompanionCultivationConflictError("请求编号已经用于其他操作") from exc
         except (AssetStateError, CompanionCultivationError, CompanionStateError) as exc:
@@ -219,7 +231,9 @@ class CompanionCultivationFeature:
                 if str(value.get("名称") or "").strip() == query
             )
             if len(matches) != 1:
-                raise CompanionCultivationFeatureError(f"未找到唯一{section}：{query}") from None
+                raise CompanionCultivationFeatureError(
+                    f"未找到唯一{section}：{query}"
+                ) from None
             return matches[0]
         return query
 
