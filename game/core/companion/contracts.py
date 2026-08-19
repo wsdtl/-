@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from game.core.database import StateMutation
+from game.core.medicine import PreparedBattleMedicine
 
 
 class CompanionError(RuntimeError):
@@ -47,6 +48,8 @@ class CompanionStatus:
 @dataclass(frozen=True)
 class CompanionRules:
     base_affection_per_item: Decimal
+    favorite_gift_multiplier: Decimal
+    acceptable_gift_multiplier: Decimal
     active_limit: int
     invitation_affection: Decimal
     first_invitation_gender_relation: str
@@ -56,6 +59,7 @@ class CompanionRules:
     cultivation_slots: Mapping[str, int]
     qualification_growth_minimum: Decimal
     qualification_growth_maximum: Decimal
+    automatic_medicine_default: bool
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,8 @@ class CompanionDefinition:
     interactable: bool
     favorite_pool_names: tuple[str, ...]
     favorite_item_ids: frozenset[str]
+    acceptable_pool_names: tuple[str, ...]
+    acceptable_item_ids: frozenset[str]
     reward: CompanionReward
     dialogue: CompanionDialogue
     qualification_range: tuple[int, int]
@@ -151,6 +157,8 @@ class CompanionInstance:
     breakthrough_records: tuple[Mapping[str, object], ...]
     version: int
     resources: Mapping[str, int | float]
+    automatic_medicine: bool
+    prepared_battle_medicine: PreparedBattleMedicine | None
 
 
 @dataclass(frozen=True)
@@ -191,6 +199,23 @@ class CompanionBreakthroughPlan:
 
 
 @dataclass(frozen=True)
+class CompanionBuildResetPlan:
+    companion_id: str
+    category: str
+    content_ids: tuple[str, ...]
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionBreakthroughCorrectionPlan:
+    companion_id: str
+    target_realm: str
+    source_medicine_id: str
+    attributes: tuple[tuple[str, int | float], ...]
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
 class CompanionLawPlan:
     companion_id: str
     slot: int
@@ -210,11 +235,55 @@ class CompanionBattlePlan:
 
 
 @dataclass(frozen=True)
+class CompanionMedicineSettingPlan:
+    companion_id: str
+    enabled: bool
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionRecoveryPlan:
+    companion_id: str
+    resource: str
+    before: float
+    after: float
+    recovered: float
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CompanionBattleMedicinePlan:
+    companion_id: str
+    before: PreparedBattleMedicine | None
+    after: PreparedBattleMedicine | None
+    operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
 class CompanionGiftPlan:
     relation_before: CompanionRelation
     relation_after: CompanionRelation
     first_full: bool
     operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CompanionCultivationResetPlan:
+    companion_id: str
+    realm_before: str
+    realm_after: str
+    realm_name_after: str
+    level_before: int
+    level_after: int
+    operation: StateMutation
+    active_guard: StateMutation
+
+
+@dataclass(frozen=True)
+class CompanionSeverancePlan:
+    companion_id: str
+    affection_before: Decimal
+    operations: tuple[StateMutation, ...]
 
 
 @dataclass(frozen=True)
@@ -235,9 +304,13 @@ class CompanionFarewellPlan:
 __all__ = [
     "ActiveCompanion",
     "ActiveCompanionInstance",
+    "CompanionBattleMedicinePlan",
     "CompanionBattlePlan",
+    "CompanionBreakthroughCorrectionPlan",
     "CompanionBreakthroughPlan",
+    "CompanionBuildResetPlan",
     "CompanionCultivationError",
+    "CompanionCultivationResetPlan",
     "CompanionDefinition",
     "CompanionDialogue",
     "CompanionError",
@@ -250,11 +323,14 @@ __all__ = [
     "CompanionInvitationError",
     "CompanionInvitationPlan",
     "CompanionLawPlan",
+    "CompanionMedicineSettingPlan",
     "CompanionNotFoundError",
+    "CompanionRecoveryPlan",
     "CompanionRelation",
     "CompanionRetreatPlan",
     "CompanionReward",
     "CompanionRules",
+    "CompanionSeverancePlan",
     "CompanionStateError",
     "CompanionStatus",
     "LocalCultivator",

@@ -135,7 +135,12 @@ class CompanionInteractionFeature:
             require_interactable=True,
         )
         item = self._resolve_item(request.item)
-        if item.category != "灵植" or item.item_id not in definition.favorite_item_ids:
+        preference = (
+            self._companion.gift_preference(definition.companion_id, item.item_id)
+            if item.category == "灵植"
+            else "拒绝"
+        )
+        if preference == "拒绝":
             return CompanionGiftResult(
                 view,
                 item,
@@ -143,6 +148,8 @@ class CompanionInteractionFeature:
                 request.quantity,
                 Decimal(0),
                 False,
+                "拒绝",
+                Decimal(0),
                 self._choice(definition.dialogue.refuse_gift),
                 Decimal(0),
                 view.relation.current_affection,
@@ -160,8 +167,14 @@ class CompanionInteractionFeature:
             item.item_id,
             request.grade,
         )
+        preference_multiplier = (
+            self._companion.rules().favorite_gift_multiplier
+            if preference == "偏爱"
+            else self._companion.rules().acceptable_gift_multiplier
+        )
         affection_gain = (
             self._companion.rules().base_affection_per_item
+            * preference_multiplier
             * grade.ability_multiplier
             * request.quantity
         ).quantize(_AFFECTION_QUANTUM, rounding=ROUND_HALF_UP)
@@ -236,7 +249,9 @@ class CompanionInteractionFeature:
                 request.quantity,
                 base_affection,
                 True,
-                self._choice(definition.dialogue.accept_gift),
+                preference,
+                preference_multiplier,
+                self._gift_dialogue(definition, preference),
                 affection_gain,
                 current.relation.current_affection,
                 current.relation.current_affection,
@@ -258,7 +273,9 @@ class CompanionInteractionFeature:
             request.quantity,
             base_affection,
             True,
-            self._choice(definition.dialogue.accept_gift),
+            preference,
+            preference_multiplier,
+            self._gift_dialogue(definition, preference),
             affection_gain,
             relation_plan.relation_before.current_affection,
             relation_plan.relation_after.current_affection,
@@ -267,6 +284,13 @@ class CompanionInteractionFeature:
             reward_quantity,
             relation_plan.first_full,
             receipt.replayed,
+        )
+
+    def _gift_dialogue(self, definition, preference: str) -> str:
+        if preference == "偏爱":
+            return self._choice(definition.dialogue.accept_gift)
+        return self.copy().text["赠礼"]["合意话语"].format_map(
+            {"名称": definition.name}
         )
 
     async def invite(

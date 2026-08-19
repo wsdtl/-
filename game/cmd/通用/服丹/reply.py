@@ -1,0 +1,47 @@
+"""服丹命令回复构造。"""
+
+from __future__ import annotations
+
+from game.features.fudan import AutoMedicineResult, MedicineFeature, MedicineUseResult
+from message import M
+
+
+def used(feature: MedicineFeature, result: MedicineUseResult):
+    key = f"{result.target}{'恢复' if result.effect == '恢复' else '寄存'}"
+    line = feature.copy(
+        "服丹",
+        key,
+        人物=result.target_name,
+        道侣=result.target_name,
+        品级=result.grade_name,
+        丹药=result.medicine_name,
+        资源=result.resource,
+        实际恢复=_number(result.recovered),
+    )
+    return M.document().section(feature.copy("服丹", "标题"), icon="status").line(line).build()
+
+
+def setting(feature: MedicineFeature, result: AutoMedicineResult):
+    line = feature.copy(
+        "自动用药",
+        result.target,
+        道侣=result.target_name,
+        状态="开启" if result.enabled else "关闭",
+    )
+    return (
+        M.document()
+        .section(feature.copy("自动用药", "标题"), icon="status")
+        .line(line)
+        .build()
+    )
+
+
+def error(message: str):
+    return M.document().section("服丹", icon="notice").line(message).build()
+
+
+def _number(value: float) -> str:
+    return str(int(value)) if value.is_integer() else str(round(value, 4))
+
+
+__all__ = ["error", "setting", "used"]

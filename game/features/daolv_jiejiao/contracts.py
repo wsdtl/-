@@ -81,6 +81,8 @@ class CompanionGiftResult:
     quantity: int
     base_affection: Decimal
     accepted: bool
+    preference: str
+    preference_multiplier: Decimal
     dialogue: str
     affection_gain: Decimal
     affection_before: Decimal

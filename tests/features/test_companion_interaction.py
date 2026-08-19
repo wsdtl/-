@@ -228,6 +228,7 @@ def test_unliked_gift_is_not_consumed_and_multiple_grades_require_choice(
         item.item_id
         for item in item_catalog.category("灵植")
         if item.item_id not in definition.favorite_item_ids
+        and item.item_id not in definition.acceptable_item_ids
     )
     _grant(database, asset, liked_item, "01", 1, "grant-yellow")
     _grant(database, asset, liked_item, "02", 1, "grant-black")
@@ -260,6 +261,32 @@ def test_unliked_gift_is_not_consumed_and_multiple_grades_require_choice(
                 )
             )
         )
+
+
+def test_same_meridian_plant_is_accepted_with_lower_affection(tmp_path: Path) -> None:
+    database, companion, _, asset, create, interaction, _ = _services(tmp_path)
+    _create(create)
+    definition = _local_female(companion)
+    item_id = min(definition.acceptable_item_ids)
+    _grant(database, asset, item_id, "01", 1, "grant-acceptable")
+
+    result = _run(
+        interaction.gift(
+            CompanionGiftRequest(
+                "qq-1",
+                "gift-acceptable",
+                definition.companion_id,
+                item_id,
+                "01",
+                1,
+            )
+        )
+    )
+
+    assert result.accepted is True
+    assert result.preference == "合意"
+    assert str(result.affection_gain) == "5.0"
+    assert result.view.relation.gift_totals[f"{item_id}:01"] == 1
 
 
 def test_companion_command_repeats_current_location_actions(

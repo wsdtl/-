@@ -88,6 +88,7 @@ class CombatService:
             left=left,
             right=right,
             medicine_definitions=medicine_definitions,
+            medicine_selection_strategy=request.medicine_selection_strategy,
             seed=request.seed,
             action_limit=request.action_limit,
             field=field,
@@ -107,6 +108,7 @@ class CombatService:
         left: tuple[RuntimeCombatantSnapshot, ...],
         right: tuple[RuntimeCombatantSnapshot, ...],
         medicine_definitions: dict[str, Any],
+        medicine_selection_strategy: str,
         seed: int,
         action_limit: int,
         field: PreparedCombatField | None = None,
@@ -118,6 +120,7 @@ class CombatService:
             left=left,
             right=right,
             medicine_definitions=medicine_definitions,
+            medicine_selection_strategy=medicine_selection_strategy,
             seed=seed,
             action_limit=action_limit,
             field=field,
@@ -279,6 +282,8 @@ class CombatService:
         definitions = {value.stack_key: value for value in request.medicine_definitions}
         if len(definitions) != len(request.medicine_definitions):
             raise ValueError("恢复丹堆叠键不能重复")
+        if definitions and request.medicine_selection_strategy != "缺口优先":
+            raise ValueError("恢复丹选药策略必须由调用方明确提交为缺口优先")
         inventory_ids = {
             str(item_id)
             for combatant in (*request.left_team, *request.right_team)

@@ -44,7 +44,14 @@ class RandomCultivationBuild:
     qi_patterns: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class CultivationCategoryBuild:
+    category: str
+    content_ids: tuple[str, ...]
+
+
 __all__ = [
+    "CultivationCategoryBuild",
     "ExperienceAdvance",
     "GrowthError",
     "GrowthStatus",

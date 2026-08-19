@@ -41,7 +41,6 @@ from .contracts import (
     LawReserveAcquisitionPlan,
     LawReserveChangePlan,
     LawReserveStack,
-    RecoveryMedicineStack,
 )
 
 _STATE_TYPES = frozenset(
@@ -149,39 +148,6 @@ class AssetService:
         grade_ids = tuple(sorted(self._grades, key=lambda key: self._grades[key].order))
         weights = tuple(self._grade_drop_weights[grade_id] for grade_id in grade_ids)
         return self._grades[source.choices(grade_ids, weights=weights, k=1)[0]]
-
-    async def recovery_medicines(
-        self, user_id: str
-    ) -> tuple[RecoveryMedicineStack, ...]:
-        """返回纳戒内可供战斗自动使用的完整品级堆叠。"""
-
-        snapshot = await self.snapshot(user_id)
-        result: list[RecoveryMedicineStack] = []
-        for entry in snapshot.entries:
-            if entry.category != "物品" or entry.subcategory != "恢复丹":
-                continue
-            raw = self._data.entity("物品", entry.content_id)
-            effect = raw.get("使用效果")
-            if not isinstance(effect, Mapping):
-                continue
-            effect_type = str(effect.get("类型") or "")
-            if effect_type not in {"恢复血气", "恢复精神"}:
-                continue
-            base = effect.get("恢复百分比")
-            if isinstance(base, bool) or not isinstance(base, (int, float)):
-                raise JsonDataError(f"恢复丹 {entry.content_id} 缺少恢复百分比")
-            grade = self.grade(entry.grade_id)
-            result.append(
-                RecoveryMedicineStack(
-                    entry.instance_key,
-                    entry.content_id,
-                    grade.grade_id,
-                    entry.quantity,
-                    effect_type.removeprefix("恢复"),
-                    float(Decimal(str(base)) * grade.ability_multiplier),
-                )
-            )
-        return tuple(result)
 
     async def inventory_stacks(
         self, user_id: str, item_id: str

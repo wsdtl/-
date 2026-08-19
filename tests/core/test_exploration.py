@@ -24,6 +24,7 @@ from game.core.formation import FormationService
 from game.core.growth import GrowthService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
+from game.core.medicine import MedicineService, PreparedBattleMedicine
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
 from game.core.team import TeamService
@@ -59,6 +60,8 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
+    medicine = MedicineService(data, asset)
+    medicine.initialize()
     forging = ForgingService(data, database, asset, world, location)
     forging.initialize()
     formation = FormationService(data, database, asset, world, location)
@@ -87,6 +90,7 @@ def _services(tmp_path: Path):
         enemy,
         formation,
         combat,
+        medicine,
     )
     exploration.initialize()
     exploration_feature = ExplorationFeature(
@@ -106,6 +110,7 @@ def _services(tmp_path: Path):
         team,
         exploration_feature,
         formation,
+        medicine,
     )
 
 
@@ -121,6 +126,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
         _,
         _,
         formation,
+        medicine,
     ) = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     reserve = _run(
@@ -138,7 +144,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
         )
     )
     _run(formation.arm("qq-1", "arm-formation", reserve.stack.state_key))
-    medicines_before = _run(asset.recovery_medicines("qq-1"))
+    medicines_before = _run(medicine.recovery_stacks("qq-1"))
     assert medicines_before
     started_at = datetime(2026, 8, 17, 10, 0, tzinfo=timezone.utc)
 
@@ -170,7 +176,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
             started.formal_unit_count * battle.value["敌人倍率"]
         )
         assert battle.value["我方存活"] <= started.formal_unit_count
-    medicines_after = _run(asset.recovery_medicines("qq-1"))
+    medicines_after = _run(medicine.recovery_stacks("qq-1"))
     remaining = {stack.stack_key: stack.quantity for stack in medicines_after}
     deducted = sum(
         stack.quantity - remaining.get(stack.stack_key, 0) for stack in medicines_before
@@ -220,11 +226,55 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
     assert allocated["qq-2"]["掉落"] == {}
 
 
+def test_exploration_consumes_prepared_battle_medicine_only_after_creation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    database, _, character, _, create, _, exploration, _, _, _, _ = _services(
+        tmp_path
+    )
+    _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
+    prepared = PreparedBattleMedicine("120001", "01")
+    plan = _run(
+        character.plan_battle_medicine(
+            "qq-1", medicine=prepared, require_empty=True
+        )
+    )
+    _run(
+        database.commit(
+            TransactionCommand(
+                "qq-1", "prepare-battle", "测试寄存战丹", (plan.operation,), {}
+            )
+        )
+    )
+
+    original_execute = exploration._combat.execute
+
+    async def fail_once(request):
+        raise RuntimeError("战斗创建失败")
+
+    monkeypatch.setattr(exploration._combat, "execute", fail_once)
+    with pytest.raises(RuntimeError, match="战斗创建失败"):
+        _run(
+            exploration.start(
+                ExplorationStartCommand("qq-1", "failed-start", ("qq-1",), seed=7)
+            )
+        )
+    assert _run(character.profile("qq-1")).prepared_battle_medicine == prepared
+
+    monkeypatch.setattr(exploration._combat, "execute", original_execute)
+    _run(
+        exploration.start(
+            ExplorationStartCommand("qq-1", "successful-start", ("qq-1",), seed=7)
+        )
+    )
+    assert _run(character.profile("qq-1")).prepared_battle_medicine is None
+
+
 def test_team_leader_starts_one_real_exploration_for_all_players(
     tmp_path: Path,
 ) -> None:
-    database, player_state, _, _, create, _, exploration, team, feature, _ = _services(
-        tmp_path
+    database, player_state, _, _, create, _, exploration, team, feature, _, _ = (
+        _services(tmp_path)
     )
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     _run(create.create(CreateCharacterRequest("qq-2", "create-2", "白川", "男")))
@@ -264,7 +314,7 @@ def test_team_leader_starts_one_real_exploration_for_all_players(
 
 
 def test_world_exposes_enemy_multiplier_and_environment_id(tmp_path: Path) -> None:
-    _, _, _, _, _, world, _, _, _, _ = _services(tmp_path)
+    _, _, _, _, _, world, _, _, _, _, _ = _services(tmp_path)
     location = world.locate(LocationQuery(location_name="溪隐台"))
 
     assert location.enemy_multiplier == (1, 2)

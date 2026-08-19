@@ -428,6 +428,7 @@ class BattleContext:
     left: Fighter
     right: Fighter
     medicine_definitions: dict[str, CombatMedicineSpec]
+    medicine_selection_strategy: str = ""
     field: RuntimeCombatField | None = None
     formations: list[RuntimeFormation] = dataclass_field(default_factory=list)
     left_team: list[Fighter] = dataclass_field(default_factory=list)

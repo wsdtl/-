@@ -50,6 +50,7 @@ class CombatMedicineSpec:
     grade_id: str
     resource: str
     recovery_percent: float
+    grade_order: int = 0
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,7 @@ class CombatRequest:
     seed: int
     action_limit: int
     medicine_definitions: tuple[CombatMedicineSpec, ...] = ()
+    medicine_selection_strategy: str = ""
     report: CombatReportSpec | None = None
     field: CombatFieldSpec | None = None
     left_formation: CombatFormationSpec | None = None

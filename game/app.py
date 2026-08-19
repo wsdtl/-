@@ -13,6 +13,7 @@ from .core.asset import AssetService
 from .core.character import CharacterService
 from .core.combat import CombatService
 from .core.companion import CompanionService
+from .core.cultivation_transfer import CultivationTransferService
 from .core.data import JsonDataService
 from .core.database import DatabaseService
 from .core.enemy import EnemyService
@@ -23,6 +24,7 @@ from .core.gathering import GatheringService
 from .core.growth import GrowthService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
+from .core.medicine import MedicineService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
 from .core.retreat import RetreatService
@@ -30,6 +32,7 @@ from .core.team import TeamService
 from .core.trade import TradeService
 from .core.world import WorldService
 from .features.biguan import RetreatFeature
+from .features.butian import ButianFeature
 from .features.buzhen import FormationArmFeature
 from .features.caikuang import OreGatheringFeature
 from .features.caiyao import HerbGatheringFeature
@@ -40,6 +43,8 @@ from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.duiwu import TeamFeature
+from .features.fudan import MedicineFeature
+from .features.guiyuan import GuiyuanFeature
 from .features.jiaoyi import TradeFeature
 from .features.liandan import AlchemyFeature
 from .features.lianqi import ForgingFeature
@@ -47,8 +52,10 @@ from .features.lianzhen import FormationCraftFeature
 from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
+from .features.tongquetai import TongquetaiFeature
 from .features.weizhi import PositionFeature
 from .features.xinglu import TravelFeature
+from .features.yixing import YixingFeature
 from .startup import validate_startup_contracts
 
 
@@ -66,12 +73,14 @@ class CoreServices:
     formation: FormationService
     world: WorldService
     companion: CompanionService
+    cultivation_transfer: CultivationTransferService
     database: DatabaseService
     location: LocationService
     player_state: PlayerStateService
     team: TeamService
     character: CharacterService
     asset: AssetService
+    medicine: MedicineService
     enemy: EnemyService
     exploration: ExplorationService
     retreat: RetreatService
@@ -103,6 +112,11 @@ class FeatureServices:
     lianzhen: FormationCraftFeature
     buzhen: FormationArmFeature
     jiaoyi: TradeFeature
+    fudan: MedicineFeature
+    tongquetai: TongquetaiFeature
+    guiyuan: GuiyuanFeature
+    butian: ButianFeature
+    yixing: YixingFeature
 
 
 @dataclass(frozen=True)
@@ -224,6 +238,25 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("artisans", forging_status.artisan_count),
         )
     )
+    medicine = MedicineService(data, asset)
+    medicine_status = medicine.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("丹药核心微服务已启动"),
+            C.kv("recovery", medicine_status.recovery_count),
+            C.kv("battle", medicine_status.battle_count),
+            C.kv("special", medicine_status.special_count),
+        )
+    )
+    cultivation_transfer = CultivationTransferService(data, growth)
+    transfer_status = cultivation_transfer.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("修为转移核心微服务已启动"),
+            C.kv("function", transfer_status.location_function),
+            C.kv("medicine", transfer_status.medicine_id),
+        )
+    )
     alchemy = AlchemyService(data, database, asset, world, location)
     alchemy_status = alchemy.initialize()
     logger.opt(colors=True).success(
@@ -305,6 +338,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         enemy,
         formation,
         combat,
+        medicine,
     )
     exploration_status = exploration.initialize()
     logger.opt(colors=True).success(
@@ -362,12 +396,14 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         formation=formation,
         world=world,
         companion=companion,
+        cultivation_transfer=cultivation_transfer,
         database=database,
         location=location,
         player_state=player_state,
         team=team,
         character=character,
         asset=asset,
+        medicine=medicine,
         enemy=enemy,
         exploration=exploration,
         retreat=retreat,
@@ -400,6 +436,34 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     najie.initialize()
     jiaoyi = TradeFeature(data, trade)
     jiaoyi.initialize()
+    fudan = MedicineFeature(
+        data,
+        medicine,
+        character,
+        companion,
+        asset,
+        player_state,
+        database,
+    )
+    fudan.initialize()
+    tongquetai = TongquetaiFeature(
+        data,
+        cultivation_transfer,
+        character,
+        companion,
+        asset,
+        player_state,
+        location,
+        world,
+        database,
+    )
+    tongquetai.initialize()
+    guiyuan = GuiyuanFeature(data, medicine, companion, asset, player_state, location, world, database)
+    guiyuan.initialize()
+    butian = ButianFeature(data, medicine, character, companion, asset, player_state, location, world, database)
+    butian.initialize()
+    yixing = YixingFeature(data, medicine, character, asset, player_state, location, world, database)
+    yixing.initialize()
     weizhi = PositionFeature(
         data,
         world,
@@ -482,6 +546,11 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         lianzhen=lianzhen,
         buzhen=buzhen,
         jiaoyi=jiaoyi,
+        fudan=fudan,
+        tongquetai=tongquetai,
+        guiyuan=guiyuan,
+        butian=butian,
+        yixing=yixing,
     )
     return GameServices(core=core, features=features)
 

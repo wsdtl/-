@@ -10,11 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
-from game.core.asset import (
-    AssetService,
-    InventoryAdjustment,
-    RecoveryMedicineStack,
-)
+from game.core.asset import AssetService, InventoryAdjustment
 from game.core.character import CharacterService
 from game.core.combat import (
     CombatantResult,
@@ -38,6 +34,7 @@ from game.core.database import (
 from game.core.enemy import EnemyInstance, EnemyService
 from game.core.formation import FormationService
 from game.core.location import LocationService
+from game.core.medicine import MedicineService, RecoveryMedicineStack
 from game.core.player_state import (
     PlayerStateService,
     StateTransitionCommand,
@@ -86,6 +83,7 @@ class ExplorationService:
         enemy: EnemyService,
         formation: FormationService,
         combat: CombatService,
+        medicine: MedicineService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -98,12 +96,15 @@ class ExplorationService:
         self._enemy = enemy
         self._formation = formation
         self._combat = combat
+        self._medicine = medicine
         self._initialized = False
         self._rules: Mapping[str, object] = {}
 
     def initialize(self) -> ExplorationStatus:
         if self._initialized:
             raise RuntimeError("探险核心已经初始化")
+        if self._medicine is None or not self._medicine.status().initialized:
+            raise RuntimeError("丹药核心必须先于探险核心启动")
         rules = self._data.dataset("玩法规则").get("探险")
         self._rules = _mapping(rules, "规则/玩法/探险.json")
         seconds = _positive_int(self._rules.get("每场秒数"), "探险.每场秒数")
@@ -166,6 +167,7 @@ class ExplorationService:
         combatants: list[CombatantSpec] = []
         medicines: dict[str, tuple[RecoveryMedicineStack, ...]] = {}
         character_names: dict[str, str] = {}
+        battle_medicine_operations: list[StateMutation] = []
         for user_id in participants:
             guard = await self._player_state.authorize(user_id, "自主空闲")
             if not guard.allowed:
@@ -185,13 +187,50 @@ class ExplorationService:
                     )
                 )
             )
+            profile = await self._character.profile(user_id)
             player = await self._character.combatant(user_id)
+            if profile.prepared_battle_medicine is not None:
+                definition = self._medicine.battle(
+                    profile.prepared_battle_medicine.medicine_id,
+                    profile.prepared_battle_medicine.grade_id,
+                )
+                player = replace(
+                    player,
+                    prepared_statuses=(self._medicine.prepared_status(definition),),
+                )
+                battle_medicine_operations.append(
+                    (
+                        await self._character.plan_battle_medicine(
+                            user_id, medicine=None
+                        )
+                    ).operation
+                )
             character_names[user_id] = player.name
             combatants.append(player)
             companion = await self._companion.combatant(user_id)
             if companion is not None:
+                current_companion = await self._companion.active_instance(user_id)
+                prepared = current_companion.instance.prepared_battle_medicine
+                if prepared is not None:
+                    definition = self._medicine.battle(
+                        prepared.medicine_id,
+                        prepared.grade_id,
+                    )
+                    companion = replace(
+                        companion,
+                        prepared_statuses=(
+                            self._medicine.prepared_status(definition),
+                        ),
+                    )
+                    battle_medicine_operations.extend(
+                        (
+                            await self._companion.plan_battle_medicine(
+                                user_id, medicine=None
+                            )
+                        ).operations
+                    )
                 combatants.append(companion)
-            medicines[user_id] = await self._asset.recovery_medicines(user_id)
+            medicines[user_id] = await self._medicine.recovery_stacks(user_id)
 
         initial_unit_count = len(combatants)
         source = random.Random(seed)
@@ -233,7 +272,12 @@ class ExplorationService:
                 seed=source.getrandbits(64),
                 instance_prefix=f"{session_id}:{battle_index}",
             )
-            left = _attach_inventory(living, virtual_inventory, self._rules)
+            left = _attach_inventory(
+                living,
+                virtual_inventory,
+                self._medicine.auto_medicine_threshold,
+                include_prepared=battle_index == 1,
+            )
             result = await self._combat.execute(
                 CombatRequest(
                     left_team=tuple(left),
@@ -241,6 +285,7 @@ class ExplorationService:
                     seed=source.getrandbits(64),
                     action_limit=self.status().action_limit,
                     medicine_definitions=medicine_definitions,
+                    medicine_selection_strategy=self._medicine.selection_strategy,
                     field=CombatFieldSpec(
                         environment_id=location.environment_id,
                         scene=location.location_name or location.terrain,
@@ -372,6 +417,7 @@ class ExplorationService:
             StateMutation(owner, SESSION_STATE, session_id, session_value, 0)
         ]
         operations.extend(plan.mutation for plan in transition_plans)
+        operations.extend(battle_medicine_operations)
         operations.extend(
             operation
             for user_id in participants
@@ -666,9 +712,10 @@ class ExplorationService:
 def _attach_inventory(
     combatants: Sequence[CombatantSpec],
     inventory: Mapping[str, Mapping[str, int]],
-    rules: Mapping[str, object],
+    threshold: float,
+    *,
+    include_prepared: bool,
 ) -> list[CombatantSpec]:
-    threshold = float(rules.get("自动用药阈值", 0.3))
     seen: set[str] = set()
     result: list[CombatantSpec] = []
     for value in combatants:
@@ -681,7 +728,7 @@ def _attach_inventory(
                 inventory=current,
                 medicine_threshold=threshold,
                 statuses=(),
-                prepared_statuses=(),
+                prepared_statuses=value.prepared_statuses if include_prepared else (),
                 cooldowns={},
                 shield=0,
                 skill_cursor=0,
@@ -702,6 +749,7 @@ def _medicine_definitions(
                 stack.grade_id,
                 stack.resource,
                 stack.recovery_percent,
+                stack.grade_order,
             )
             previous = result.get(stack.stack_key)
             if previous is not None and previous != definition:

@@ -131,6 +131,12 @@ def gift(
                 result.grade.ability_multiplier,
             ),
         ).row(
+            (text(copy, "赠礼", "喜好程度"), result.preference),
+            (
+                text(copy, "赠礼", "喜好倍率"),
+                result.preference_multiplier,
+            ),
+        ).row(
             (text(copy, "赠礼", "实际好感"), _affection(result.affection_gain)),
             (
                 text(copy, "赠礼", "当前好感"),

@@ -18,22 +18,29 @@ from game.core.database import (
 from game.core.forging import ForgingError, ForgingService
 from game.core.growth import GrowthError, GrowthService
 from game.core.location import LocationService
+from game.core.medicine import PreparedBattleMedicine
 from game.core.player_state import PlayerStateService
 
 from .contracts import (
+    CharacterAbsorptionPlan,
     CharacterAlreadyExistsError,
+    CharacterBattleMedicinePlan,
     CharacterBattlePlan,
+    CharacterBreakthroughCorrectionPlan,
     CharacterBreakthroughPlan,
     CharacterCreateCommand,
     CharacterCreationResult,
     CharacterCultivationError,
     CharacterEquipPlan,
+    CharacterGenderPlan,
     CharacterGrowthPlan,
     CharacterInputError,
     CharacterLawPlan,
+    CharacterMedicineSettingPlan,
     CharacterNotFoundError,
     CharacterProfile,
     CharacterPublicProfile,
+    CharacterRecoveryPlan,
     CharacterRetreatPlan,
     CharacterSpiritStonePlan,
     CharacterStateError,
@@ -72,6 +79,7 @@ class CharacterService:
         self._gender_values: tuple[str, ...] = ()
         self._grade_values: frozenset[str] = frozenset()
         self._attributes: Mapping[str, object] = {}
+        self._medicine_default = True
 
     def initialize(self) -> CharacterStatus:
         if self._initialized:
@@ -107,6 +115,10 @@ class CharacterService:
         creation = _mapping(role_rule.get("创建"), "人物.json.创建")
         _mapping(creation.get("初始本命武器"), "人物.json.创建.初始本命武器")
         attributes = self._data.dataset("战斗定义").get("属性")
+        medicine_rules = _mapping(
+            self._data.dataset("服丹规则").get("服丹"), "规则/服丹/服丹.json"
+        )
+        medicine_auto = _mapping(medicine_rules.get("自动用药"), "服丹.自动用药")
         self._role_rule = role_rule
         self._gender_values = _strings(genders)
         self._grade_values = frozenset(
@@ -114,6 +126,9 @@ class CharacterService:
             for raw in grade_rows
         )
         self._attributes = _mapping(attributes, "战斗定义.属性")
+        self._medicine_default = _bool(
+            medicine_auto.get("默认开启"), "服丹.自动用药.默认开启"
+        )
         self._validate_static_rules()
         self._initialized = True
         initial_items = _initial_items(self._role_rule)
@@ -174,6 +189,9 @@ class CharacterService:
             experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
             spirit_stones=_state_nonnegative_int(character.get("灵石"), "人物.灵石"),
             automatic_medicine=_state_bool(character.get("自动用药"), "人物.自动用药"),
+            prepared_battle_medicine=_prepared_battle_medicine(
+                character.get("待战战丹"), "人物.待战战丹"
+            ),
             attributes=_state_numbers(character.get("属性"), "人物.属性"),
             resources=_state_numbers(character.get("资源"), "人物.资源"),
             cultivation_slots=cultivation_slots,
@@ -372,6 +390,137 @@ class CharacterService:
                     weapon_snapshot.version,
                 ),
             ),
+        )
+
+    async def plan_absorb_experience(
+        self, user_id: str, *, experience: int
+    ) -> CharacterAbsorptionPlan:
+        """生成不允许越过当前境界等级上限的修为承接计划。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        offered = _nonnegative_request_int(experience, "夺元修为")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        level_before = _state_positive_int(character.get("等级"), "人物.等级")
+        experience_before = _state_nonnegative_int(character.get("经验"), "人物.经验")
+        realm_id = _state_text(character.get("境界"), "人物.境界")
+        realm = self._growth.realm(realm_id)
+        capacity = -experience_before
+        for level in range(level_before, realm.maximum_level):
+            capacity += self._growth.experience_required(level)
+        accepted = min(offered, max(0, capacity))
+        advance = self._growth.advance_cultivator(
+            level=level_before,
+            experience=experience_before,
+            realm_id=realm_id,
+            gained=accepted,
+        )
+        character["等级"] = advance.level_after
+        character["经验"] = advance.experience_after
+        character["属性"] = _add_numbers(
+            _state_mapping(character.get("属性"), "人物.属性"),
+            self._growth.cultivator_attribute_growth(advance.levels_gained),
+        )
+        return CharacterAbsorptionPlan(
+            offered,
+            accepted,
+            offered - accepted,
+            level_before,
+            advance.level_after,
+            advance.experience_after,
+            StateMutation(
+                normalized_user_id,
+                "character",
+                "main",
+                character,
+                snapshot.version,
+            ),
+        )
+
+    async def plan_medicine_setting(
+        self, user_id: str, *, enabled: bool
+    ) -> CharacterMedicineSettingPlan:
+        """生成只改变人物自动用药开关的状态变更。"""
+
+        if not isinstance(enabled, bool):
+            raise CharacterCultivationError("自动用药开关必须是布尔值")
+        user, snapshot, character = await self._medicine_state(user_id)
+        if _state_bool(character.get("自动用药"), "人物.自动用药") == enabled:
+            raise CharacterCultivationError(
+                f"人物自动用药已经{'开启' if enabled else '关闭'}"
+            )
+        character["自动用药"] = enabled
+        return CharacterMedicineSettingPlan(
+            enabled,
+            StateMutation(user, "character", "main", character, snapshot.version),
+        )
+
+    async def plan_recovery(
+        self, user_id: str, *, resource: str, recovery_percent: float
+    ) -> CharacterRecoveryPlan:
+        """按人物资源上限生成一次主动恢复。"""
+
+        user, snapshot, character = await self._medicine_state(user_id)
+        normalized_resource = _medicine_resource(resource)
+        percent = _positive_number(recovery_percent, "恢复百分比")
+        attributes = _state_mapping(character.get("属性"), "人物.属性")
+        resources = dict(_state_mapping(character.get("资源"), "人物.资源"))
+        maximum = _number(attributes.get(f"{normalized_resource}上限"), f"{normalized_resource}上限")
+        before = _bounded_resource(
+            resources.get(normalized_resource), maximum, f"当前{normalized_resource}"
+        )
+        if before >= maximum:
+            raise CharacterCultivationError(f"人物{normalized_resource}已满")
+        after = min(maximum, before + maximum * percent / 100)
+        resources[normalized_resource] = _clean_number(after)
+        character["资源"] = resources
+        return CharacterRecoveryPlan(
+            normalized_resource,
+            before,
+            after,
+            after - before,
+            StateMutation(user, "character", "main", character, snapshot.version),
+        )
+
+    async def plan_battle_medicine(
+        self,
+        user_id: str,
+        *,
+        medicine: PreparedBattleMedicine | None,
+        require_empty: bool = False,
+    ) -> CharacterBattleMedicinePlan:
+        """寄存或清除人物下一场正式战斗使用的战丹。"""
+
+        user, snapshot, character = await self._medicine_state(user_id)
+        before = _prepared_battle_medicine(character.get("待战战丹"), "人物.待战战丹")
+        if require_empty and before is not None:
+            raise CharacterCultivationError("人物已有待战战丹")
+        if before == medicine:
+            raise CharacterCultivationError("人物待战战丹没有变化")
+        character["待战战丹"] = _prepared_battle_value(medicine)
+        return CharacterBattleMedicinePlan(
+            before,
+            medicine,
+            StateMutation(user, "character", "main", character, snapshot.version),
+        )
+
+    async def _medicine_state(self, user_id: str):
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        return (
+            normalized_user_id,
+            snapshot,
+            dict(_state_mapping(snapshot.value, "character/main")),
         )
 
     async def plan_battle_settlement(
@@ -843,6 +992,69 @@ class CharacterService:
             ),
         )
 
+    async def plan_breakthrough_correction(
+        self, user_id: str, *, source_medicine_id: str
+    ) -> CharacterBreakthroughCorrectionPlan:
+        """为尚未补正的人物纯突破节点写入一项永久属性。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        records = list(_state_records(character.get("突破记录"), "人物.突破记录"))
+        realm_id = _state_text(character.get("境界"), "人物.境界")
+        record = next((row for row in records if row.get("目标境界") == realm_id), None)
+        if record is None:
+            raise CharacterCultivationError("当前境界没有可补正的突破节点")
+        if record.get("补正来源丹药"):
+            raise CharacterCultivationError("当前突破节点已经补正")
+        _, original_permanent = self._breakthrough_medicine(
+            _state_text(record.get("突破丹"), "突破记录.突破丹"), realm_id
+        )
+        if original_permanent:
+            raise CharacterCultivationError("只有纯突破节点可以补正")
+        _, permanent = self._breakthrough_medicine(source_medicine_id, realm_id)
+        if len(permanent) != 1:
+            raise CharacterCultivationError("补正丹必须只提供一项永久属性")
+        attributes = _add_numbers(_state_mapping(character.get("属性"), "人物.属性"), permanent)
+        bonuses = _add_numbers(_state_mapping(character.get("属性加成"), "人物.属性加成"), permanent)
+        record["补正来源丹药"] = str(source_medicine_id).strip()
+        character["属性"] = attributes
+        character["属性加成"] = bonuses
+        character["突破记录"] = records
+        return CharacterBreakthroughCorrectionPlan(
+            realm_id,
+            str(source_medicine_id).strip(),
+            tuple((str(key), value) for key, value in permanent.items()),
+            StateMutation(normalized_user_id, "character", "main", character, snapshot.version),
+        )
+
+    async def plan_gender_change(self, user_id: str) -> CharacterGenderPlan:
+        """只把玩家性别切换到另一项正式性别。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        before = _state_text(character.get("性别"), "人物.性别")
+        choices = tuple(value for value in self._gender_values if value != before)
+        if len(choices) != 1:
+            raise CharacterCultivationError("当前性别定义不支持两仪易形")
+        character["性别"] = choices[0]
+        return CharacterGenderPlan(
+            before,
+            choices[0],
+            StateMutation(normalized_user_id, "character", "main", character, snapshot.version),
+        )
+
     async def _growth_snapshots(self, user_id: str):
         snapshots = await self._database.get_many(
             (
@@ -1011,7 +1223,8 @@ class CharacterService:
             "属性": attributes,
             "属性加成": {},
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},
-            "自动用药": bool(self._role_rule.get("自动用药")),
+            "自动用药": self._medicine_default,
+            "待战战丹": self._role_rule.get("待战战丹"),
             "突破记录": [],
         }
 
@@ -1047,6 +1260,12 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
+def _bool(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise JsonDataError(f"{label}必须是布尔值")
+    return value
+
+
 def _state_mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise CharacterStateError(f"{label}必须是对象")
@@ -1057,6 +1276,45 @@ def _state_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise CharacterStateError(f"{label}必须是非空字符串")
     return value.strip()
+
+
+def _prepared_battle_medicine(
+    value: object, label: str
+) -> PreparedBattleMedicine | None:
+    if value is None:
+        return None
+    row = _state_mapping(value, label)
+    if set(row) != {"编号", "品级"}:
+        raise CharacterStateError(f"{label}字段不完整")
+    return PreparedBattleMedicine(
+        _state_text(row.get("编号"), f"{label}.编号"),
+        _state_text(row.get("品级"), f"{label}.品级"),
+    )
+
+
+def _prepared_battle_value(
+    value: PreparedBattleMedicine | None,
+) -> dict[str, str] | None:
+    if value is None:
+        return None
+    return {"编号": value.medicine_id, "品级": value.grade_id}
+
+
+def _medicine_resource(value: object) -> str:
+    result = str(value or "").strip()
+    if result not in {"血气", "精神"}:
+        raise CharacterCultivationError("恢复资源只能是血气或精神")
+    return result
+
+
+def _positive_number(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise CharacterCultivationError(f"{label}必须是正数")
+    return float(value)
+
+
+def _clean_number(value: float) -> int | float:
+    return int(value) if value.is_integer() else round(value, 4)
 
 
 def _state_positive_int(value: object, label: str) -> int:

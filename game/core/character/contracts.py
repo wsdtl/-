@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.core.database import StateMutation
+from game.core.medicine import PreparedBattleMedicine
 
 
 class CharacterCreationError(RuntimeError):
@@ -108,6 +109,7 @@ class CharacterProfile:
     experience: int
     spirit_stones: int
     automatic_medicine: bool
+    prepared_battle_medicine: PreparedBattleMedicine | None
     attributes: tuple[tuple[str, int | float], ...]
     resources: tuple[tuple[str, int | float], ...]
     cultivation_slots: tuple[tuple[str, int], ...]
@@ -123,6 +125,17 @@ class CharacterGrowthPlan:
     weapon_level_before: int
     weapon_level_after: int
     operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CharacterAbsorptionPlan:
+    experience_offered: int
+    experience_accepted: int
+    experience_discarded: int
+    level_before: int
+    level_after: int
+    experience_after: int
+    operation: StateMutation
 
 
 @dataclass(frozen=True)
@@ -171,6 +184,21 @@ class CharacterBreakthroughPlan:
 
 
 @dataclass(frozen=True)
+class CharacterBreakthroughCorrectionPlan:
+    target_realm: str
+    source_medicine_id: str
+    attributes: tuple[tuple[str, int | float], ...]
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterGenderPlan:
+    gender_before: str
+    gender_after: str
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
 class CharacterLawPlan:
     slot: int
     law_id: str
@@ -188,21 +216,49 @@ class CharacterBattlePlan:
     operations: tuple[StateMutation, ...]
 
 
+@dataclass(frozen=True)
+class CharacterMedicineSettingPlan:
+    enabled: bool
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterRecoveryPlan:
+    resource: str
+    before: float
+    after: float
+    recovered: float
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterBattleMedicinePlan:
+    before: PreparedBattleMedicine | None
+    after: PreparedBattleMedicine | None
+    operation: StateMutation
+
+
 __all__ = [
+    "CharacterAbsorptionPlan",
     "CharacterAlreadyExistsError",
+    "CharacterBattleMedicinePlan",
     "CharacterBattlePlan",
+    "CharacterBreakthroughCorrectionPlan",
     "CharacterBreakthroughPlan",
     "CharacterCreateCommand",
     "CharacterCreationError",
     "CharacterCreationResult",
     "CharacterCultivationError",
     "CharacterEquipPlan",
+    "CharacterGenderPlan",
     "CharacterGrowthPlan",
     "CharacterInputError",
     "CharacterLawPlan",
+    "CharacterMedicineSettingPlan",
     "CharacterNotFoundError",
     "CharacterProfile",
     "CharacterPublicProfile",
+    "CharacterRecoveryPlan",
     "CharacterRetreatPlan",
     "CharacterSpiritStonePlan",
     "CharacterStateError",

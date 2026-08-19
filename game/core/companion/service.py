@@ -13,13 +13,18 @@ from game.core.data import JsonDataError, JsonDataService
 from game.core.database import DatabaseService, StateAddress, StateMutation
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
+from game.core.medicine import PreparedBattleMedicine
 
 from .contracts import (
     ActiveCompanion,
     ActiveCompanionInstance,
+    CompanionBattleMedicinePlan,
     CompanionBattlePlan,
+    CompanionBreakthroughCorrectionPlan,
     CompanionBreakthroughPlan,
+    CompanionBuildResetPlan,
     CompanionCultivationError,
+    CompanionCultivationResetPlan,
     CompanionDefinition,
     CompanionDialogue,
     CompanionFarewellError,
@@ -31,11 +36,14 @@ from .contracts import (
     CompanionInvitationError,
     CompanionInvitationPlan,
     CompanionLawPlan,
+    CompanionMedicineSettingPlan,
     CompanionNotFoundError,
+    CompanionRecoveryPlan,
     CompanionRelation,
     CompanionRetreatPlan,
     CompanionReward,
     CompanionRules,
+    CompanionSeverancePlan,
     CompanionStateError,
     CompanionStatus,
     LocalCultivator,
@@ -72,6 +80,7 @@ class CompanionService:
             {}
         )
         self._attribute_definitions: Mapping[str, object] = {}
+        self._plant_pool_meridians: Mapping[str, str] = {}
 
     def initialize(self) -> CompanionStatus:
         if self._initialized:
@@ -88,6 +97,7 @@ class CompanionService:
         self._attribute_definitions = _mapping(
             self._data.dataset("战斗定义").get("属性"), "战斗定义.属性"
         )
+        self._plant_pool_meridians = self._load_plant_pool_meridians()
         if (
             self._rules.qualification_growth_minimum <= 0
             or self._rules.qualification_growth_maximum
@@ -165,6 +175,17 @@ class CompanionService:
         if companion_id is None:
             raise CompanionNotFoundError(f"未找到道侣：{query or '<空>'}")
         return self._definitions[companion_id]
+
+    def gift_preference(self, companion_id: str, item_id: str) -> str:
+        """返回赠礼在该道侣定义中的正式喜好层级。"""
+
+        definition = self.definition(companion_id)
+        normalized = str(item_id or "").strip()
+        if normalized in definition.favorite_item_ids:
+            return "偏爱"
+        if normalized in definition.acceptable_item_ids:
+            return "合意"
+        return "拒绝"
 
     def local_cultivators(
         self,
@@ -258,6 +279,8 @@ class CompanionService:
             "属性倍率",
             "突破记录",
             "资源",
+            "自动用药",
+            "待战战丹",
         }
         if set(value) != expected:
             raise CompanionStateError("道侣实例字段不完整")
@@ -334,6 +357,8 @@ class CompanionService:
             ),
             snapshot.version,
             MappingProxyType(resources),
+            _state_bool(value.get("自动用药"), "道侣实例.自动用药"),
+            _prepared_battle_medicine(value.get("待战战丹"), "道侣实例.待战战丹"),
         )
 
     async def active_instance(self, user_id: str) -> ActiveCompanionInstance:
@@ -386,7 +411,7 @@ class CompanionService:
             build=build,
             health=float(instance.resources["血气"]),
             spirit=float(instance.resources["精神"]),
-            auto_medicine=True,
+            auto_medicine=instance.automatic_medicine,
             owner_id=user_id,
             controller_id=user_id,
             inventory_owner_id=user_id,
@@ -443,6 +468,8 @@ class CompanionService:
             before.breakthrough_records,
             before.version + 1,
             before.resources,
+            before.automatic_medicine,
+            before.prepared_battle_medicine,
         )
         return CompanionGrowthPlan(
             before.companion_id,
@@ -516,6 +543,8 @@ class CompanionService:
             records,
             before.version + 1,
             before.resources,
+            before.automatic_medicine,
+            before.prepared_battle_medicine,
         )
         return CompanionBreakthroughPlan(
             before.companion_id,
@@ -566,6 +595,8 @@ class CompanionService:
             before.breakthrough_records,
             before.version + 1,
             before.resources,
+            before.automatic_medicine,
+            before.prepared_battle_medicine,
         )
         return CompanionLawPlan(
             before.companion_id,
@@ -598,6 +629,90 @@ class CompanionService:
                 {"道侣编号": current.active.companion_id},
                 current.active.version,
             ),
+        )
+
+    async def plan_medicine_setting(
+        self, user_id: str, *, enabled: bool
+    ) -> CompanionMedicineSettingPlan:
+        """生成当前同行道侣的自动用药开关变更。"""
+
+        if not isinstance(enabled, bool):
+            raise CompanionCultivationError("自动用药开关必须是布尔值")
+        current = await self.active_instance(user_id)
+        before = current.instance
+        if before.automatic_medicine == enabled:
+            raise CompanionCultivationError(
+                f"道侣自动用药已经{'开启' if enabled else '关闭'}"
+            )
+        after = replace(before, automatic_medicine=enabled, version=before.version + 1)
+        return CompanionMedicineSettingPlan(
+            before.companion_id,
+            enabled,
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_recovery(
+        self, user_id: str, *, resource: str, recovery_percent: float
+    ) -> CompanionRecoveryPlan:
+        """按当前同行道侣的资源上限生成一次主动恢复。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        normalized_resource = _medicine_resource(resource)
+        percent = _positive_number(recovery_percent, "恢复百分比")
+        maximum = _number(
+            before.attributes.get(f"{normalized_resource}上限"),
+            f"道侣{normalized_resource}上限",
+        )
+        current_value = _bounded_resource(
+            before.resources.get(normalized_resource),
+            maximum,
+            f"道侣当前{normalized_resource}",
+        )
+        if current_value >= maximum:
+            raise CompanionCultivationError(f"道侣{normalized_resource}已满")
+        after_value = min(maximum, current_value + maximum * percent / 100)
+        resources = dict(before.resources)
+        resources[normalized_resource] = _clean_number(after_value)
+        after = replace(
+            before,
+            resources=MappingProxyType(resources),
+            version=before.version + 1,
+        )
+        return CompanionRecoveryPlan(
+            before.companion_id,
+            normalized_resource,
+            current_value,
+            after_value,
+            after_value - current_value,
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_battle_medicine(
+        self,
+        user_id: str,
+        *,
+        medicine: PreparedBattleMedicine | None,
+        require_empty: bool = False,
+    ) -> CompanionBattleMedicinePlan:
+        """寄存或清除当前同行道侣下一场正式战斗使用的战丹。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        if require_empty and before.prepared_battle_medicine is not None:
+            raise CompanionCultivationError("当前同行道侣已有待战战丹")
+        if before.prepared_battle_medicine == medicine:
+            raise CompanionCultivationError("道侣待战战丹没有变化")
+        after = replace(
+            before,
+            prepared_battle_medicine=medicine,
+            version=before.version + 1,
+        )
+        return CompanionBattleMedicinePlan(
+            before.companion_id,
+            before.prepared_battle_medicine,
+            medicine,
+            self._active_instance_operations(user_id, current, after),
         )
 
     async def plan_battle_settlement(
@@ -720,6 +835,166 @@ class CompanionService:
             ),
         )
 
+    async def plan_cultivation_reset(
+        self, user_id: str
+    ) -> CompanionCultivationResetPlan:
+        """把当前同行道侣的等级与突破所得全部退回初始状态。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        definition = self.definition(before.companion_id)
+        initial_realm = self._growth.realm_for_level(1)
+        attributes = self._initial_attributes(
+            definition,
+            before.qualification,
+            before.attribute_multipliers,
+        )
+        resources = {
+            resource: _bounded_resource(
+                before.resources.get(resource),
+                attributes.get(f"{resource}上限"),
+                f"夺元后道侣{resource}",
+            )
+            for resource in ("血气", "精神")
+        }
+        after = replace(
+            before,
+            realm_id=initial_realm.realm_id,
+            level=1,
+            experience=0,
+            attributes=MappingProxyType(attributes),
+            breakthrough_records=(),
+            resources=MappingProxyType(resources),
+            version=before.version + 1,
+        )
+        user = _user_id(user_id)
+        return CompanionCultivationResetPlan(
+            before.companion_id,
+            before.realm_id,
+            initial_realm.realm_id,
+            initial_realm.name,
+            before.level,
+            1,
+            StateMutation(
+                user,
+                INSTANCE_STATE,
+                before.companion_id,
+                _instance_value(after, self._forging),
+                before.version,
+            ),
+            StateMutation(
+                user,
+                ACTIVE_STATE,
+                ACTIVE_KEY,
+                {"道侣编号": before.companion_id},
+                current.active.version,
+            ),
+        )
+
+    async def plan_build_reset(
+        self, user_id: str, *, category: str
+    ) -> CompanionBuildResetPlan:
+        """只重抽当前同行道侣的一类构筑，器律永远不在此范围。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        normalized = str(category or "").strip()
+        if normalized not in {"功法", "真意", "气机"}:
+            raise CompanionCultivationError("道侣归元只能选择功法、真意或气机")
+        definition = self.definition(before.companion_id)
+        build = self._growth.redraw_companion_category(
+            pools=definition.cultivation_pools,
+            current=before.cultivation,
+            category=normalized,
+            slots=self.rules().cultivation_slots,
+        )
+        cultivation = dict(before.cultivation)
+        cultivation[normalized] = build.content_ids
+        after = replace(
+            before,
+            cultivation=MappingProxyType(cultivation),
+            version=before.version + 1,
+        )
+        return CompanionBuildResetPlan(
+            before.companion_id,
+            normalized,
+            build.content_ids,
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_breakthrough_correction(
+        self, user_id: str, *, source_medicine_id: str
+    ) -> CompanionBreakthroughCorrectionPlan:
+        """为当前同行道侣的纯突破节点写入一项永久属性。"""
+
+        current = await self.active_instance(user_id)
+        before = current.instance
+        records = [dict(row) for row in before.breakthrough_records]
+        record = next((row for row in records if row.get("目标境界") == before.realm_id), None)
+        if record is None:
+            raise CompanionCultivationError("当前境界没有可补正的突破节点")
+        if record.get("补正来源丹药"):
+            raise CompanionCultivationError("当前突破节点已经补正")
+        _, original_permanent = self._breakthrough_medicine(
+            _text(record.get("突破丹"), "突破记录.突破丹"), before.realm_id
+        )
+        if original_permanent:
+            raise CompanionCultivationError("只有纯突破节点可以补正")
+        _, permanent = self._breakthrough_medicine(source_medicine_id, before.realm_id)
+        if len(permanent) != 1:
+            raise CompanionCultivationError("补正丹必须只提供一项永久属性")
+        attributes = _add_numbers(before.attributes, permanent)
+        record["补正来源丹药"] = str(source_medicine_id).strip()
+        records[records.index(record)] = record
+        after = replace(
+            before,
+            attributes=MappingProxyType(attributes),
+            breakthrough_records=tuple(MappingProxyType(item) for item in records),
+            version=before.version + 1,
+        )
+        return CompanionBreakthroughCorrectionPlan(
+            before.companion_id,
+            before.realm_id,
+            str(source_medicine_id).strip(),
+            tuple((str(key), value) for key, value in permanent.items()),
+            self._active_instance_operations(user_id, current, after),
+        )
+
+    async def plan_severance(self, user_id: str) -> CompanionSeverancePlan:
+        """归零当前同行道侣好感并解除同行，保留全部历史事实。"""
+
+        current = await self.active_instance(user_id)
+        relation = await self.relation(user_id, current.instance.companion_id)
+        after = CompanionRelation(
+            relation.companion_id,
+            Decimal(0),
+            relation.gift_totals,
+            relation.first_full_at,
+            relation.first_invited_at,
+            relation.version + 1,
+        )
+        user = _user_id(user_id)
+        return CompanionSeverancePlan(
+            relation.companion_id,
+            relation.current_affection,
+            (
+                StateMutation(
+                    user,
+                    RELATION_STATE,
+                    relation.companion_id,
+                    _relation_value(after),
+                    relation.version,
+                ),
+                StateMutation(
+                    user,
+                    ACTIVE_STATE,
+                    ACTIVE_KEY,
+                    None,
+                    current.active.version,
+                ),
+            ),
+        )
+
     def _breakthrough_medicine(
         self, medicine_id: str, target_realm_id: str
     ) -> tuple[Mapping[str, object], Mapping[str, int | float]]:
@@ -752,8 +1027,8 @@ class CompanionService:
     ) -> CompanionGiftPlan:
         definition = self.definition(companion_id)
         normalized_item_id = str(item_id or "").strip()
-        if normalized_item_id not in definition.favorite_item_ids:
-            raise CompanionGiftError(f"{definition.name}并不喜欢这件物品")
+        if self.gift_preference(definition.companion_id, normalized_item_id) == "拒绝":
+            raise CompanionGiftError(f"{definition.name}不愿收下这件物品")
         if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
             raise CompanionGiftError("赠礼数量必须是正整数")
         gain = _positive_affection(affection_gain, "赠礼好感")
@@ -908,15 +1183,7 @@ class CompanionService:
             attribute: source.randint(*definition.attribute_multiplier_range)
             for attribute in definition.fluctuating_attributes
         }
-        overrides = {
-            name: _scaled_number(raw, multipliers.get(name, 100))
-            for name, raw in definition.attribute_overrides.items()
-        }
-        attributes = {
-            name: _number(_mapping(raw, f"属性.{name}").get("默认值"), name)
-            for name, raw in self._attribute_definitions.items()
-        }
-        attributes.update(overrides)
+        attributes = self._initial_attributes(definition, qualification, multipliers)
         attributes = _add_numbers(
             attributes,
             self._growth.cultivator_attribute_growth(
@@ -958,7 +1225,31 @@ class CompanionService:
                     "精神": attributes["精神上限"],
                 }
             ),
+            self.rules().automatic_medicine_default,
+            None,
         )
+
+    def _initial_attributes(
+        self,
+        definition: CompanionDefinition,
+        qualification: int,
+        multipliers: Mapping[str, int],
+    ) -> dict[str, int | float]:
+        minimum, maximum = definition.qualification_range
+        if not minimum <= qualification <= maximum:
+            raise CompanionStateError("道侣资质超出正式定义范围")
+        if set(multipliers) != set(definition.fluctuating_attributes):
+            raise CompanionStateError("道侣属性倍率与正式定义不一致")
+        overrides = {
+            name: _scaled_number(raw, multipliers.get(name, 100))
+            for name, raw in definition.attribute_overrides.items()
+        }
+        attributes = {
+            name: _number(_mapping(raw, f"属性.{name}").get("默认值"), name)
+            for name, raw in self._attribute_definitions.items()
+        }
+        attributes.update(overrides)
+        return attributes
 
     def _load_rules(self) -> CompanionRules:
         value = _mapping(
@@ -966,11 +1257,28 @@ class CompanionService:
             "规则/角色/主体/道侣.json",
         )
         invitation = _mapping(value.get("邀约"), "道侣.邀约")
+        gift_rules = _mapping(value.get("赠礼喜好"), "道侣.赠礼喜好")
+        acceptable_rule = _mapping(
+            gift_rules.get("合意推导"), "道侣.赠礼喜好.合意推导"
+        )
+        if acceptable_rule != {
+            "来源": "炼药规则.归脉",
+            "条件": "与偏爱灵植池本脉相同",
+        }:
+            raise JsonDataError("道侣合意灵植必须按炼药归脉的同本脉关系推导")
+        if gift_rules.get("拒绝倍率") != 0:
+            raise JsonDataError("道侣拒绝赠礼倍率必须为0")
         reward = _mapping(value.get("圆满回礼"), "道侣.圆满回礼")
         slots_value = _mapping(value.get("修行槽位"), "道侣.修行槽位")
         qualification_growth = _mapping(value.get("资质成长修正"), "道侣.资质成长修正")
+        medicine_rules = _mapping(
+            self._data.dataset("服丹规则").get("服丹"), "规则/服丹/服丹.json"
+        )
+        medicine_auto = _mapping(medicine_rules.get("自动用药"), "服丹.自动用药")
         return CompanionRules(
             _positive_affection(value.get("赠礼每件好感"), "道侣.赠礼每件好感"),
+            _positive_affection(gift_rules.get("偏爱倍率"), "道侣.赠礼喜好.偏爱倍率"),
+            _positive_affection(gift_rules.get("合意倍率"), "道侣.赠礼喜好.合意倍率"),
             _positive_int(value.get("同行上限"), "道侣.同行上限"),
             _positive_affection(invitation.get("好感要求"), "道侣.邀约.好感要求"),
             _text(
@@ -996,7 +1304,23 @@ class CompanionService:
             ),
             Decimal(str(qualification_growth.get("最低倍率"))),
             Decimal(str(qualification_growth.get("最高倍率"))),
+            _bool(medicine_auto.get("默认开启"), "服丹.自动用药.默认开启"),
         )
+
+    def _load_plant_pool_meridians(self) -> Mapping[str, str]:
+        rows = _sequence(
+            self._data.dataset("炼药规则").get("归脉"),
+            "规则/炼药/归脉.json",
+        )
+        result: dict[str, str] = {}
+        for raw in rows:
+            row = _mapping(raw, "炼药归脉[]")
+            pool_name = _text(row.get("灵植池"), "炼药归脉.灵植池")
+            main = _text(row.get("本脉"), "炼药归脉.本脉")
+            if pool_name in result:
+                raise JsonDataError(f"炼药归脉重复定义灵植池：{pool_name}")
+            result[pool_name] = main
+        return MappingProxyType(result)
 
     def _realms(self) -> tuple[tuple[str, str, int, int], ...]:
         return tuple(
@@ -1038,6 +1362,24 @@ class CompanionService:
         for item_id in favorite_items:
             if self._data.entity_record("物品", item_id).number_category != "灵植":
                 raise JsonDataError(f"道侣 {companion_id} 的喜爱池包含非灵植 {item_id}")
+        try:
+            favorite_meridians = {
+                self._plant_pool_meridians[pool_name] for pool_name in favorite_pools
+            }
+        except KeyError as exc:
+            raise JsonDataError(
+                f"道侣 {companion_id} 的偏爱灵植池缺少炼药归脉：{exc.args[0]}"
+            ) from exc
+        acceptable_pools = tuple(
+            sorted(
+                pool_name
+                for pool_name, main in self._plant_pool_meridians.items()
+                if main in favorite_meridians and pool_name not in favorite_pools
+            )
+        )
+        acceptable_items = frozenset(
+            self._data.pool_members(acceptable_pools, "物品")
+        ) - favorite_items
         reward_value = _mapping(join.get("圆满回礼"), "道侣.结交.圆满回礼")
         reward = CompanionReward(
             _text(reward_value.get("编号"), "圆满回礼.编号"),
@@ -1089,6 +1431,8 @@ class CompanionService:
             _bool(identity.get("可交互"), f"道侣 {companion_id}.身份.可交互"),
             favorite_pools,
             favorite_items,
+            acceptable_pools,
+            acceptable_items,
             reward,
             CompanionDialogue(
                 _text_sequence(identity.get("话语"), "道侣.身份.话语"),
@@ -1157,7 +1501,48 @@ def _instance_value(
         "属性倍率": dict(instance.attribute_multipliers),
         "突破记录": [dict(record) for record in instance.breakthrough_records],
         "资源": dict(instance.resources),
+        "自动用药": instance.automatic_medicine,
+        "待战战丹": _prepared_battle_value(instance.prepared_battle_medicine),
     }
+
+
+def _prepared_battle_medicine(
+    value: object, label: str
+) -> PreparedBattleMedicine | None:
+    if value is None:
+        return None
+    row = _state_mapping(value, label)
+    if set(row) != {"编号", "品级"}:
+        raise CompanionStateError(f"{label}字段不完整")
+    return PreparedBattleMedicine(
+        _state_text(row.get("编号"), f"{label}.编号"),
+        _state_text(row.get("品级"), f"{label}.品级"),
+    )
+
+
+def _prepared_battle_value(
+    value: PreparedBattleMedicine | None,
+) -> dict[str, str] | None:
+    if value is None:
+        return None
+    return {"编号": value.medicine_id, "品级": value.grade_id}
+
+
+def _medicine_resource(value: object) -> str:
+    result = str(value or "").strip()
+    if result not in {"血气", "精神"}:
+        raise CompanionCultivationError("恢复资源只能是血气或精神")
+    return result
+
+
+def _positive_number(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise CompanionCultivationError(f"{label}必须是正数")
+    return float(value)
+
+
+def _clean_number(value: float) -> int | float:
+    return int(value) if value.is_integer() else round(value, 4)
 
 
 def _scaled_number(value: float, multiplier: int) -> int | float:
@@ -1362,6 +1747,12 @@ def _state_nonnegative_int(value: object, label: str) -> int:
 def _state_number(value: object, label: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CompanionStateError(f"{label}必须是数值")
+    return value
+
+
+def _state_bool(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise CompanionStateError(f"{label}必须是布尔值")
     return value
 
 

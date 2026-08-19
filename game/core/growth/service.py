@@ -11,6 +11,7 @@ from game.core.data import JsonDataError, JsonDataService
 from game.core.pool import EXPAND_DEDUPLICATED, PoolRequest, PoolService
 
 from .contracts import (
+    CultivationCategoryBuild,
     ExperienceAdvance,
     GrowthError,
     GrowthStatus,
@@ -84,6 +85,21 @@ class GrowthService:
         if not current.next_realm_id:
             raise GrowthError(f"{current.name}已经是最高境界")
         return self.realm(current.next_realm_id)
+
+    def realm_for_level(self, level: int) -> RealmDefinition:
+        """返回唯一覆盖指定等级的正式境界。"""
+
+        self._require_initialized()
+        if isinstance(level, bool) or not isinstance(level, int) or level < 1:
+            raise GrowthError("等级必须是正整数")
+        matches = tuple(
+            realm
+            for realm in self._realms.values()
+            if realm.minimum_level <= level <= realm.maximum_level
+        )
+        if len(matches) != 1:
+            raise GrowthError(f"等级{level}无法唯一归属境界")
+        return matches[0]
 
     def experience_required(self, level: int) -> int:
         self._require_initialized()
@@ -211,6 +227,43 @@ class GrowthService:
             None,
         )
 
+    def redraw_companion_category(
+        self,
+        *,
+        pools: Mapping[str, str],
+        current: Mapping[str, Sequence[str]],
+        category: str,
+        slots: Mapping[str, int],
+        seed: int | None = None,
+    ) -> CultivationCategoryBuild:
+        """只重抽道侣一类构筑，其他类别由调用方原样保留。"""
+
+        self._require_initialized()
+        normalized = str(category or "").strip()
+        if normalized not in _CATEGORIES:
+            raise GrowthError("只能重做功法、真意或气机")
+        count = _positive_int(slots.get(normalized), f"道侣.{normalized}槽位")
+        pool_name = _text(pools.get(normalized), f"道侣.{normalized}池")
+        source = random.Random(secrets.randbits(64) if seed is None else seed)
+        preserved = {
+            name: tuple(str(item) for item in current.get(name, ()))
+            for name in _CATEGORIES
+        }
+        for _ in range(self._attempt_limit):
+            chosen = self._pool.draw(
+                PoolRequest(
+                    section=normalized,
+                    count=count,
+                    mode=EXPAND_DEDUPLICATED,
+                    file_ids=(pool_name,),
+                    seed=source.getrandbits(64),
+                )
+            ).entity_ids
+            preserved[normalized] = chosen
+            if self.build_conflict(preserved) is None:
+                return CultivationCategoryBuild(normalized, chosen)
+        raise GrowthError("道侣个人修行池无法生成无相冲构筑")
+
     def _advance(
         self,
         *,
@@ -274,6 +327,14 @@ class GrowthService:
         for realm in self._realms.values():
             if realm.next_realm_id and realm.next_realm_id not in self._realms:
                 raise JsonDataError(f"境界下一境界不存在：{realm.realm_id}")
+        for level in range(1, maximum + 1):
+            matches = tuple(
+                realm
+                for realm in self._realms.values()
+                if realm.minimum_level <= level <= realm.maximum_level
+            )
+            if len(matches) != 1:
+                raise JsonDataError(f"等级{level}必须唯一归属一个境界")
 
     def _require_initialized(self) -> None:
         if not self._initialized:

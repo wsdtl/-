@@ -112,12 +112,20 @@ class BattleEngine(MechanismRuntime):
         }
 
     def simulate(
-        self, *, left, right, medicine_definitions, seed, action_limit
+        self,
+        *,
+        left,
+        right,
+        medicine_definitions,
+        medicine_selection_strategy,
+        seed,
+        action_limit,
     ) -> CombatResult:
         return self.simulate_teams(
             left=(left,),
             right=(right,),
             medicine_definitions=medicine_definitions,
+            medicine_selection_strategy=medicine_selection_strategy,
             seed=seed,
             action_limit=action_limit,
         )
@@ -128,6 +136,7 @@ class BattleEngine(MechanismRuntime):
         left: tuple[RuntimeCombatantSnapshot, ...],
         right: tuple[RuntimeCombatantSnapshot, ...],
         medicine_definitions: dict[str, Any],
+        medicine_selection_strategy: str,
         seed: int,
         action_limit: int,
         field: PreparedCombatField | None = None,
@@ -149,6 +158,7 @@ class BattleEngine(MechanismRuntime):
             left=left_fighters[0],
             right=right_fighters[0],
             medicine_definitions=medicine_definitions,
+            medicine_selection_strategy=medicine_selection_strategy,
             field=runtime_field,
             left_team=left_fighters,
             right_team=right_fighters,
@@ -1694,10 +1704,23 @@ class BattleEngine(MechanismRuntime):
                     and medicine.resource == resource
                 ):
                     amount = maximum * medicine.recovery_percent / 100.0
-                    candidates.append((amount, item_id))
+                    candidates.append((amount, medicine.grade_order, item_id))
             if not candidates:
                 continue
-            amount, item_id = min(candidates)
+            if context.medicine_selection_strategy != "缺口优先":
+                raise ValueError("战斗不支持该恢复丹选药策略")
+            gap = maximum - current
+            filling = [candidate for candidate in candidates if candidate[0] >= gap]
+            if filling:
+                amount, _, item_id = min(
+                    filling,
+                    key=lambda value: (value[0] - gap, value[1], value[2]),
+                )
+            else:
+                amount, _, item_id = min(
+                    candidates,
+                    key=lambda value: (-value[0], value[1], value[2]),
+                )
             fighter.inventory[item_id] -= 1
             fighter.consumed_items[item_id] = fighter.consumed_items.get(item_id, 0) + 1
             before, _ = self._resource_values(fighter, resource)
