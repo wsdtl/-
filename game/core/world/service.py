@@ -143,7 +143,10 @@ class WorldService:
                         f"地点 {location_name} 使用未登记功能：{function}"
                     )
                 for section in sections:
-                    self._require_location_pool(location_name, section)
+                    if section == "商店":
+                        self._require_location_shop(location_name)
+                    else:
+                        self._require_location_pool(location_name, section)
         birthplace = str(world.get("出生地") or "").strip()
         if birthplace not in self._locations:
             raise JsonDataError(f"世界出生地不存在：{birthplace or '<空>'}")
@@ -413,6 +416,15 @@ class WorldService:
             raise JsonDataError(
                 f"地点资源池不在对应目录：{file_id} -> {'、'.join(misplaced)}"
             )
+
+    def _require_location_shop(self, location_name: str) -> None:
+        file_id = f"{location_name}商店"
+        shop = self._data.entities("地点商店").get(file_id)
+        if shop is None:
+            raise JsonDataError(f"交易地点缺少同目录商店：{location_name}")
+        owner = self._data.entity_record("地点商店", file_id).directory_owner
+        if owner != location_name:
+            raise JsonDataError(f"地点商店不在对应目录：{file_id} -> {owner}")
 
     def _region_at(self, xy: tuple[int, int]) -> str:
         try:
@@ -816,7 +828,7 @@ def _feature_definitions(
             f"地点功能 {name}.同目录内容",
             allow_empty=True,
         )
-        if any(section not in {"道侣", "敌人"} for section in sections):
+        if any(section not in {"道侣", "敌人", "商店"} for section in sections):
             raise JsonDataError(f"地点功能使用未知同目录内容：{name} -> {sections}")
         requirement = raw.get("要求")
         if not isinstance(requirement, Mapping):

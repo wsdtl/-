@@ -1290,6 +1290,14 @@ class Audit:
                 if point not in terrain_by_point:
                     self.add("世界", path, f"地点 {name} 没有命中地形分区")
             self._audit_location_functions(name, row, path)
+        trading_shops = {
+            f"{name}商店"
+            for name, row in locations.items()
+            if "交易" in row.get("可用功能", [])
+        }
+        for file_id in sorted(set(self.data.entities("地点商店")) - trading_shops):
+            path = self.data.entity_record("地点商店", file_id).source_file
+            self.add("世界", path, f"地点商店没有对应的交易地点：{file_id}")
         for name, row in regions.items():
             path = self.data.entity_record("区域", name).source_file
             if set(row) != {"类别", "坐标带", "说明"}:
@@ -1361,7 +1369,15 @@ class Audit:
             for section in definition.get("同目录内容", []):
                 file_id = f"{name}{section}"
                 try:
-                    self.data.pool_members((file_id,), section)
+                    if section == "商店":
+                        self.data.entity("地点商店", file_id)
+                        owner = self.data.entity_record(
+                            "地点商店", file_id
+                        ).directory_owner
+                        if owner != name:
+                            raise ValueError(f"归属目录为 {owner or '<空>'}")
+                    else:
+                        self.data.pool_members((file_id,), section)
                 except Exception as exc:  # noqa: BLE001
                     self.add(
                         "世界",

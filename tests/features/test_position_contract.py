@@ -244,6 +244,7 @@ def test_position_copy_overview_and_buttons_are_json_driven(tmp_path: Path) -> N
     assert position.open_location_functions(("修士", "闭关", "交易")) == (
         "修士",
         "闭关",
+        "交易",
     )
     assert tuple(
         action.command for action in _run(position.current_location_actions("qq-1"))

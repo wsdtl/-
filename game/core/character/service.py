@@ -35,8 +35,10 @@ from .contracts import (
     CharacterProfile,
     CharacterPublicProfile,
     CharacterRetreatPlan,
+    CharacterSpiritStonePlan,
     CharacterStateError,
     CharacterStatus,
+    CharacterTechniqueUpgradePlan,
     EquippedContent,
     InventorySummary,
     WeaponProfile,
@@ -525,14 +527,17 @@ class CharacterService:
             raise CharacterCultivationError("人物只能装配功法、真意或气机")
         if isinstance(slot, bool) or not isinstance(slot, int) or slot < 1:
             raise CharacterCultivationError("修行槽位必须是正整数")
+        normalized_content_id = str(content_id or "").strip()
+        if not normalized_content_id:
+            raise CharacterCultivationError("修行编号不能为空")
         try:
-            ownership = await self._asset.cultivation_ownership(
-                normalized_user_id,
-                normalized_category,
-                content_id,
-                grade_id,
+            record = self._data.entity_record(
+                normalized_category, normalized_content_id
             )
-        except (AssetStateError, ValueError) as exc:
+            if record.number_category != normalized_category:
+                raise CharacterCultivationError("修行编号类别不匹配")
+            grade = self._asset.grade(grade_id)
+        except (AssetStateError, JsonDataError, ValueError) as exc:
             raise CharacterCultivationError(str(exc)) from exc
         snapshot = await self._database.get(
             StateAddress(normalized_user_id, "cultivation", "main")
@@ -548,9 +553,18 @@ class CharacterService:
                 f"{normalized_category}槽位只有{len(slots)}个"
             )
         replaced = slots[slot - 1]
+        if replaced is not None:
+            replaced_value = _state_mapping(replaced, "原修行槽")
+            if (
+                _state_text(replaced_value.get("编号"), "原修行槽.编号")
+                == normalized_content_id
+                and _state_text(replaced_value.get("品级"), "原修行槽.品级")
+                == grade.grade_id
+            ):
+                raise CharacterCultivationError("该槽位已经装配相同内容")
         slots[slot - 1] = {
-            "编号": ownership.content_id,
-            "品级": ownership.grade.grade_id,
+            "编号": normalized_content_id,
+            "品级": grade.grade_id,
         }
         cultivation[normalized_category] = slots
         build = {
@@ -567,6 +581,28 @@ class CharacterService:
             raise CharacterCultivationError(
                 f"该构筑触发相冲机制：{'、'.join(sorted(conflict))}"
             )
+        try:
+            if normalized_category == "功法":
+                ownership = await self._asset.cultivation_ownership(
+                    normalized_user_id,
+                    normalized_category,
+                    normalized_content_id,
+                    grade.grade_id,
+                )
+                content_name = ownership.name
+                reserve_operation = None
+            else:
+                reserve = await self._asset.plan_cultivation_reserve_change(
+                    normalized_user_id,
+                    category=normalized_category,
+                    content_id=normalized_content_id,
+                    grade_id=grade.grade_id,
+                    quantity_delta=-1,
+                )
+                content_name = reserve.stack.name
+                reserve_operation = reserve.operation
+        except (AssetStateError, ValueError) as exc:
+            raise CharacterCultivationError(str(exc)) from exc
         replaced_id = (
             ""
             if replaced is None
@@ -577,10 +613,110 @@ class CharacterService:
         return CharacterEquipPlan(
             normalized_category,
             slot,
-            ownership.content_id,
-            ownership.name,
-            ownership.grade.grade_id,
+            normalized_content_id,
+            content_name,
+            grade.grade_id,
             replaced_id,
+            StateMutation(
+                normalized_user_id,
+                "cultivation",
+                "main",
+                cultivation,
+                snapshot.version,
+            ),
+            reserve_operation,
+        )
+
+    async def plan_spirit_stone_change(
+        self, user_id: str, *, delta: int
+    ) -> CharacterSpiritStonePlan:
+        """生成只改变人物灵石余额的状态变更。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        stone_delta = _request_int(delta, "灵石变化")
+        if stone_delta == 0:
+            raise CharacterCultivationError("灵石变化不能为零")
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        before = _state_nonnegative_int(character.get("灵石"), "人物.灵石")
+        after = before + stone_delta
+        if after < 0:
+            raise CharacterCultivationError(
+                f"灵石不足：现有{before}，需要{-stone_delta}"
+            )
+        character["灵石"] = after
+        return CharacterSpiritStonePlan(
+            before,
+            after,
+            stone_delta,
+            StateMutation(
+                normalized_user_id,
+                "character",
+                "main",
+                character,
+                snapshot.version,
+            ),
+        )
+
+    async def plan_technique_grade_sync(
+        self,
+        user_id: str,
+        upgrades: Sequence[tuple[str, str]],
+    ) -> CharacterTechniqueUpgradePlan:
+        """把已装配功法同步到本次取得的最高品级。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        highest: dict[str, str] = {}
+        for content_id, grade_id in upgrades:
+            normalized_content_id = str(content_id or "").strip()
+            if not normalized_content_id:
+                raise CharacterCultivationError("升品功法编号不能为空")
+            record = self._data.entity_record("功法", normalized_content_id)
+            if record.number_category != "功法":
+                raise CharacterCultivationError("升品功法编号类别不匹配")
+            grade = self._asset.grade(grade_id)
+            previous = highest.get(normalized_content_id)
+            if previous is None or grade.order > self._asset.grade(previous).order:
+                highest[normalized_content_id] = grade.grade_id
+        if not highest:
+            return CharacterTechniqueUpgradePlan(0, None)
+
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "cultivation", "main")
+        )
+        if snapshot is None:
+            raise CharacterStateError("人物缺少修行槽状态")
+        cultivation = dict(_state_mapping(snapshot.value, "cultivation/main"))
+        slots = list(_state_slots(cultivation.get("功法"), "功法"))
+        updated = 0
+        for index, raw in enumerate(slots):
+            if raw is None:
+                continue
+            entry = dict(_state_mapping(raw, f"功法槽[{index + 1}]"))
+            content_id = _state_text(entry.get("编号"), "功法槽.编号")
+            target_grade_id = highest.get(content_id)
+            if target_grade_id is None:
+                continue
+            current_grade = self._asset.grade(
+                _state_text(entry.get("品级"), "功法槽.品级")
+            )
+            target_grade = self._asset.grade(target_grade_id)
+            if target_grade.order <= current_grade.order:
+                continue
+            entry["品级"] = target_grade.grade_id
+            slots[index] = entry
+            updated += 1
+        if not updated:
+            return CharacterTechniqueUpgradePlan(0, None)
+        cultivation["功法"] = slots
+        return CharacterTechniqueUpgradePlan(
+            updated,
             StateMutation(
                 normalized_user_id,
                 "cultivation",

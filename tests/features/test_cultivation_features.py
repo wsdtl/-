@@ -4,7 +4,7 @@ import asyncio
 import random
 from pathlib import Path
 
-from game.core.asset import AssetService, InventoryAdjustment
+from game.core.asset import AssetService, CultivationAcquisition, InventoryAdjustment
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
@@ -221,16 +221,18 @@ def test_character_equip_and_law_forging_use_shared_reserves(tmp_path: Path) -> 
     (
         data,
         database,
+        assets,
         _,
         _,
-        _,
-        _,
+        character,
         create,
         feature,
         _,
     ) = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
-    technique_id, technique = next(iter(data.entities("功法").items()))
+    (first_technique_id, _), (second_technique_id, second_technique) = tuple(
+        data.entities("功法").items()
+    )[:2]
     law_id, law = next(
         (law_id, value)
         for law_id, value in data.entities("器律").items()
@@ -250,8 +252,15 @@ def test_character_equip_and_law_forging_use_shared_reserves(tmp_path: Path) -> 
                     StateMutation(
                         "qq-1",
                         "cultivation_library",
-                        f"{technique_id}:01",
-                        {"编号": technique_id, "品级": "01"},
+                        first_technique_id,
+                        {"编号": first_technique_id, "品级": "01"},
+                        0,
+                    ),
+                    StateMutation(
+                        "qq-1",
+                        "cultivation_library",
+                        second_technique_id,
+                        {"编号": second_technique_id, "品级": "01"},
                         0,
                     ),
                     StateMutation(
@@ -270,15 +279,71 @@ def test_character_equip_and_law_forging_use_shared_reserves(tmp_path: Path) -> 
         )
     )
 
+    _run(
+        feature.equip(
+            CharacterEquipRequest(
+                "qq-1", "equip-1", "功法", first_technique_id, "01", 1
+            )
+        )
+    )
     equipped = _run(
         feature.equip(
-            CharacterEquipRequest("qq-1", "equip-1", "功法", technique_id, "01", 1)
+            CharacterEquipRequest(
+                "qq-1", "equip-2", "功法", second_technique_id, "01", 1
+            )
+        )
+    )
+    acquisition = _run(
+        assets.plan_cultivation_acquisitions(
+            "qq-1",
+            (CultivationAcquisition("功法", second_technique_id, "02"),),
+        )
+    )
+    sync = _run(
+        character.plan_technique_grade_sync(
+            "qq-1", ((second_technique_id, "02"),)
+        )
+    )
+    assert acquisition.results[0].outcome == "升品"
+    assert sync.updated_slots == 1 and sync.operation is not None
+    _run(
+        database.commit(
+            TransactionCommand(
+                "qq-1",
+                "upgrade-technique",
+                "测试功法升品",
+                acquisition.operations + (sync.operation,),
+                {},
+            )
         )
     )
     forged = _run(feature.forge_law(CharacterLawRequest("qq-1", "forge-1", law_id, 1)))
 
-    assert equipped.content_name == technique["名称"]
+    assert equipped.content_name == second_technique["名称"]
     assert forged.law_name == law["名称"]
-    assert forged.profile.equipped_content[0].content_id == technique_id
+    assert forged.profile.equipped_content[0].content_id == second_technique_id
+    assert forged.profile.equipped_content[0].grade == "02"
     assert forged.profile.weapon.equipped_laws[0].content_id == law_id
+    assert (
+        _run(
+            database.get(
+                StateAddress("qq-1", "cultivation_library", first_technique_id)
+            )
+        )
+        is not None
+    )
+    assert (
+        _run(
+            database.get(
+                StateAddress("qq-1", "cultivation_library", second_technique_id)
+            )
+        )
+        is not None
+    )
+    upgraded = _run(
+        database.get(
+            StateAddress("qq-1", "cultivation_library", second_technique_id)
+        )
+    )
+    assert upgraded is not None and upgraded.value["品级"] == "02"
     assert _run(database.get(StateAddress("qq-1", "law_reserve", law_id))) is None

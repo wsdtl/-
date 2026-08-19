@@ -95,6 +95,8 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "炼阵",
         "纳戒",
         "查看物品",
+        "交易",
+        "购买",
     ]
     assert help_registry.find("web") is None
     assert help_registry.find("天道后台") is None

@@ -144,6 +144,21 @@ class CharacterEquipPlan:
     grade_id: str
     replaced_content_id: str
     operation: StateMutation
+    reserve_operation: StateMutation | None
+
+
+@dataclass(frozen=True)
+class CharacterSpiritStonePlan:
+    before: int
+    after: int
+    delta: int
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterTechniqueUpgradePlan:
+    updated_slots: int
+    operation: StateMutation | None
 
 
 @dataclass(frozen=True)
@@ -189,8 +204,10 @@ __all__ = [
     "CharacterProfile",
     "CharacterPublicProfile",
     "CharacterRetreatPlan",
+    "CharacterSpiritStonePlan",
     "CharacterStateError",
     "CharacterStatus",
+    "CharacterTechniqueUpgradePlan",
     "EquippedContent",
     "InventorySummary",
     "WeaponProfile",

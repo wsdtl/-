@@ -28,6 +28,8 @@ from .contracts import (
     CultivationAcquisitionPlan,
     CultivationAcquisitionResult,
     CultivationOwnership,
+    CultivationReserveChangePlan,
+    CultivationReserveStack,
     FormationReserveAcquisitionPlan,
     FormationReserveConsumptionPlan,
     FormationReserveStack,
@@ -46,12 +48,14 @@ _STATE_TYPES = frozenset(
     {
         "inventory",
         "cultivation_library",
+        "cultivation_reserve",
         "law_reserve",
         "formation_reserve",
         "knowledge",
     }
 )
 _CULTIVATION_CATEGORIES = frozenset({"功法", "真意", "气机"})
+_CULTIVATION_RESERVE_CATEGORIES = frozenset({"真意", "气机"})
 
 
 class AssetService:
@@ -90,6 +94,7 @@ class AssetService:
             raise JsonDataError("纳戒每页上限不能超过 50")
         self._load_prefixes()
         self._load_grades()
+        self._validate_cultivation_rules()
         self._load_categories(layout.get("大类"))
         self._sort_rules = _sort_rules(layout.get("排序"))
         self._initialized = True
@@ -342,7 +347,7 @@ class AssetService:
         self._require_initialized()
         normalized_user_id = _required_text(user_id, "user_id")
         normalized_category = _required_text(category, "修行类别")
-        if normalized_category not in _CULTIVATION_CATEGORIES:
+        if normalized_category != "功法":
             raise AssetStateError(f"不能装配该类别：{normalized_category}")
         normalized_content_id = _required_text(content_id, "修行编号")
         normalized_grade_id = self.grade(grade_id).grade_id
@@ -353,7 +358,7 @@ class AssetService:
             StateAddress(
                 normalized_user_id,
                 "cultivation_library",
-                f"{normalized_content_id}:{normalized_grade_id}",
+                normalized_content_id,
             )
         )
         if snapshot is None:
@@ -384,8 +389,8 @@ class AssetService:
         normalized: list[tuple[str, str, AssetGrade]] = []
         for acquisition in acquisitions:
             category = _required_text(acquisition.category, "修行取得.类别")
-            if category not in _CULTIVATION_CATEGORIES:
-                raise AssetStateError(f"不能收入道藏的类别：{category}")
+            if category != "功法":
+                raise AssetStateError(f"只有功法可以收入道藏：{category}")
             content_id = _required_text(acquisition.content_id, "修行取得.编号")
             record = self._data.entity_record(category, content_id)
             if record.number_category != category:
@@ -396,7 +401,8 @@ class AssetService:
 
         keys = tuple(
             dict.fromkeys(
-                f"{content_id}:{grade.grade_id}" for _, content_id, grade in normalized
+                _cultivation_state_key(category, content_id, grade.grade_id)
+                for category, content_id, grade in normalized
             )
         )
         snapshots = await self._database.get_many(
@@ -405,34 +411,156 @@ class AssetService:
                 for key in keys
             )
         )
-        existing = {snapshot.address.state_key for snapshot in snapshots}
-        added: set[str] = set()
-        operations: list[StateMutation] = []
+        existing = {snapshot.address.state_key: snapshot for snapshot in snapshots}
+        pending: dict[str, tuple[str, str, AssetGrade]] = {}
         results: list[CultivationAcquisitionResult] = []
         for category, content_id, grade in normalized:
-            key = f"{content_id}:{grade.grade_id}"
-            acquired = key not in existing and key not in added
-            if acquired:
-                added.add(key)
-                operations.append(
-                    StateMutation(
-                        normalized_user_id,
-                        "cultivation_library",
-                        key,
-                        {"编号": content_id, "品级": grade.grade_id},
-                        0,
-                    )
-                )
+            key = _cultivation_state_key(category, content_id, grade.grade_id)
+            current = pending.get(key)
+            if current is None and key in existing:
+                value = _mapping(existing[key].value, f"cultivation_library/{key}")
+                _expect_key(existing[key], content_id)
+                if _text(value.get("编号"), "功法所有权.编号") != content_id:
+                    raise AssetStateError("功法所有权状态键与编号不一致")
+                current = (category, content_id, self.grade(value.get("品级")))
+            if current is None:
+                outcome = "新得"
+                pending[key] = (category, content_id, grade)
+            elif grade.order > current[2].order:
+                outcome = "升品"
+                pending[key] = (category, content_id, grade)
+            else:
+                outcome = "复悟"
             results.append(
                 CultivationAcquisitionResult(
                     category,
                     content_id,
                     _entity_name(self._data, category, content_id),
                     grade,
-                    acquired,
+                    outcome,
                 )
             )
-        return CultivationAcquisitionPlan(tuple(results), tuple(operations))
+        operations = tuple(
+            StateMutation(
+                normalized_user_id,
+                "cultivation_library",
+                key,
+                {"编号": content_id, "品级": grade.grade_id},
+                existing[key].version if key in existing else 0,
+            )
+            for key, (_, content_id, grade) in pending.items()
+        )
+        return CultivationAcquisitionPlan(tuple(results), operations)
+
+    async def cultivation_reserve_stack(
+        self,
+        user_id: str,
+        category: str,
+        content_id: str,
+        grade_id: str,
+    ) -> CultivationReserveStack | None:
+        """取得一类待装入人物槽位的真意或气机储备。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_category = _required_text(category, "修行资粮类别")
+        if normalized_category not in _CULTIVATION_RESERVE_CATEGORIES:
+            raise AssetStateError("修行资粮只能是真意或气机")
+        normalized_content_id = _required_text(content_id, "修行资粮编号")
+        record = self._data.entity_record(normalized_category, normalized_content_id)
+        if record.number_category != normalized_category:
+            raise AssetStateError("修行资粮编号类别不匹配")
+        grade = self.grade(grade_id)
+        key = f"{normalized_content_id}:{grade.grade_id}"
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "cultivation_reserve", key)
+        )
+        if snapshot is None:
+            return None
+        value = _mapping(snapshot.value, f"cultivation_reserve/{key}")
+        _expect_key(snapshot, key)
+        if _text(value.get("类别"), "修行资粮.类别") != normalized_category:
+            raise AssetStateError("修行资粮状态键与类别不一致")
+        if _text(value.get("编号"), "修行资粮.编号") != normalized_content_id:
+            raise AssetStateError("修行资粮状态键与编号不一致")
+        stored_grade = self.grade(_text(value.get("品级"), "修行资粮.品级"))
+        if stored_grade.grade_id != grade.grade_id:
+            raise AssetStateError("修行资粮状态键与品级不一致")
+        return CultivationReserveStack(
+            normalized_category,
+            normalized_content_id,
+            _entity_name(self._data, normalized_category, normalized_content_id),
+            stored_grade,
+            _positive_int(value.get("数量"), "修行资粮.数量"),
+            snapshot.version,
+        )
+
+    async def plan_cultivation_reserve_change(
+        self,
+        user_id: str,
+        *,
+        category: str,
+        content_id: str,
+        grade_id: str,
+        quantity_delta: int,
+    ) -> CultivationReserveChangePlan:
+        """生成一类真意或气机储备的原子增减。"""
+
+        if (
+            isinstance(quantity_delta, bool)
+            or not isinstance(quantity_delta, int)
+            or quantity_delta == 0
+        ):
+            raise AssetStateError("修行资粮变化数量必须是非零整数")
+        normalized_user_id = _required_text(user_id, "user_id")
+        normalized_category = _required_text(category, "修行资粮类别")
+        normalized_content_id = _required_text(content_id, "修行资粮编号")
+        grade = self.grade(grade_id)
+        current = await self.cultivation_reserve_stack(
+            normalized_user_id,
+            normalized_category,
+            normalized_content_id,
+            grade.grade_id,
+        )
+        before = current.quantity if current is not None else 0
+        after = before + quantity_delta
+        if after < 0:
+            raise AssetStateError(
+                f"{grade.name}{_entity_name(self._data, normalized_category, normalized_content_id)}"
+                f"储备不足：现有{before}，需要{-quantity_delta}"
+            )
+        key = f"{normalized_content_id}:{grade.grade_id}"
+        name = _entity_name(self._data, normalized_category, normalized_content_id)
+        stack = current or CultivationReserveStack(
+            normalized_category,
+            normalized_content_id,
+            name,
+            grade,
+            0,
+            0,
+        )
+        value = (
+            {
+                "类别": normalized_category,
+                "编号": normalized_content_id,
+                "品级": grade.grade_id,
+                "数量": after,
+            }
+            if after
+            else None
+        )
+        return CultivationReserveChangePlan(
+            stack,
+            before,
+            after,
+            StateMutation(
+                normalized_user_id,
+                "cultivation_reserve",
+                key,
+                value,
+                current.version if current is not None else 0,
+            ),
+        )
 
     async def law_reserve_stack(self, user_id: str, law_id: str) -> LawReserveStack:
         """取得玩家器藏中的一类待覆炼器律。"""
@@ -700,6 +828,10 @@ class AssetService:
             return self._cultivation_entry(
                 snapshot, category, content_id, value, equipped
             )
+        if state_type == "cultivation_reserve":
+            return self._cultivation_reserve_entry(
+                snapshot, category, content_id, value, equipped
+            )
         if state_type == "law_reserve":
             return self._law_entry(snapshot, category, content_id, value)
         if state_type == "formation_reserve":
@@ -740,10 +872,12 @@ class AssetService:
         equipped: Mapping[tuple[str, str], tuple[str, ...]],
     ) -> AssetEntry:
         number_category, _ = self._number_identity(content_id)
-        if number_category not in _CULTIVATION_CATEGORIES:
+        if number_category != "功法":
             raise AssetStateError(f"道藏包含非法编号：{content_id}")
         grade_id, grade_name = self._grade(value.get("品级"))
-        _expect_key(snapshot, f"{content_id}:{grade_id}")
+        _expect_key(
+            snapshot, _cultivation_state_key(number_category, content_id, grade_id)
+        )
         name = _entity_name(self._data, number_category, content_id)
         subcategory = self._match_subcategory(category, "编号类别", number_category)
         return AssetEntry(
@@ -755,6 +889,35 @@ class AssetService:
             grade_id,
             grade_name,
             equipped_slots=equipped.get((content_id, grade_id), ()),
+            updated_at=snapshot.updated_at,
+        )
+
+    def _cultivation_reserve_entry(
+        self,
+        snapshot: StateSnapshot,
+        category: str,
+        content_id: str,
+        value: Mapping[str, object],
+        equipped: Mapping[tuple[str, str], tuple[str, ...]],
+    ) -> AssetEntry:
+        number_category, _ = self._number_identity(content_id)
+        if number_category not in _CULTIVATION_RESERVE_CATEGORIES:
+            raise AssetStateError(f"修行资粮包含非法编号：{content_id}")
+        if _text(value.get("类别"), "修行资粮.类别") != number_category:
+            raise AssetStateError("修行资粮编号类别与正文不一致")
+        grade_id, grade_name = self._grade(value.get("品级"))
+        quantity = _positive_int(value.get("数量"), "修行资粮.数量")
+        _expect_key(snapshot, f"{content_id}:{grade_id}")
+        return AssetEntry(
+            category,
+            self._match_subcategory(category, "编号类别", number_category),
+            content_id,
+            snapshot.address.state_key,
+            _entity_name(self._data, number_category, content_id),
+            grade_id,
+            grade_name,
+            quantity,
+            equipped.get((content_id, grade_id), ()),
             updated_at=snapshot.updated_at,
         )
 
@@ -918,6 +1081,50 @@ class AssetService:
         self._category_by_state = states
         self._subcategory_rules = rules
 
+    def _validate_cultivation_rules(self) -> None:
+        rules = _mapping(
+            self._data.dataset("角色规则").get("修行所得"),
+            "规则/角色/修行/修行所得.json",
+        )
+        policy = _mapping(rules.get("功法取得"), "修行所得.功法取得")
+        identity = tuple(
+            _text(field, "修行所得.功法取得.唯一实例[]")
+            for field in _sequence(
+                policy.get("唯一实例"), "修行所得.功法取得.唯一实例"
+            )
+        )
+        expected = {
+            "相同或更低品级": "复悟",
+            "更高品级": "覆盖并同步已装配槽位",
+            "复悟收益": "无",
+            "积累": "无",
+        }
+        if identity != ("编号",) or any(
+            policy.get(key) != value for key, value in expected.items()
+        ):
+            raise JsonDataError("功法取得规则与道藏唯一所有权契约不一致")
+        acquisitions = tuple(
+            _mapping(value, "修行所得.取得[]")
+            for value in _sequence(rules.get("取得"), "修行所得.取得")
+        )
+        reserve = next(
+            (
+                value
+                for value in acquisitions
+                if tuple(value.get("类别") or ()) == ("真意", "气机")
+            ),
+            None,
+        )
+        if reserve is None or reserve.get("进入") != "修行资粮" or reserve.get(
+            "相同实例"
+        ) != "累计数量":
+            raise JsonDataError("真意与气机取得规则必须进入修行资粮并累计数量")
+        equip = _mapping(rules.get("装配"), "修行所得.装配")
+        if equip.get("真意气机消耗数量") != 1 or equip.get(
+            "被替换真意气机"
+        ) != "消失":
+            raise JsonDataError("真意与气机装配必须消耗一份且替换后消失")
+
     def _number_identity(self, content_id: str) -> tuple[str, str]:
         identity = self._prefixes.get(content_id[:2])
         if identity is None:
@@ -1026,6 +1233,10 @@ def _expect_key(snapshot: StateSnapshot, expected: str) -> None:
             f"资产状态键与正文不符：{snapshot.address.state_type}/"
             f"{snapshot.address.state_key} != {expected}"
         )
+
+
+def _cultivation_state_key(category: str, content_id: str, grade_id: str) -> str:
+    return content_id if category == "功法" else f"{content_id}:{grade_id}"
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 from game.core.database import StateMutation
 
@@ -140,13 +141,31 @@ class CultivationAcquisitionResult:
     content_id: str
     name: str
     grade: AssetGrade
-    acquired: bool
+    outcome: Literal["新得", "升品", "复悟"]
 
 
 @dataclass(frozen=True)
 class CultivationAcquisitionPlan:
     results: tuple[CultivationAcquisitionResult, ...]
     operations: tuple[StateMutation, ...]
+
+
+@dataclass(frozen=True)
+class CultivationReserveStack:
+    category: Literal["真意", "气机"]
+    content_id: str
+    name: str
+    grade: AssetGrade
+    quantity: int
+    version: int
+
+
+@dataclass(frozen=True)
+class CultivationReserveChangePlan:
+    stack: CultivationReserveStack
+    quantity_before: int
+    quantity_after: int
+    operation: StateMutation
 
 
 @dataclass(frozen=True)
@@ -215,6 +234,8 @@ __all__ = [
     "CultivationAcquisitionPlan",
     "CultivationAcquisitionResult",
     "CultivationOwnership",
+    "CultivationReserveChangePlan",
+    "CultivationReserveStack",
     "FormationReserveAcquisitionPlan",
     "FormationReserveConsumptionPlan",
     "FormationReserveStack",

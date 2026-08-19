@@ -118,7 +118,10 @@ class CharacterCultivationFeature:
                     request.user_id,
                     request.request_id,
                     "人物装配",
-                    (plan.operation,),
+                    (
+                        ((plan.reserve_operation,) if plan.reserve_operation else ())
+                        + (plan.operation,)
+                    ),
                     {
                         "类别": plan.category,
                         "编号": plan.content_id,
@@ -130,7 +133,7 @@ class CharacterCultivationFeature:
             profile = await self._character.profile(request.user_id)
         except StateConflictError as exc:
             raise CharacterCultivationConflictError(
-                "人物修行槽已经变化，请重试"
+                "人物修行槽或修行资粮已经变化，请重试"
             ) from exc
         except IdempotencyConflictError as exc:
             raise CharacterCultivationConflictError("请求编号已经用于其他操作") from exc

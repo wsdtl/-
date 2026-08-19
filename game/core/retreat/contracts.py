@@ -57,7 +57,7 @@ class RetreatInsight:
     round_number: int
     content_id: str
     grade_id: str
-    acquired: bool | None = None
+    outcome: str | None = None
 
 
 @dataclass(frozen=True)

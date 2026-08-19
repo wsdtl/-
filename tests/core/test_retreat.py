@@ -157,11 +157,19 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
             (
                 CultivationAcquisition("功法", technique_id, "01"),
                 CultivationAcquisition("功法", technique_id, "01"),
+                CultivationAcquisition("功法", technique_id, "02"),
+                CultivationAcquisition("功法", technique_id, "01"),
             ),
         )
     )
-    assert [result.acquired for result in duplicate.results] == [True, False]
-    assert len(duplicate.operations) == 1
+    assert [result.outcome for result in duplicate.results] == [
+        "新得",
+        "复悟",
+        "升品",
+        "复悟",
+    ]
+    assert [operation.state_key for operation in duplicate.operations] == [technique_id]
+    assert duplicate.operations[0].value == {"编号": technique_id, "品级": "02"}
 
 
 def test_team_retreat_members_only_view_and_leader_ends(tmp_path: Path) -> None:

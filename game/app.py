@@ -27,6 +27,7 @@ from .core.player_state import PlayerStateService
 from .core.pool import PoolService
 from .core.retreat import RetreatService
 from .core.team import TeamService
+from .core.trade import TradeService
 from .core.world import WorldService
 from .features.biguan import RetreatFeature
 from .features.buzhen import FormationArmFeature
@@ -39,6 +40,7 @@ from .features.daolv_jiejiao import CompanionInteractionFeature
 from .features.daolv_peiyang import CompanionCultivationFeature
 from .features.ditu import WorldMapFeature
 from .features.duiwu import TeamFeature
+from .features.jiaoyi import TradeFeature
 from .features.liandan import AlchemyFeature
 from .features.lianqi import ForgingFeature
 from .features.lianzhen import FormationCraftFeature
@@ -74,6 +76,7 @@ class CoreServices:
     exploration: ExplorationService
     retreat: RetreatService
     gathering: GatheringService
+    trade: TradeService
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,7 @@ class FeatureServices:
     liandan: AlchemyFeature
     lianzhen: FormationCraftFeature
     buzhen: FormationArmFeature
+    jiaoyi: TradeFeature
 
 
 @dataclass(frozen=True)
@@ -272,6 +276,15 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
+    trade = TradeService(data, database, world, location, character, asset)
+    trade_status = trade.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("地点交易核心微服务已启动"),
+            C.kv("shops", trade_status.shop_count),
+            C.kv("source_groups", trade_status.source_group_count),
+        )
+    )
     enemy = EnemyService(data, pool, growth, asset, forging)
     enemy_status = enemy.initialize()
     logger.opt(colors=True).success(
@@ -359,6 +372,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         exploration=exploration,
         retreat=retreat,
         gathering=gathering,
+        trade=trade,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -384,6 +398,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     )
     najie = NajieFeature(asset)
     najie.initialize()
+    jiaoyi = TradeFeature(data, trade)
+    jiaoyi.initialize()
     weizhi = PositionFeature(
         data,
         world,
@@ -465,6 +481,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         liandan=liandan,
         lianzhen=lianzhen,
         buzhen=buzhen,
+        jiaoyi=jiaoyi,
     )
     return GameServices(core=core, features=features)
 

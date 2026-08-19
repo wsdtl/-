@@ -150,7 +150,7 @@ def _user_page(
     builder.section(text(copy, "用户", "功法"), icon="skill")
     if value.insights:
         for index, insight in enumerate(value.insights, start=1):
-            result = text(copy, "用户", "新得" if insight.acquired else "复悟")
+            result = text(copy, "用户", insight.outcome or "复悟")
             builder.item(
                 index,
                 f"第{insight.round_number}轮 · {result} · "

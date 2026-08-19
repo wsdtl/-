@@ -77,6 +77,7 @@ def test_initial_assets_form_json_driven_najie_home(tmp_path: Path) -> None:
     assert [category.name for category in snapshot.categories] == [
         "物品",
         "道藏",
+        "修行资粮",
         "器藏",
         "阵藏",
         "所学",
@@ -112,21 +113,21 @@ def test_owned_cultivation_stays_in_library_and_obeys_json_sorting(
                     StateMutation(
                         "qq-1",
                         "cultivation_library",
-                        "400002:01",
+                        "400002",
                         {"编号": "400002", "品级": "01"},
                         0,
                     ),
                     StateMutation(
                         "qq-1",
                         "cultivation_library",
-                        "400001:05",
+                        "400001",
                         {"编号": "400001", "品级": "05"},
                         0,
                     ),
                     StateMutation(
                         "qq-1",
                         "cultivation_library",
-                        "400003:05",
+                        "400003",
                         {"编号": "400003", "品级": "05"},
                         0,
                     ),

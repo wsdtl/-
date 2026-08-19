@@ -125,7 +125,7 @@ class RetreatService:
             "候选来源": "玩家虚拟全池",
             "抽取模式": ALLOW_REPEATS,
             "品级来源": "随机奖励",
-            "精确重复": "复悟",
+            "取得规则": "修行所得.功法取得",
         }
         if any(insight.get(key) != value for key, value in expected.items()):
             raise JsonDataError("闭关功法感悟规则与当前玩家全池契约不一致")
@@ -402,12 +402,22 @@ class RetreatService:
                 ),
             )
             operations.extend(acquisition_plan.operations)
+            technique_sync = await self._character.plan_technique_grade_sync(
+                participant,
+                tuple(
+                    (result.content_id, result.grade.grade_id)
+                    for result in acquisition_plan.results
+                    if result.outcome == "升品"
+                ),
+            )
+            if technique_sync.operation is not None:
+                operations.append(technique_sync.operation)
             insights = [
                 {
                     "轮次": source.round_number,
                     "编号": result.content_id,
                     "品级": result.grade.grade_id,
-                    "新得": result.acquired,
+                    "结果": result.outcome,
                 }
                 for source, result in zip(
                     unlocked, acquisition_plan.results, strict=True
@@ -564,7 +574,7 @@ def _user_summary(value: Mapping[str, object]) -> RetreatUserSummary:
             _positive_int(row.get("轮次"), "闭关结算.功法感悟.轮次"),
             _text(row.get("编号"), "闭关结算.功法感悟.编号"),
             _text(row.get("品级"), "闭关结算.功法感悟.品级"),
-            _boolean(row.get("新得"), "闭关结算.功法感悟.新得"),
+            _insight_outcome(row.get("结果")),
         )
         for row in (
             _mapping(raw, "闭关结算.功法感悟[]")
@@ -594,6 +604,13 @@ def _insights(value: object, completed_rounds: int) -> tuple[RetreatInsight, ...
         )
         if _positive_int(row.get("轮次"), "功法感悟.轮次") <= completed_rounds
     )
+
+
+def _insight_outcome(value: object) -> str:
+    outcome = _text(value, "闭关结算.功法感悟.结果")
+    if outcome not in {"新得", "升品", "复悟"}:
+        raise RetreatStateError(f"未知功法感悟结果：{outcome}")
+    return outcome
 
 
 def _participants(owner: str, values: tuple[str, ...]) -> tuple[str, ...]:

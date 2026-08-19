@@ -15,7 +15,7 @@ from . import reply
     guard_rule="已创建",
     help=HelpSpec(
         category="资源",
-        summary="分类查看物品、道藏、器藏、阵藏与所学",
+        summary="分类查看物品、功法道藏、修行资粮、器藏、阵藏与所学",
         usage=("纳戒", "纳戒 大类", "纳戒 大类 小类", "纳戒 大类 小类 页码"),
         side_effect="只读查询，不消耗、装配或改变任何玩家资产",
         order=5,

@@ -42,9 +42,9 @@ async def show_character_cultivation(*, user_id: str, manager, **_) -> None:
     guard_rule="自主空闲或休息",
     help=HelpSpec(
         category="修行",
-        summary="把道藏中的功法、真意或气机装入人物槽位",
+        summary="把功法或一份真意、气机装入人物槽位",
         usage=("人物装配 类别 编号或名称 品级 孔位",),
-        side_effect="替换指定槽位，原内容仍保留在道藏",
+        side_effect="功法保留所有权；真意和气机消耗一份，原槽内容消失",
         order=20,
     ),
 )
