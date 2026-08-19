@@ -32,6 +32,8 @@ class PlayerLocation:
     xy: tuple[int, int]
     version: int
     updated_at: str
+    space_type: str = "地表"
+    space_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,8 @@ class NearbyPlayerLocation:
     user_id: str
     xy: tuple[int, int]
     distance_squared_meters: int
+    space_type: str = "地表"
+    space_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,24 @@ class GroupLocationMoveResult:
     replayed: bool
 
 
+@dataclass(frozen=True)
+class SpaceChangeCommand:
+    owner_user_id: str
+    request_id: str
+    participant_user_ids: tuple[str, ...]
+    space_type: str
+    space_id: str
+
+
+@dataclass(frozen=True)
+class SpaceChangeResult:
+    owner_user_id: str
+    participant_user_ids: tuple[str, ...]
+    space_type: str
+    space_id: str
+    replayed: bool
+
+
 __all__ = [
     "GroupLocationMoveCommand",
     "GroupLocationMoveResult",
@@ -98,4 +120,6 @@ __all__ = [
     "NearbyPlayerCandidates",
     "NearbyPlayerLocation",
     "PlayerLocation",
+    "SpaceChangeCommand",
+    "SpaceChangeResult",
 ]

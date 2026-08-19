@@ -18,6 +18,7 @@ from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
@@ -55,6 +56,8 @@ def _services(tmp_path: Path):
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     item_catalog = ItemCatalogService(data)
@@ -90,6 +93,7 @@ def _services(tmp_path: Path):
         player_state,
         companion,
         team,
+        sect,
     )
     position.initialize()
     return database, companion, item_catalog, asset, create, interaction, position

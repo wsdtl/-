@@ -25,6 +25,8 @@ from .contracts import (
     NearbyPlayerCandidates,
     NearbyPlayerLocation,
     PlayerLocation,
+    SpaceChangeCommand,
+    SpaceChangeResult,
 )
 
 
@@ -110,6 +112,8 @@ class LocationService:
             record.xy,
             record.version,
             record.updated_at,
+            record.space_type,
+            record.space_id,
         )
 
     async def nearby_players(self, user_id: str) -> NearbyPlayerCandidates:
@@ -117,6 +121,8 @@ class LocationService:
         origin = await self.current(user_id)
         records = await self._database.nearby_locations(
             origin_xy=origin.xy,
+            space_type=origin.space_type,
+            space_id=origin.space_id,
             radius_meters=self._radius_meters,
             cell_size_meters=self._cell_size_meters,
             limit=self._candidate_limit + 1,
@@ -133,7 +139,13 @@ class LocationService:
             )
             if distance_squared <= self._radius_meters**2:
                 values.append(
-                    NearbyPlayerLocation(value.user_id, value.xy, distance_squared)
+                    NearbyPlayerLocation(
+                        value.user_id,
+                        value.xy,
+                        distance_squared,
+                        value.space_type,
+                        value.space_id,
+                    )
                 )
         values.sort(
             key=lambda value: (
@@ -150,6 +162,75 @@ class LocationService:
             visible_limit=self._visible_limit,
         )
 
+    async def change_space(self, command: SpaceChangeCommand) -> SpaceChangeResult:
+        self._require_initialized()
+        owner = _text(command.owner_user_id, "owner_user_id")
+        request_id = _text(command.request_id, "request_id")
+        participants = tuple(
+            _text(value, "participant_user_id")
+            for value in command.participant_user_ids
+        )
+        if (
+            not participants
+            or participants[0] != owner
+            or len(participants) != len(set(participants))
+        ):
+            raise ValueError("空间变更参与者顺序无效")
+        space_type = _text(command.space_type, "space_type")
+        space_id = str(command.space_id or "").strip()
+        if space_type == "地表":
+            if space_id:
+                raise ValueError("地表空间不能包含空间编号")
+        elif not space_id:
+            raise ValueError("非地表空间必须包含空间编号")
+        currents = await asyncio.gather(
+            *(self.current(user_id) for user_id in participants)
+        )
+        if any(
+            (current.space_type, current.space_id) == (space_type, space_id)
+            for current in currents
+        ):
+            if all(
+                (current.space_type, current.space_id) == (space_type, space_id)
+                for current in currents
+            ):
+                return SpaceChangeResult(owner, participants, space_type, space_id, False)
+            raise LocationConflictError("同行空间状态不一致")
+        if any(
+            current.space_type != currents[0].space_type
+            or current.space_id != currents[0].space_id
+            for current in currents
+        ):
+            raise LocationConflictError("同行修士不在同一空间")
+        try:
+            receipt = await self._database.commit(
+                TransactionCommand(
+                    user_id=owner,
+                    request_id=request_id,
+                    business_type="进入宗门洞天" if space_type != "地表" else "离开宗门洞天",
+                    operations=tuple(
+                        LocationMutation(
+                            current.user_id,
+                            current.xy,
+                            current.version,
+                            space_type,
+                            space_id,
+                        )
+                        for current in currents
+                    ),
+                    payload={
+                        "空间类型": space_type,
+                        "空间编号": space_id,
+                        "参与者": list(participants),
+                    },
+                )
+            )
+        except StateConflictError as exc:
+            raise LocationConflictError("空间变更前位置已经改变") from exc
+        return SpaceChangeResult(
+            owner, participants, space_type, space_id, receipt.replayed
+        )
+
     async def move(self, command: LocationMoveCommand) -> LocationMoveResult:
         self._require_initialized()
         user_id = _text(command.user_id, "user_id")
@@ -161,6 +242,8 @@ class LocationService:
             LocationQuery(xy=_xy(command.destination_xy))
         ).xy
         current = await self.current(user_id)
+        if current.space_type != "地表":
+            raise LocationConflictError("非地表空间不能执行世界行路")
         if current.xy == destination:
             return LocationMoveResult(user_id, current.xy, destination, False, False)
         if current.xy != expected:
@@ -214,6 +297,8 @@ class LocationService:
         currents = await asyncio.gather(
             *(self.current(user_id) for user_id in participants)
         )
+        if any(current.space_type != "地表" for current in currents):
+            raise LocationConflictError("非地表空间不能执行世界行路")
         if any(current.xy != expected for current in currents):
             raise LocationConflictError("同行修士已经不在同一出发位置")
         if expected == destination:
@@ -225,7 +310,7 @@ class LocationService:
                 TransactionCommand(
                     user_id=owner,
                     request_id=request_id,
-                    business_type="队伍行路" if len(participants) > 1 else "人物行路",
+                    business_type="集体行路" if len(participants) > 1 else "人物行路",
                     operations=tuple(
                         LocationMutation(user_id, destination, current.version)
                         for user_id, current in zip(participants, currents, strict=True)

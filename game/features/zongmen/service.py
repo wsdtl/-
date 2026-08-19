@@ -197,7 +197,15 @@ class SectFeature:
     async def _require_same_location_target(self, first: str, second: str) -> None:
         first_location = await self._location.current(first)
         second_location = await self._location.current(second)
-        if first_location.xy != second_location.xy:
+        if (
+            first_location.space_type,
+            first_location.space_id,
+            first_location.xy,
+        ) != (
+            second_location.space_type,
+            second_location.space_id,
+            second_location.xy,
+        ):
             raise SectFeatureError("not_same_location")
 
 

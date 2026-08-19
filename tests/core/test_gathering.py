@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from game.core.action_group import ActionGroupService
 from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
@@ -22,6 +23,7 @@ from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.caikuang import OreGatheringFeature
@@ -52,6 +54,10 @@ def _services(tmp_path: Path):
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
+    action_group = ActionGroupService(team, sect)
+    action_group.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -76,9 +82,9 @@ def _services(tmp_path: Path):
         pool,
     )
     gathering.initialize()
-    caiyao = HerbGatheringFeature(data, gathering, asset, team)
+    caiyao = HerbGatheringFeature(data, gathering, asset, action_group)
     caiyao.initialize()
-    caikuang = OreGatheringFeature(data, gathering, asset, team)
+    caikuang = OreGatheringFeature(data, gathering, asset, action_group)
     caikuang.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()

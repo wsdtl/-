@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from game.core.action_group import ActionGroupService
 from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.data import JsonDataService
@@ -16,6 +17,7 @@ from game.core.growth import GrowthService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.chuangjian_renwu import (
@@ -50,6 +52,10 @@ def _features(
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
+    action_group = ActionGroupService(team, sect)
+    action_group.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -62,7 +68,7 @@ def _features(
     character.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
-    travel = TravelFeature(world, character, location, team)
+    travel = TravelFeature(world, character, location, action_group)
     travel.initialize()
     return create, travel, database
 

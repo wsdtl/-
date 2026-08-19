@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from game.core.action_group import ActionGroupError, ActionGroupService
 from game.core.character import CharacterService
 from game.core.data import JsonDataError
 from game.core.location import (
@@ -9,7 +10,6 @@ from game.core.location import (
     LocationConflictError,
     LocationService,
 )
-from game.core.team import TeamError, TeamService
 from game.core.world import JourneyQuery, LocationQuery, WorldService
 
 from .contracts import (
@@ -28,12 +28,12 @@ class TravelFeature:
         world: WorldService,
         character: CharacterService,
         location: LocationService,
-        team: TeamService,
+        action_group: ActionGroupService,
     ) -> None:
         self._world = world
         self._character = character
         self._location = location
-        self._team = team
+        self._action_group = action_group
         self._initialized = False
 
     def initialize(self) -> None:
@@ -45,8 +45,8 @@ class TravelFeature:
             raise RuntimeError("角色核心必须先于行路玩法启动")
         if not self._location.status().initialized:
             raise RuntimeError("玩家位置核心必须先于行路玩法启动")
-        if not self._team.status().initialized:
-            raise RuntimeError("队伍核心必须先于行路玩法启动")
+        if not self._action_group.status().initialized:
+            raise RuntimeError("行动编排核心必须先于行路玩法启动")
         self._initialized = True
 
     async def travel(self, request: TravelRequest) -> TravelResult:
@@ -54,16 +54,18 @@ class TravelFeature:
             raise RuntimeError("行路玩法微服务尚未初始化")
         destination = _destination_query(request.destination)
         try:
-            participants = await self._team.action_participants(request.user_id)
-        except TeamError as exc:
+            participants = await self._action_group.participants(request.user_id)
+        except ActionGroupError as exc:
             if exc.code == "member_cannot_start":
-                raise TravelQueryError("只有队长可以带队行路") from exc
-            raise TravelConflictError("队伍状态刚刚发生变化") from exc
+                raise TravelQueryError("当前正在跟随领队，只有领队可以发起行路") from exc
+            raise TravelConflictError("同行状态刚刚发生变化") from exc
         public_profiles = await self._character.public_profiles((request.user_id,))
         if not public_profiles:
             raise TravelQueryError("尚未创建人物")
         character = public_profiles[0]
         current = await self._location.current(request.user_id)
+        if current.space_type != "地表":
+            raise TravelQueryError("当前身处宗门洞天，必须先出山门才能行路")
         try:
             plan = self._world.plan_journey(
                 JourneyQuery(

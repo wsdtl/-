@@ -8,6 +8,7 @@ from pathlib import Path
 from launch import C, OnEvent, config, logger
 
 from .config import game_config
+from .core.action_group import ActionGroupService
 from .core.alchemy import AlchemyService
 from .core.asset import AssetService
 from .core.character import CharacterService
@@ -22,6 +23,7 @@ from .core.forging import ForgingService
 from .core.formation import FormationService
 from .core.gathering import GatheringService
 from .core.growth import GrowthService
+from .core.hosting import HostingService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
 from .core.medicine import MedicineService
@@ -54,10 +56,13 @@ from .features.najie import NajieFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
 from .features.tongquetai import TongquetaiFeature
+from .features.tuoguan import HostingFeature
 from .features.weizhi import PositionFeature
 from .features.xinglu import TravelFeature
 from .features.yixing import YixingFeature
 from .features.zongmen import SectFeature
+from .features.zongmen_shanmen import GateFeature
+from .features.zongmen_tongxing import SectFollowFeature
 from .startup import validate_startup_contracts
 
 
@@ -81,6 +86,8 @@ class CoreServices:
     player_state: PlayerStateService
     team: TeamService
     sect: SectService
+    action_group: ActionGroupService
+    hosting: HostingService
     character: CharacterService
     asset: AssetService
     medicine: MedicineService
@@ -121,6 +128,9 @@ class FeatureServices:
     butian: ButianFeature
     yixing: YixingFeature
     zongmen: SectFeature
+    zongmen_tongxing: SectFollowFeature
+    zongmen_shanmen: GateFeature
+    tuoguan: HostingFeature
 
 
 @dataclass(frozen=True)
@@ -251,6 +261,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("invitation_seconds", sect_status.invitation_seconds),
         )
     )
+    action_group = ActionGroupService(team, sect)
+    action_group.initialize()
+    hosting = HostingService(data, database, player_state, action_group)
+    hosting.initialize()
     medicine = MedicineService(data, asset)
     medicine_status = medicine.initialize()
     logger.opt(colors=True).success(
@@ -415,6 +429,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         player_state=player_state,
         team=team,
         sect=sect,
+        action_group=action_group,
+        hosting=hosting,
         character=character,
         asset=asset,
         medicine=medicine,
@@ -480,6 +496,16 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     yixing.initialize()
     zongmen = SectFeature(data, sect, character, location, world, player_state)
     zongmen.initialize()
+    zongmen_tongxing = SectFollowFeature(
+        data, sect, character, location, player_state, team
+    )
+    zongmen_tongxing.initialize()
+    zongmen_shanmen = GateFeature(
+        data, sect, location, player_state, action_group
+    )
+    zongmen_shanmen.initialize()
+    tuoguan = HostingFeature(data, hosting)
+    tuoguan.initialize()
     weizhi = PositionFeature(
         data,
         world,
@@ -488,9 +514,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         player_state,
         companion,
         team,
+        sect,
     )
     weizhi.initialize()
-    xinglu = TravelFeature(world, character, location, team)
+    xinglu = TravelFeature(world, character, location, action_group)
     xinglu.initialize()
     daolv_jiejiao = CompanionInteractionFeature(
         data,
@@ -525,13 +552,13 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     daolv_peiyang.initialize()
     duiwu = TeamFeature(data, team, character, location, player_state)
     duiwu.initialize()
-    tanxian = ExplorationFeature(data, exploration, item_catalog, asset, team)
+    tanxian = ExplorationFeature(data, exploration, item_catalog, asset, action_group)
     tanxian.initialize()
-    biguan = RetreatFeature(data, retreat, asset, team)
+    biguan = RetreatFeature(data, retreat, asset, action_group)
     biguan.initialize()
-    caiyao = HerbGatheringFeature(data, gathering, asset, team)
+    caiyao = HerbGatheringFeature(data, gathering, asset, action_group)
     caiyao.initialize()
-    caikuang = OreGatheringFeature(data, gathering, asset, team)
+    caikuang = OreGatheringFeature(data, gathering, asset, action_group)
     caikuang.initialize()
     lianqi = ForgingFeature(data, forging)
     lianqi.initialize()
@@ -568,6 +595,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         butian=butian,
         yixing=yixing,
         zongmen=zongmen,
+        zongmen_tongxing=zongmen_tongxing,
+        zongmen_shanmen=zongmen_shanmen,
+        tuoguan=tuoguan,
     )
     return GameServices(core=core, features=features)
 

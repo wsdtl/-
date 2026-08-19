@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from game.core.action_group import ActionGroupService
 from game.core.asset import AssetService, CultivationAcquisition
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
@@ -21,6 +22,7 @@ from game.core.retreat import (
     RetreatService,
     RetreatStartCommand,
 )
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import WorldService
 from game.features.biguan import RetreatFeature
@@ -50,6 +52,10 @@ def _services(tmp_path: Path):
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
+    action_group = ActionGroupService(team, sect)
+    action_group.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -74,7 +80,7 @@ def _services(tmp_path: Path):
         pool,
     )
     retreat.initialize()
-    feature = RetreatFeature(data, retreat, asset, team)
+    feature = RetreatFeature(data, retreat, asset, action_group)
     feature.initialize()
     create = CreateCharacterFeature(data, world, character)
     create.initialize()

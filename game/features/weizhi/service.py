@@ -12,6 +12,7 @@ from game.core.companion import CompanionService, LocalCultivator
 from game.core.data import JsonDataError, JsonDataService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 
@@ -41,6 +42,7 @@ class PositionFeature:
         player_state: PlayerStateService,
         companion: CompanionService,
         team: TeamService,
+        sect: SectService,
     ) -> None:
         self._data = data
         self._world = world
@@ -49,6 +51,7 @@ class PositionFeature:
         self._player_state = player_state
         self._companion = companion
         self._team = team
+        self._sect = sect
         self._initialized = False
         self._location_radius_meters = 0
         self._location_limit = 0
@@ -69,6 +72,7 @@ class PositionFeature:
             (self._character.status().initialized, "角色核心"),
             (self._player_state.status().initialized, "人物状态核心"),
             (self._companion.status().initialized, "世界道侣核心"),
+            (self._sect.status().initialized, "宗门核心"),
         ):
             if not initialized:
                 raise RuntimeError(f"{label}必须先于位置查看玩法启动")
@@ -205,13 +209,21 @@ class PositionFeature:
         location = self._visible_location(
             self._world.locate(LocationQuery(xy=current.xy))
         )
+        if current.space_type != "地表":
+            location = replace(
+                location,
+                available_functions=(),
+                plant_pool=(),
+                mineral_pool=(),
+                companion_pool=(),
+            )
         excluded = (active.companion_id,) if active is not None else ()
         local = (
             self._companion.local_cultivators(
                 location.location_name,
                 exclude_companion_ids=excluded,
             )
-            if location.companion_pool
+            if location.companion_pool and current.space_type == "地表"
             else ()
         )
         return CurrentPositionView(
@@ -244,23 +256,41 @@ class PositionFeature:
             self._companion.active(user_id),
         )
         user_ids = tuple(value.user_id for value in candidates.values)
-        profiles, states, teams = await asyncio.gather(
+        profiles, states, teams, sect_follows = await asyncio.gather(
             self._character.public_profiles(user_ids),
             self._player_state.public_many(user_ids),
             self._team.public_many(user_ids),
+            self._sect.public_follow_many(user_ids),
         )
         profile_by_user = {value.user_id: value for value in profiles}
         state_by_user = {value.user_id: value for value in states}
         team_by_user = {value.user_id: value for value in teams}
+        sect_follow_by_user = {value.user_id: value for value in sect_follows}
         visible: list[NearbyCultivatorView] = []
         for candidate in candidates.values:
             profile = profile_by_user.get(candidate.user_id)
             state = state_by_user.get(candidate.user_id)
             team = team_by_user.get(candidate.user_id)
+            sect_follow = sect_follow_by_user.get(candidate.user_id)
             if profile is None or state is None or not state.appears_nearby:
                 continue
             names = state.names
-            if team is not None and team.grouped:
+            if (
+                sect_follow is not None
+                and sect_follow.following
+                and team is not None
+                and team.grouped
+            ):
+                names += (self.copy().fellowship_conflict_state,)
+            elif sect_follow is not None and sect_follow.following:
+                names += (
+                    self.copy().sect_follow_leader_state.format(
+                        人数=sect_follow.member_count
+                    )
+                    if sect_follow.leading
+                    else self.copy().sect_follow_member_state,
+                )
+            elif team is not None and team.grouped:
                 names += (self.copy().team_state.format(人数=team.member_count),)
             visible.append(
                 NearbyCultivatorView(
@@ -323,6 +353,8 @@ class PositionFeature:
     async def nearby_locations(self, user_id: str) -> NearbyWorldLocations:
         self._require_initialized()
         current = await self._location.current(user_id)
+        if current.space_type != "地表":
+            return NearbyWorldLocations(())
         map_view = self._world.map_view()
         origin_altitude = self._world.locate(LocationQuery(xy=current.xy)).altitude
         radius_squared = self._location_radius_meters**2

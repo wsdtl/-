@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from game.core.action_group import ActionGroupError, ActionGroupService
 from game.core.asset import AssetService
 from game.core.data import JsonDataService
 from game.core.exploration import (
@@ -15,7 +16,6 @@ from game.core.exploration import (
     ExplorationStarted,
 )
 from game.core.item_catalog import ItemCatalogService
-from game.core.team import TeamError, TeamService
 
 from .contracts import ExplorationAction, ExplorationCopy, ExplorationFeatureError
 from .presentation import actions, load_presentation
@@ -28,13 +28,13 @@ class ExplorationFeature:
         exploration: ExplorationService,
         items: ItemCatalogService,
         asset: AssetService,
-        team: TeamService,
+        action_group: ActionGroupService,
     ) -> None:
         self._data = data
         self._exploration = exploration
         self._items = items
         self._asset = asset
-        self._team = team
+        self._action_group = action_group
         self._copy: ExplorationCopy | None = None
         self._buttons = ()
 
@@ -43,8 +43,8 @@ class ExplorationFeature:
             raise RuntimeError("探险玩法已经初始化")
         if not self._exploration.status().initialized:
             raise RuntimeError("探险核心必须先于玩法微服务启动")
-        if not self._team.status().initialized:
-            raise RuntimeError("队伍核心必须先于探险玩法启动")
+        if not self._action_group.status().initialized:
+            raise RuntimeError("行动编排核心必须先于探险玩法启动")
         self._copy, self._buttons = load_presentation(self._data)
 
     def copy(self) -> ExplorationCopy:
@@ -54,15 +54,15 @@ class ExplorationFeature:
 
     async def start(self, user_id: str, request_id: str) -> ExplorationStarted:
         try:
-            participants = await self._team.action_participants(user_id)
+            participants = await self._action_group.participants(user_id)
             return await self._exploration.start(
                 ExplorationStartCommand(user_id, request_id, participants)
             )
-        except TeamError as exc:
+        except ActionGroupError as exc:
             message = (
-                "只有队长可以带队探险"
+                "当前正在跟随领队，只有领队可以发起探险"
                 if exc.code == "member_cannot_start"
-                else "队伍状态刚刚发生变化"
+                else "同行状态刚刚发生变化"
             )
             raise ExplorationFeatureError(message) from exc
         except ExplorationError as exc:

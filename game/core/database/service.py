@@ -107,6 +107,14 @@ class DatabaseService:
             self._store.get_shared_member, entity_type, user_id
         )
 
+    async def get_shared_members(
+        self, entity_type: str, user_ids: tuple[str, ...]
+    ) -> tuple[SharedMemberRecord, ...]:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.get_shared_members, entity_type, user_ids
+        )
+
     async def list_shared_members(
         self, entity_type: str, entity_id: str
     ) -> tuple[SharedMemberRecord, ...]:
@@ -135,6 +143,8 @@ class DatabaseService:
         self,
         *,
         origin_xy: tuple[int, int],
+        space_type: str,
+        space_id: str,
         radius_meters: int,
         cell_size_meters: int,
         limit: int,
@@ -144,6 +154,8 @@ class DatabaseService:
         return await asyncio.to_thread(
             self._store.nearby_locations,
             origin_xy=origin_xy,
+            space_type=space_type,
+            space_id=space_id,
             radius_meters=radius_meters,
             cell_size_meters=cell_size_meters,
             limit=limit,

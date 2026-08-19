@@ -58,6 +58,7 @@ def test_database_has_state_transaction_and_location_tables(tmp_path) -> None:
         "state_snapshot",
         "committed_transaction",
         "player_location",
+        "player_space",
         "shared_entity",
         "shared_member",
         "shared_location",

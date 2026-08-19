@@ -68,6 +68,8 @@ class LocationMutation:
     user_id: str
     xy: tuple[int, int] | None
     expected_version: int
+    space_type: str = "地表"
+    space_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,8 @@ class LocationRecord:
     xy: tuple[int, int]
     version: int
     updated_at: str
+    space_type: str = "地表"
+    space_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -153,6 +157,8 @@ class NearbyLocationRecord:
     user_id: str
     xy: tuple[int, int]
     horizontal_distance_squared_meters: int
+    space_type: str = "地表"
+    space_id: str = ""
 
 
 @dataclass(frozen=True)

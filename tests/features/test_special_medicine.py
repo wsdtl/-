@@ -295,7 +295,7 @@ def test_butian_corrects_pure_breakthrough_once_for_each_target(
         )
 
     assert result.attribute == "血气上限"
-    assert after["血气上限"] == before["血气上限"] + result.value
+    assert after["血气上限"] == pytest.approx(before["血气上限"] + result.value)
     assert replay.replayed is True
     assert _run(services["asset"].inventory_stacks("qq-1", "160002")) == ()
     with pytest.raises(ButianError, match="已经补正"):

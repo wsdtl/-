@@ -78,6 +78,11 @@ class SQLiteStateStore:
                     version INTEGER NOT NULL CHECK (version > 0),
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS player_space (
+                    user_id TEXT PRIMARY KEY,
+                    space_type TEXT NOT NULL,
+                    space_id TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS ix_state_snapshot_user
                 ON state_snapshot(user_id, state_type);
                 CREATE INDEX IF NOT EXISTS ix_committed_transaction_user
@@ -238,6 +243,40 @@ class SQLiteStateStore:
             )
             if row is not None
             else None
+        )
+
+    def get_shared_members(
+        self, entity_type: str, user_ids: tuple[str, ...]
+    ) -> tuple[SharedMemberRecord, ...]:
+        self._require_initialized()
+        _validate_text(entity_type, "entity_type")
+        if not user_ids:
+            return ()
+        if len(user_ids) != len(set(user_ids)):
+            raise ValueError("user_ids不能重复")
+        for user_id in user_ids:
+            _validate_text(user_id, "user_id")
+        placeholders = ", ".join("?" for _ in user_ids)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT entity_id, user_id, role, join_order, version, updated_at
+                FROM shared_member
+                WHERE entity_type = ? AND user_id IN ({placeholders})
+                """,
+                (entity_type, *user_ids),
+            ).fetchall()
+        return tuple(
+            SharedMemberRecord(
+                entity_type,
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                int(row[3]),
+                int(row[4]),
+                str(row[5]),
+            )
+            for row in rows
         )
 
     def list_shared_members(
@@ -412,22 +451,31 @@ class SQLiteStateStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT x, y, version, updated_at
-                FROM player_location
-                WHERE user_id = ?
+                SELECT p.x, p.y, p.version, p.updated_at,
+                       COALESCE(s.space_type, '地表'), COALESCE(s.space_id, '')
+                FROM player_location AS p
+                LEFT JOIN player_space AS s ON s.user_id = p.user_id
+                WHERE p.user_id = ?
                 """,
                 (user_id,),
             ).fetchone()
         if row is None:
             return None
         return LocationRecord(
-            user_id, (int(row[0]), int(row[1])), int(row[2]), str(row[3])
+            user_id,
+            (int(row[0]), int(row[1])),
+            int(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(row[5]),
         )
 
     def nearby_locations(
         self,
         *,
         origin_xy: tuple[int, int],
+        space_type: str,
+        space_id: str,
         radius_meters: int,
         cell_size_meters: int,
         limit: int,
@@ -435,6 +483,7 @@ class SQLiteStateStore:
     ) -> tuple[NearbyLocationRecord, ...]:
         self._require_initialized()
         origin_x, origin_y = _validate_xy(origin_xy)
+        _validate_space(space_type, space_id)
         _validate_text(exclude_user_id, "exclude_user_id")
         for value, label in (
             (radius_meters, "radius_meters"),
@@ -467,19 +516,25 @@ class SQLiteStateStore:
                     break
                 rows = connection.execute(
                     """
-                    SELECT user_id
-                    FROM player_location
-                    WHERE x = ? AND y = ? AND user_id <> ?
-                    ORDER BY user_id
+                    SELECT p.user_id,
+                           COALESCE(s.space_type, '地表'), COALESCE(s.space_id, '')
+                    FROM player_location AS p
+                    LEFT JOIN player_space AS s ON s.user_id = p.user_id
+                    WHERE p.x = ? AND p.y = ? AND p.user_id <> ?
+                      AND COALESCE(s.space_type, '地表') = ?
+                      AND COALESCE(s.space_id, '') = ?
+                    ORDER BY p.user_id
                     LIMIT ?
                     """,
-                    (x, y, exclude_user_id, remaining),
+                    (x, y, exclude_user_id, space_type, space_id, remaining),
                 ).fetchall()
                 result.extend(
                     NearbyLocationRecord(
                         user_id=str(row[0]),
                         xy=(x, y),
                         horizontal_distance_squared_meters=distance_squared,
+                        space_type=str(row[1]),
+                        space_id=str(row[2]),
                     )
                     for row in rows
                 )
@@ -724,6 +779,9 @@ def _apply_location_mutation(
             "DELETE FROM player_location WHERE user_id = ?",
             (mutation.user_id,),
         )
+        connection.execute(
+            "DELETE FROM player_space WHERE user_id = ?", (mutation.user_id,)
+        )
         return MutationChange(
             "player_location",
             mutation.user_id,
@@ -755,6 +813,19 @@ def _apply_location_mutation(
             (x, y, next_version, committed_at, mutation.user_id),
         )
         operation = "update"
+    space_type = str(mutation.space_type or "").strip()
+    space_id = str(mutation.space_id or "").strip()
+    _validate_space(space_type, space_id)
+    connection.execute(
+        """
+        INSERT INTO player_space (user_id, space_type, space_id)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            space_type = excluded.space_type,
+            space_id = excluded.space_id
+        """,
+        (mutation.user_id, space_type, space_id),
+    )
     return MutationChange(
         "player_location",
         mutation.user_id,
@@ -1082,6 +1153,7 @@ def _validate_command(command: TransactionCommand) -> None:
             address = (operation.user_id, operation.state_type, operation.state_key)
         elif isinstance(operation, LocationMutation):
             _validate_text(operation.user_id, "operation.user_id")
+            _validate_space(operation.space_type, operation.space_id)
             address = (operation.user_id, "location", "main")
         elif isinstance(operation, SharedEntityMutation):
             _validate_text(operation.entity_type, "entity_type")
@@ -1128,6 +1200,17 @@ def _validate_text(value: object, label: str) -> None:
         raise ValueError(f"{label} 必须是无首尾空白的非空字符串")
 
 
+def _validate_space(space_type: object, space_id: object) -> None:
+    normalized_type = str(space_type or "").strip()
+    normalized_id = str(space_id or "").strip()
+    if not normalized_type:
+        raise ValueError("space_type 必须是非空字符串")
+    if normalized_type == "地表" and normalized_id:
+        raise ValueError("地表空间不能包含 space_id")
+    if normalized_type != "地表" and not normalized_id:
+        raise ValueError("非地表空间必须包含 space_id")
+
+
 def _command_json(command: TransactionCommand) -> dict[str, object]:
     return {
         "business_type": command.business_type,
@@ -1170,6 +1253,8 @@ def _operation_json(
             "user_id": operation.user_id,
             "xy": list(operation.xy) if operation.xy is not None else None,
             "expected_version": operation.expected_version,
+            "space_type": operation.space_type,
+            "space_id": operation.space_id,
         }
     if isinstance(operation, SharedEntityMutation):
         return {

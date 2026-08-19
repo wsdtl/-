@@ -12,6 +12,8 @@ from .contracts import (
     NearbyPlayerCandidates,
     NearbyPlayerLocation,
     PlayerLocation,
+    SpaceChangeCommand,
+    SpaceChangeResult,
 )
 from .service import LocationService
 
@@ -28,4 +30,6 @@ __all__ = [
     "NearbyPlayerCandidates",
     "NearbyPlayerLocation",
     "PlayerLocation",
+    "SpaceChangeCommand",
+    "SpaceChangeResult",
 ]

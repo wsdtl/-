@@ -14,6 +14,7 @@ from game.core.growth import GrowthService
 from game.core.location import LocationMoveCommand, LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
 from game.core.pool import PoolService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 from game.features.chuangjian_renwu import (
@@ -43,6 +44,8 @@ def _services(tmp_path: Path):
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -65,6 +68,7 @@ def _services(tmp_path: Path):
         player_state,
         companion,
         team,
+        sect,
     )
     position.initialize()
     return database, player_state, team, location, create, position

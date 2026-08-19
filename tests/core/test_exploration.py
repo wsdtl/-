@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from game.core.action_group import ActionGroupService
 from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.combat import CombatService
@@ -27,6 +28,7 @@ from game.core.location import LocationService
 from game.core.medicine import MedicineService, PreparedBattleMedicine
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
+from game.core.sect import SectService
 from game.core.team import TeamService
 from game.core.world import LocationQuery, WorldService
 from game.features.chuangjian_renwu import (
@@ -56,6 +58,10 @@ def _services(tmp_path: Path):
     player_state.initialize()
     team = TeamService(data, database, player_state)
     team.initialize()
+    sect = SectService(data, database, player_state)
+    sect.initialize()
+    action_group = ActionGroupService(team, sect)
+    action_group.initialize()
     location = LocationService(data, database, world)
     location.initialize()
     asset = AssetService(data, database)
@@ -94,7 +100,7 @@ def _services(tmp_path: Path):
     )
     exploration.initialize()
     exploration_feature = ExplorationFeature(
-        data, exploration, item_catalog, asset, team
+        data, exploration, item_catalog, asset, action_group
     )
     exploration_feature.initialize()
     create = CreateCharacterFeature(data, world, character)

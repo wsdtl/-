@@ -162,6 +162,9 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
             "状态前缀",
             "状态分隔",
             "队伍状态",
+            "宗门同行领队",
+            "宗门同行成员",
+            "同行状态冲突",
             "功能分隔",
             "无开放功能",
         },
@@ -267,6 +270,17 @@ def _position_copy(value: object, icon_value: object) -> PositionCopy:
             common.get("队伍状态"),
             "位置文本.格式.队伍状态",
             {"人数"},
+        ),
+        sect_follow_leader_state=_template(
+            common.get("宗门同行领队"),
+            "位置文本.格式.宗门同行领队",
+            {"人数"},
+        ),
+        sect_follow_member_state=_text(
+            common.get("宗门同行成员"), "位置文本.格式.宗门同行成员"
+        ),
+        fellowship_conflict_state=_text(
+            common.get("同行状态冲突"), "位置文本.格式.同行状态冲突"
         ),
         function_separator=_text(common.get("功能分隔"), "位置文本.格式.功能分隔"),
         no_available_function=_text(

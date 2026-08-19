@@ -23,7 +23,9 @@ from . import reply
 )
 async def show_position(*, user_id: str, manager, **_) -> None:
     feature = current_game_services().features.weizhi
+    services = current_game_services()
     result = await feature.current(user_id)
+    gate_actions = await services.features.zongmen_shanmen.gate_actions(user_id)
     await manager.send(
         reply.current(
             feature.copy(),
@@ -32,7 +34,7 @@ async def show_position(*, user_id: str, manager, **_) -> None:
                 result.location.available_functions,
                 plant_pool=result.location.plant_pool,
                 mineral_pool=result.location.mineral_pool,
-            ),
+            ) + gate_actions,
         )
     )
 

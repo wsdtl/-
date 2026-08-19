@@ -24,6 +24,30 @@ class SectServiceStatus:
 
 
 @dataclass(frozen=True)
+class SectFollowSnapshot:
+    sect_id: str
+    leader_user_id: str
+    member_user_ids: tuple[str, ...]
+    version: int
+
+
+@dataclass(frozen=True)
+class SectFollowMembership:
+    sect_id: str
+    user_id: str
+    leader_user_id: str
+    member_user_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PublicSectFollowState:
+    user_id: str
+    following: bool
+    leading: bool
+    member_count: int
+
+
+@dataclass(frozen=True)
 class SectSnapshot:
     sect_id: str
     name: str
@@ -54,8 +78,11 @@ class SectInvitation:
 
 
 __all__ = [
+    "PublicSectFollowState",
     "SectConflictError",
     "SectError",
+    "SectFollowMembership",
+    "SectFollowSnapshot",
     "SectInvitation",
     "SectMember",
     "SectServiceStatus",
