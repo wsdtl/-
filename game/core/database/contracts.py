@@ -20,6 +20,10 @@ class IdempotencyConflictError(DatabaseError):
     """同一请求编号被重复用于不同事务。"""
 
 
+class SharedConstraintError(DatabaseError):
+    """共享实体、成员或位置违反唯一约束。"""
+
+
 JsonObject = Mapping[str, Any]
 
 
@@ -30,6 +34,9 @@ class DatabaseStatus:
     state_count: int
     location_count: int
     transaction_count: int
+    shared_entity_count: int
+    shared_member_count: int
+    shared_location_count: int
 
 
 @dataclass(frozen=True)
@@ -64,7 +71,34 @@ class LocationMutation:
 
 
 @dataclass(frozen=True)
-class StateChange:
+class SharedEntityMutation:
+    entity_type: str
+    entity_id: str
+    value: JsonObject | None
+    expected_version: int
+
+
+@dataclass(frozen=True)
+class SharedMemberMutation:
+    entity_type: str
+    user_id: str
+    entity_id: str | None
+    role: str
+    join_order: int
+    expected_version: int
+
+
+@dataclass(frozen=True)
+class SharedLocationMutation:
+    entity_type: str
+    entity_id: str
+    xy: tuple[int, int] | None
+    expected_version: int
+
+
+@dataclass(frozen=True)
+class MutationChange:
+    scope: str
     user_id: str
     state_type: str
     state_key: str
@@ -78,7 +112,14 @@ class TransactionCommand:
     user_id: str
     request_id: str
     business_type: str
-    operations: tuple[StateMutation | LocationMutation, ...]
+    operations: tuple[
+        StateMutation
+        | LocationMutation
+        | SharedEntityMutation
+        | SharedMemberMutation
+        | SharedLocationMutation,
+        ...,
+    ]
     payload: JsonObject
 
 
@@ -90,7 +131,7 @@ class TransactionReceipt:
     business_type: str
     committed_at: str
     replayed: bool
-    changes: tuple[StateChange, ...]
+    changes: tuple[MutationChange, ...]
 
 
 @dataclass(frozen=True)
@@ -114,6 +155,35 @@ class NearbyLocationRecord:
     horizontal_distance_squared_meters: int
 
 
+@dataclass(frozen=True)
+class SharedEntityRecord:
+    entity_type: str
+    entity_id: str
+    value: JsonObject
+    version: int
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class SharedMemberRecord:
+    entity_type: str
+    entity_id: str
+    user_id: str
+    role: str
+    join_order: int
+    version: int
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class SharedLocationRecord:
+    entity_type: str
+    entity_id: str
+    xy: tuple[int, int]
+    version: int
+    updated_at: str
+
+
 __all__ = [
     "CommittedTransaction",
     "DatabaseError",
@@ -121,9 +191,16 @@ __all__ = [
     "IdempotencyConflictError",
     "LocationMutation",
     "LocationRecord",
+    "MutationChange",
     "NearbyLocationRecord",
+    "SharedConstraintError",
+    "SharedEntityMutation",
+    "SharedEntityRecord",
+    "SharedLocationMutation",
+    "SharedLocationRecord",
+    "SharedMemberMutation",
+    "SharedMemberRecord",
     "StateAddress",
-    "StateChange",
     "StateConflictError",
     "StateMutation",
     "StateSnapshot",

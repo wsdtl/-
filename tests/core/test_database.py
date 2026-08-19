@@ -8,6 +8,10 @@ import pytest
 from game.core.database import (
     DatabaseService,
     LocationMutation,
+    SharedConstraintError,
+    SharedEntityMutation,
+    SharedLocationMutation,
+    SharedMemberMutation,
     StateAddress,
     StateConflictError,
     StateMutation,
@@ -50,7 +54,76 @@ def test_database_has_state_transaction_and_location_tables(tmp_path) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-    assert tables == {"state_snapshot", "committed_transaction", "player_location"}
+    assert tables == {
+        "state_snapshot",
+        "committed_transaction",
+        "player_location",
+        "shared_entity",
+        "shared_member",
+        "shared_location",
+    }
+
+
+def test_shared_entities_members_and_locations_are_atomic_and_unique(tmp_path) -> None:
+    service = DatabaseService(tmp_path / "game.db")
+    service.initialize()
+    receipt = _run(
+        service.commit(
+            _command(
+                request_id="sect-create",
+                operations=(
+                    SharedEntityMutation(
+                        "宗门",
+                        "sect-1",
+                        {
+                            "编号": "sect-1",
+                            "名称": "青云宗",
+                            "宗主": "10001",
+                            "洞天编号": "cave-1",
+                            "入口坐标": [10, 20],
+                        },
+                        0,
+                    ),
+                    SharedMemberMutation("宗门", "10001", "sect-1", "宗主", 1, 0),
+                    SharedLocationMutation("宗门", "sect-1", (10, 20), 0),
+                ),
+            )
+        )
+    )
+    assert receipt.replayed is False
+    entity = _run(service.get_shared_entity("宗门", "sect-1"))
+    member = _run(service.get_shared_member("宗门", "10001"))
+    location = _run(service.get_shared_location("宗门", "sect-1"))
+    assert entity is not None and entity.value["名称"] == "青云宗"
+    assert member is not None and member.role == "宗主"
+    assert location is not None and location.xy == (10, 20)
+
+    with pytest.raises(SharedConstraintError):
+        _run(
+            service.commit(
+                _command(
+                    request_id="sect-duplicate-location",
+                    operations=(
+                        SharedEntityMutation(
+                            "宗门",
+                            "sect-2",
+                            {
+                                "编号": "sect-2",
+                                "名称": "赤霄宗",
+                                "宗主": "10002",
+                                "洞天编号": "cave-2",
+                                "入口坐标": [10, 20],
+                            },
+                            0,
+                        ),
+                        SharedMemberMutation("宗门", "10002", "sect-2", "宗主", 1, 0),
+                        SharedLocationMutation("宗门", "sect-2", (10, 20), 0),
+                    ),
+                )
+            )
+        )
+    assert _run(service.get_shared_entity("宗门", "sect-2")) is None
+    assert _run(service.get_shared_member("宗门", "10002")) is None
 
 
 def test_commit_writes_multiple_states_atomically(tmp_path) -> None:

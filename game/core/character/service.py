@@ -899,7 +899,10 @@ class CharacterService:
         medicine, permanent = self._breakthrough_medicine(
             medicine_id, next_realm.realm_id
         )
-        records = list(_state_records(character.get("突破记录"), "人物.突破记录"))
+        records = [
+            dict(record)
+            for record in _state_records(character.get("突破记录"), "人物.突破记录")
+        ]
         if any(record.get("目标境界") == next_realm.realm_id for record in records):
             raise CharacterCultivationError("该境界已经完成突破")
         attributes = _add_numbers(
@@ -1005,7 +1008,10 @@ class CharacterService:
         if snapshot is None:
             raise CharacterNotFoundError("尚未创建人物")
         character = dict(_state_mapping(snapshot.value, "character/main"))
-        records = list(_state_records(character.get("突破记录"), "人物.突破记录"))
+        records = [
+            dict(record)
+            for record in _state_records(character.get("突破记录"), "人物.突破记录")
+        ]
         realm_id = _state_text(character.get("境界"), "人物.境界")
         record = next((row for row in records if row.get("目标境界") == realm_id), None)
         if record is None:

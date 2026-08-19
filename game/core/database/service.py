@@ -10,6 +10,9 @@ from .contracts import (
     DatabaseStatus,
     LocationRecord,
     NearbyLocationRecord,
+    SharedEntityRecord,
+    SharedLocationRecord,
+    SharedMemberRecord,
     StateAddress,
     StateSnapshot,
     TransactionCommand,
@@ -39,8 +42,15 @@ class DatabaseService:
         return self.status()
 
     def status(self) -> DatabaseStatus:
-        state_count, location_count, transaction_count = (
-            self._store.counts() if self._initialized else (0, 0, 0)
+        (
+            state_count,
+            location_count,
+            transaction_count,
+            shared_entity_count,
+            shared_member_count,
+            shared_location_count,
+        ) = (
+            self._store.counts() if self._initialized else (0, 0, 0, 0, 0, 0)
         )
         return DatabaseStatus(
             initialized=self._initialized,
@@ -48,6 +58,9 @@ class DatabaseService:
             state_count=state_count,
             location_count=location_count,
             transaction_count=transaction_count,
+            shared_entity_count=shared_entity_count,
+            shared_member_count=shared_member_count,
+            shared_location_count=shared_location_count,
         )
 
     async def get(self, address: StateAddress) -> StateSnapshot | None:
@@ -69,6 +82,54 @@ class DatabaseService:
     async def get_location(self, user_id: str) -> LocationRecord | None:
         self._require_initialized()
         return await asyncio.to_thread(self._store.get_location, user_id)
+
+    async def get_shared_entity(
+        self, entity_type: str, entity_id: str
+    ) -> SharedEntityRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.get_shared_entity, entity_type, entity_id
+        )
+
+    async def get_shared_entity_by_name(
+        self, entity_type: str, entity_name: str
+    ) -> SharedEntityRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.get_shared_entity_by_name, entity_type, entity_name
+        )
+
+    async def get_shared_member(
+        self, entity_type: str, user_id: str
+    ) -> SharedMemberRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.get_shared_member, entity_type, user_id
+        )
+
+    async def list_shared_members(
+        self, entity_type: str, entity_id: str
+    ) -> tuple[SharedMemberRecord, ...]:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.list_shared_members, entity_type, entity_id
+        )
+
+    async def get_shared_location(
+        self, entity_type: str, entity_id: str
+    ) -> SharedLocationRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.get_shared_location, entity_type, entity_id
+        )
+
+    async def shared_location_at(
+        self, entity_type: str, xy: tuple[int, int]
+    ) -> SharedLocationRecord | None:
+        self._require_initialized()
+        return await asyncio.to_thread(
+            self._store.shared_location_at, entity_type, xy
+        )
 
     async def nearby_locations(
         self,

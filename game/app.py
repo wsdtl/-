@@ -28,6 +28,7 @@ from .core.medicine import MedicineService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
 from .core.retreat import RetreatService
+from .core.sect import SectService
 from .core.team import TeamService
 from .core.trade import TradeService
 from .core.world import WorldService
@@ -56,6 +57,7 @@ from .features.tongquetai import TongquetaiFeature
 from .features.weizhi import PositionFeature
 from .features.xinglu import TravelFeature
 from .features.yixing import YixingFeature
+from .features.zongmen import SectFeature
 from .startup import validate_startup_contracts
 
 
@@ -78,6 +80,7 @@ class CoreServices:
     location: LocationService
     player_state: PlayerStateService
     team: TeamService
+    sect: SectService
     character: CharacterService
     asset: AssetService
     medicine: MedicineService
@@ -117,6 +120,7 @@ class FeatureServices:
     guiyuan: GuiyuanFeature
     butian: ButianFeature
     yixing: YixingFeature
+    zongmen: SectFeature
 
 
 @dataclass(frozen=True)
@@ -236,6 +240,15 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("laws", forging_status.law_count),
             C.kv("methods", forging_status.method_count),
             C.kv("artisans", forging_status.artisan_count),
+        )
+    )
+    sect = SectService(data, database, player_state)
+    sect_status = sect.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("宗门核心微服务已启动"),
+            C.kv("maximum_followers", sect_status.maximum_followers),
+            C.kv("invitation_seconds", sect_status.invitation_seconds),
         )
     )
     medicine = MedicineService(data, asset)
@@ -401,6 +414,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         location=location,
         player_state=player_state,
         team=team,
+        sect=sect,
         character=character,
         asset=asset,
         medicine=medicine,
@@ -464,6 +478,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     butian.initialize()
     yixing = YixingFeature(data, medicine, character, asset, player_state, location, world, database)
     yixing.initialize()
+    zongmen = SectFeature(data, sect, character, location, world, player_state)
+    zongmen.initialize()
     weizhi = PositionFeature(
         data,
         world,
@@ -551,6 +567,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         guiyuan=guiyuan,
         butian=butian,
         yixing=yixing,
+        zongmen=zongmen,
     )
     return GameServices(core=core, features=features)
 

@@ -82,6 +82,7 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "闭关进度",
         "出关",
         "队伍",
+        "宗门",
         "采药",
         "采药进度",
         "结束采药",

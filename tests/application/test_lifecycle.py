@@ -60,6 +60,7 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
                 "gathering_settlement",
             ),
                 team=_StateOwner("team", "team_invite"),
+                sect=_StateOwner("sect_invite"),
                 formation=_StateOwner("prepared_formation"),
         )
     )
