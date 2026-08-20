@@ -36,7 +36,9 @@ class ActionGroupService:
         if follow is not None:
             if follow.leader_user_id != user_id:
                 raise ActionGroupError("member_cannot_start")
-            return ActionGroup("sect", follow.leader_user_id, follow.member_user_ids, follow.sect_id)
+            return ActionGroup(
+                "sect", follow.leader_user_id, follow.member_user_ids, follow.sect_id
+            )
         try:
             participants = await self._team.action_participants(user_id)
         except TeamConflictError as exc:

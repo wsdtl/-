@@ -73,7 +73,9 @@ def _services(tmp_path: Path):
 
 
 def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
-    _run(create.create(CreateCharacterRequest(user_id, f"create-{user_id}", name, "男")))
+    _run(
+        create.create(CreateCharacterRequest(user_id, f"create-{user_id}", name, "男"))
+    )
 
 
 def _join(team: TeamFeature) -> None:
@@ -121,9 +123,9 @@ def test_team_leader_hosts_and_cancels_every_member_atomically(tmp_path: Path) -
         "领队",
         "跟随",
     ]
-    assert {
-        snapshot.states["控制"].context["托管编号"] for snapshot in snapshots
-    } == {session.session_id}
+    assert {snapshot.states["控制"].context["托管编号"] for snapshot in snapshots} == {
+        session.session_id
+    }
     with pytest.raises(HostingError, match="member_cannot_cancel"):
         _run(hosting.cancel("qq-2", "member-cancel"))
     with pytest.raises(TeamFeatureError, match="actor_busy"):
@@ -139,11 +141,7 @@ def test_leader_cannot_host_when_a_participant_is_busy(tmp_path: Path) -> None:
     _create(create, "qq-1", "林远")
     _create(create, "qq-2", "白川")
     _join(team)
-    _run(
-        state.transition(
-            StateTransitionCommand("qq-2", "busy", "行为", "520005")
-        )
-    )
+    _run(state.transition(StateTransitionCommand("qq-2", "busy", "行为", "520005")))
 
     with pytest.raises(HostingError, match="participant_busy"):
         _run(hosting.start("qq-1", "busy-host"))

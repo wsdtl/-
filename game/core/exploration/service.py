@@ -60,7 +60,6 @@ BATTLE_STATE = "exploration_battle"
 LATEST_STATE = "exploration_latest"
 SETTLEMENT_STATE = "exploration_settlement"
 LATEST_KEY = "main"
-EXPLORING_STATE_ID = "520005"
 
 
 class ExplorationService:
@@ -99,6 +98,8 @@ class ExplorationService:
         self._medicine = medicine
         self._initialized = False
         self._rules: Mapping[str, object] = {}
+        self._maximum_participants = 0
+        self._state_id = ""
 
     def initialize(self) -> ExplorationStatus:
         if self._initialized:
@@ -112,6 +113,12 @@ class ExplorationService:
         duration = _positive_int(self._rules.get("持续秒数"), "探险.持续秒数")
         if seconds * maximum != duration:
             raise JsonDataError("探险持续秒数必须等于每场秒数乘最多场数")
+        self._maximum_participants = _positive_int(
+            self._rules.get("参与用户上限"), "探险.参与用户上限"
+        )
+        self._state_id = _text(self._rules.get("行为状态"), "探险.行为状态")
+        if self._player_state.state_type(self._state_id) != "行为":
+            raise JsonDataError("探险.行为状态必须引用行为状态")
         _positive_int(self._rules.get("战斗行动上限"), "探险.战斗行动上限")
         self._initialized = True
         return self.status()
@@ -127,11 +134,17 @@ class ExplorationService:
     async def start(self, command: ExplorationStartCommand) -> ExplorationStarted:
         self._require_initialized()
         owner = _user_id(command.owner_user_id)
-        participants = _participants(owner, command.participant_user_ids)
+        participants = _participants(
+            owner, command.participant_user_ids, self._maximum_participants
+        )
         replay = await self._start_replay(owner, command.request_id)
         if replay is not None:
             return replay
-        seed = command.seed if command.seed is not None else _stable_seed(owner, command.request_id)
+        seed = (
+            command.seed
+            if command.seed is not None
+            else _stable_seed(owner, command.request_id)
+        )
         if isinstance(seed, bool) or not isinstance(seed, int):
             raise TypeError("探险种子必须是整数")
         started_at = _utc(command.started_at)
@@ -140,8 +153,13 @@ class ExplorationService:
         ).hexdigest()[:24]
 
         locations = [await self._location.current(user_id) for user_id in participants]
-        if len({value.xy for value in locations}) != 1:
-            raise ExplorationConflictError("同行修士必须位于同一坐标")
+        if (
+            len({(value.space_type, value.space_id, value.xy) for value in locations})
+            != 1
+        ):
+            raise ExplorationConflictError("同行修士必须位于同一空间和坐标")
+        if locations[0].space_type != "地表":
+            raise ExplorationConflictError("宗门洞天内不能进行普通探险")
         location = self._world.locate(LocationQuery(xy=locations[0].xy))
         if not location.location_key or "探险" not in location.available_functions:
             raise ExplorationConflictError("当前位置不能进行普通探险")
@@ -178,7 +196,7 @@ class ExplorationService:
                         user_id=user_id,
                         request_id=command.request_id,
                         state_type="行为",
-                        target_state_id=EXPLORING_STATE_ID,
+                        target_state_id=self._state_id,
                         context={
                             "探险编号": session_id,
                             "发起者": owner,
@@ -218,9 +236,7 @@ class ExplorationService:
                     )
                     companion = replace(
                         companion,
-                        prepared_statuses=(
-                            self._medicine.prepared_status(definition),
-                        ),
+                        prepared_statuses=(self._medicine.prepared_status(definition),),
                     )
                     battle_medicine_operations.extend(
                         (
@@ -324,11 +340,17 @@ class ExplorationService:
             for user_id, allocation in allocations.items():
                 user_results[user_id]["灵石"] += allocation["灵石"]
                 user_results[user_id]["掉落"].update(allocation["掉落"])
-            weapon_experience = sum(value.reward.weapon_experience for value in defeated)
+            weapon_experience = sum(
+                value.reward.weapon_experience for value in defeated
+            )
             for before in living:
                 user_results[before.owner_id]["角色"].setdefault(
                     before.id,
-                    {"名称": before.name, "道侣": before.id.startswith("companion:"), "武器经验": 0},
+                    {
+                        "名称": before.name,
+                        "道侣": before.id.startswith("companion:"),
+                        "武器经验": 0,
+                    },
                 )["武器经验"] += weapon_experience
             current = {}
             for value in formal_left_results:
@@ -346,7 +368,11 @@ class ExplorationService:
                 )
                 record = user_results[value.owner_id]["角色"].setdefault(
                     value.id,
-                    {"名称": value.name, "道侣": value.id.startswith("companion:"), "武器经验": 0},
+                    {
+                        "名称": value.name,
+                        "道侣": value.id.startswith("companion:"),
+                        "武器经验": 0,
+                    },
                 )
                 record["血气"] = value.health
                 record["精神"] = value.spirit
@@ -548,7 +574,9 @@ class ExplorationService:
                 health=_number(player.get("血气"), "人物.血气"),
                 spirit=_number(player.get("精神"), "人物.精神"),
                 spirit_stones_delta=_nonnegative_int(value.get("灵石"), "用户.灵石"),
-                weapon_experience=_nonnegative_int(player.get("武器经验"), "人物.武器经验"),
+                weapon_experience=_nonnegative_int(
+                    player.get("武器经验"), "人物.武器经验"
+                ),
             )
             operations.extend(player_plan.operations)
             companion = next(
@@ -577,12 +605,16 @@ class ExplorationService:
                 )
                 for raw in (
                     _mapping(item, "掉落[]")
-                    for item in _sequence(value.get("掉落"), "用户.掉落", allow_empty=True)
+                    for item in _sequence(
+                        value.get("掉落"), "用户.掉落", allow_empty=True
+                    )
                 )
             )
             if drops:
                 operations.extend(
-                    (await self._asset.plan_inventory_changes(participant, drops)).operations
+                    (
+                        await self._asset.plan_inventory_changes(participant, drops)
+                    ).operations
                 )
             operations.append(
                 (await self._player_state.plan_finish_behavior(participant)).mutation
@@ -619,7 +651,11 @@ class ExplorationService:
         snapshot = await self._database.get(
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
-        return None if snapshot is None else self._settlement(snapshot.value, replayed=True)
+        return (
+            None
+            if snapshot is None
+            else self._settlement(snapshot.value, replayed=True)
+        )
 
     async def _start_replay(
         self, owner: str, request_id: str
@@ -648,9 +684,7 @@ class ExplorationService:
             True,
         )
 
-    async def _session_for(
-        self, user_id: str
-    ) -> tuple[str, str, Mapping[str, object]]:
+    async def _session_for(self, user_id: str) -> tuple[str, str, Mapping[str, object]]:
         owner, session_id = await self._latest(user_id)
         snapshot = await self._database.get(
             StateAddress(owner, SESSION_STATE, session_id)
@@ -931,8 +965,14 @@ def _user_summary(value: Mapping[str, object]) -> ExplorationUserSummary:
         _text(value.get("用户编号"), "用户.用户编号"),
         _text(value.get("人物"), "用户.人物"),
         characters,
-        tuple(_item_tuple(item) for item in _sequence(value.get("消耗"), "用户.消耗", allow_empty=True)),
-        tuple(_item_tuple(item) for item in _sequence(value.get("掉落"), "用户.掉落", allow_empty=True)),
+        tuple(
+            _item_tuple(item)
+            for item in _sequence(value.get("消耗"), "用户.消耗", allow_empty=True)
+        ),
+        tuple(
+            _item_tuple(item)
+            for item in _sequence(value.get("掉落"), "用户.掉落", allow_empty=True)
+        ),
         _nonnegative_int(value.get("灵石"), "用户.灵石"),
     )
 
@@ -946,14 +986,14 @@ def _item_tuple(value: object) -> tuple[str, str, int]:
     )
 
 
-def _participants(owner: str, values: tuple[str, ...]) -> tuple[str, ...]:
+def _participants(owner: str, values: tuple[str, ...], maximum: int) -> tuple[str, ...]:
     normalized = tuple(_user_id(value) for value in values) or (owner,)
     if normalized[0] != owner:
         raise ValueError("发起者必须位于参与用户首位")
     if len(normalized) != len(set(normalized)):
         raise ValueError("参与用户不能重复")
-    if len(normalized) > 15:
-        raise ValueError("一次探险最多15名用户")
+    if len(normalized) > maximum:
+        raise ValueError(f"一次探险最多{maximum}名用户")
     return normalized
 
 

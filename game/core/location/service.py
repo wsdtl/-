@@ -194,7 +194,9 @@ class LocationService:
                 (current.space_type, current.space_id) == (space_type, space_id)
                 for current in currents
             ):
-                return SpaceChangeResult(owner, participants, space_type, space_id, False)
+                return SpaceChangeResult(
+                    owner, participants, space_type, space_id, False
+                )
             raise LocationConflictError("同行空间状态不一致")
         if any(
             current.space_type != currents[0].space_type
@@ -207,7 +209,9 @@ class LocationService:
                 TransactionCommand(
                     user_id=owner,
                     request_id=request_id,
-                    business_type="进入宗门洞天" if space_type != "地表" else "离开宗门洞天",
+                    business_type="进入宗门洞天"
+                    if space_type != "地表"
+                    else "离开宗门洞天",
                     operations=tuple(
                         LocationMutation(
                             current.user_id,

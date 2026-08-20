@@ -20,6 +20,7 @@ _ERROR_KEYS = {
     "target_ambiguous": "目标不唯一",
     "cannot_invite_self": "不能邀请自己",
     "not_same_location": "不在同处",
+    "not_surface": "不在地表",
     "target_busy": "目标忙碌",
     "target_already_member": "目标已经加入",
     "pending_invitation_exists": "已有邀请",

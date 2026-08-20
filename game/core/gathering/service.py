@@ -42,7 +42,6 @@ from .contracts import (
 SESSION_STATE = "gathering_session"
 LATEST_STATE = "gathering_latest"
 SETTLEMENT_STATE = "gathering_settlement"
-MAXIMUM_PARTICIPANTS = 15
 KINDS = ("采药", "采矿")
 
 
@@ -56,6 +55,7 @@ class _Mode:
     maximum_seconds: int
     draws_per_unit: int
     quantity_per_draw: int
+    maximum_participants: int
 
     def status(self) -> GatheringModeStatus:
         return GatheringModeStatus(
@@ -103,10 +103,7 @@ class GatheringService:
         if self._initialized:
             raise RuntimeError("采集核心已经初始化")
         rules = self._data.dataset("玩法规则")
-        modes = {
-            kind: _parse_mode(kind, rules.get(kind))
-            for kind in KINDS
-        }
+        modes = {kind: _parse_mode(kind, rules.get(kind)) for kind in KINDS}
         if len({mode.state_id for mode in modes.values()}) != len(modes):
             raise JsonDataError("采药与采矿必须使用不同的行为状态")
         if {mode.resource_category for mode in modes.values()} != {"灵植", "灵矿"}:
@@ -129,12 +126,16 @@ class GatheringService:
         mode = self._mode(command.kind)
         owner = _user_id(command.owner_user_id)
         request_id = _text(command.request_id, "request_id")
-        participants = _participants(owner, command.participant_user_ids)
+        participants = _participants(
+            owner, command.participant_user_ids, mode.maximum_participants
+        )
         replay = await self._start_replay(mode, owner, request_id)
         if replay is not None:
             return replay
-        seed = command.seed if command.seed is not None else _stable_seed(
-            mode.kind, owner, request_id
+        seed = (
+            command.seed
+            if command.seed is not None
+            else _stable_seed(mode.kind, owner, request_id)
         )
         if isinstance(seed, bool) or not isinstance(seed, int):
             raise TypeError("采集种子必须是整数")
@@ -145,8 +146,13 @@ class GatheringService:
         ).hexdigest()[:24]
 
         locations = [await self._location.current(user_id) for user_id in participants]
-        if len({value.xy for value in locations}) != 1:
-            raise GatheringConflictError("同行修士必须位于同一坐标")
+        if (
+            len({(value.space_type, value.space_id, value.xy) for value in locations})
+            != 1
+        ):
+            raise GatheringConflictError("同行修士必须位于同一空间和坐标")
+        if locations[0].space_type != "地表":
+            raise GatheringConflictError("宗门洞天内不能采集地表资源")
         location = self._world.locate(LocationQuery(xy=locations[0].xy))
         pool_names = _pool_names(location, mode.resource_category)
         if not pool_names:
@@ -264,17 +270,13 @@ class GatheringService:
     ) -> GatheringProgress:
         mode = self._mode(kind)
         normalized_user_id = _user_id(user_id)
-        owner, session_id, session = await self._session_for(
-            mode, normalized_user_id
-        )
+        owner, session_id, session = await self._session_for(mode, normalized_user_id)
         settlement = await self._database.get(
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
         current = _utc(now)
         started = _parse_time(session.get("开始时间"), "采集.开始时间")
-        maximum_ends = _parse_time(
-            session.get("最晚结束时间"), "采集.最晚结束时间"
-        )
+        maximum_ends = _parse_time(session.get("最晚结束时间"), "采集.最晚结束时间")
         if settlement is None:
             completed = self._completed_rounds(mode, started, current)
             settled = False
@@ -321,18 +323,14 @@ class GatheringService:
     ) -> GatheringSettlement:
         mode = self._mode(kind)
         normalized_user_id = _user_id(user_id)
-        owner, session_id, session = await self._session_for(
-            mode, normalized_user_id
-        )
+        owner, session_id, session = await self._session_for(mode, normalized_user_id)
         existing = await self._database.get(
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
         if existing is not None:
             return self._settlement(existing.value, replayed=True)
         if normalized_user_id != owner:
-            raise GatheringLeaderRequiredError(
-                f"本次{mode.kind}由领队统一结束"
-            )
+            raise GatheringLeaderRequiredError(f"本次{mode.kind}由领队统一结束")
         settled_at = _utc(now)
         started_at = _parse_time(session.get("开始时间"), "采集.开始时间")
         completed = self._completed_rounds(mode, started_at, settled_at)
@@ -341,9 +339,7 @@ class GatheringService:
         operations: list[StateMutation] = []
         summaries: list[dict[str, object]] = []
         for participant in participants:
-            raw = _mapping(
-                raw_results.get(participant), f"采集.用户结果.{participant}"
-            )
+            raw = _mapping(raw_results.get(participant), f"采集.用户结果.{participant}")
             items = _unlocked_items(raw.get("预定收获"), completed)
             inventory = await self._asset.plan_inventory_changes(
                 participant,
@@ -412,9 +408,7 @@ class GatheringService:
             raise GatheringStateError("同行道侣缺少实例")
         health = _number(instance.resources.get("血气"), "同行道侣.血气")
         return (
-            self._companion.definition(active.companion_id).name
-            if health > 0
-            else ""
+            self._companion.definition(active.companion_id).name if health > 0 else ""
         )
 
     def _precompute_items(
@@ -461,9 +455,7 @@ class GatheringService:
     async def _start_replay(
         self, mode: _Mode, owner: str, request_id: str
     ) -> GatheringStarted | None:
-        latest = await self._database.get(
-            StateAddress(owner, LATEST_STATE, mode.kind)
-        )
+        latest = await self._database.get(StateAddress(owner, LATEST_STATE, mode.kind))
         if latest is None:
             return None
         value = _mapping(latest.value, f"最近{mode.kind}")
@@ -550,6 +542,7 @@ def _parse_mode(kind: str, value: object) -> _Mode:
     seconds = _rule_positive_int(rules.get("每轮秒数"), f"{kind}.每轮秒数")
     maximum = _rule_positive_int(rules.get("最多轮数"), f"{kind}.最多轮数")
     duration = _rule_positive_int(rules.get("持续秒数"), f"{kind}.持续秒数")
+    participants = _rule_positive_int(rules.get("参与用户上限"), f"{kind}.参与用户上限")
     if seconds * maximum != duration:
         raise JsonDataError(f"{kind}持续秒数必须等于每轮秒数乘最多轮数")
     expected = {
@@ -557,7 +550,9 @@ def _parse_mode(kind: str, value: object) -> _Mode:
         "提前结束轮数": "向下取整",
         "品级来源": "随机奖励",
     }
-    if any(rules.get(key) != expected_value for key, expected_value in expected.items()):
+    if any(
+        rules.get(key) != expected_value for key, expected_value in expected.items()
+    ):
         raise JsonDataError(f"{kind}提前结束或品级来源不符合采集契约")
     companion = _rule_mapping(rules.get("同行道侣"), f"{kind}.同行道侣")
     if companion != {
@@ -584,12 +579,11 @@ def _parse_mode(kind: str, value: object) -> _Mode:
             rules.get("每单位每轮抽取次数"), f"{kind}.每单位每轮抽取次数"
         ),
         _rule_positive_int(rules.get("每次物品数量"), f"{kind}.每次物品数量"),
+        participants,
     )
 
 
-def _pool_names(
-    location: LocationView, resource_category: str
-) -> tuple[str, ...]:
+def _pool_names(location: LocationView, resource_category: str) -> tuple[str, ...]:
     if resource_category == "灵植":
         return location.plant_pool
     if resource_category == "灵矿":
@@ -637,14 +631,14 @@ def _unlocked_items(value: object, completed_rounds: int) -> tuple[GatheredItem,
     )
 
 
-def _participants(owner: str, values: tuple[str, ...]) -> tuple[str, ...]:
+def _participants(owner: str, values: tuple[str, ...], maximum: int) -> tuple[str, ...]:
     normalized = tuple(_user_id(value) for value in values) or (owner,)
     if normalized[0] != owner:
         raise ValueError("发起者必须位于参与用户首位")
     if len(normalized) != len(set(normalized)):
         raise ValueError("参与用户不能重复")
-    if len(normalized) > MAXIMUM_PARTICIPANTS:
-        raise ValueError(f"一次采集最多{MAXIMUM_PARTICIPANTS}名用户")
+    if len(normalized) > maximum:
+        raise ValueError(f"一次采集最多{maximum}名用户")
     return normalized
 
 

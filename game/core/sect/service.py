@@ -98,7 +98,9 @@ class SectService:
 
     async def membership(self, user_id: str) -> SectMember | None:
         self._require_initialized()
-        record = await self._database.get_shared_member(ENTITY_TYPE, _text(user_id, "user_id"))
+        record = await self._database.get_shared_member(
+            ENTITY_TYPE, _text(user_id, "user_id")
+        )
         if record is None:
             return None
         return SectMember(
@@ -111,7 +113,9 @@ class SectService:
 
     async def sect(self, sect_id: str) -> SectSnapshot | None:
         self._require_initialized()
-        record = await self._database.get_shared_entity(ENTITY_TYPE, _text(sect_id, "sect_id"))
+        record = await self._database.get_shared_entity(
+            ENTITY_TYPE, _text(sect_id, "sect_id")
+        )
         if record is None:
             return None
         value = record.value
@@ -128,9 +132,13 @@ class SectService:
         )
 
     async def members(self, sect_id: str) -> tuple[SectMember, ...]:
-        rows = await self._database.list_shared_members(ENTITY_TYPE, _text(sect_id, "sect_id"))
+        rows = await self._database.list_shared_members(
+            ENTITY_TYPE, _text(sect_id, "sect_id")
+        )
         return tuple(
-            SectMember(row.entity_id, row.user_id, row.role, row.join_order, row.version)
+            SectMember(
+                row.entity_id, row.user_id, row.role, row.join_order, row.version
+            )
             for row in rows
         )
 
@@ -221,7 +229,9 @@ class SectService:
                     _text(request_id, "request_id"),
                     "召集宗门同行",
                     (
-                        SharedEntityMutation(FOLLOW_ENTITY_TYPE, member.sect_id, value, 0),
+                        SharedEntityMutation(
+                            FOLLOW_ENTITY_TYPE, member.sect_id, value, 0
+                        ),
                         SharedMemberMutation(
                             FOLLOW_ENTITY_TYPE,
                             member.user_id,
@@ -234,7 +244,11 @@ class SectService:
                     {"宗门编号": member.sect_id},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
         return SectFollowSnapshot(member.sect_id, member.user_id, (member.user_id,), 1)
 
@@ -262,7 +276,9 @@ class SectService:
                     _text(request_id, "request_id"),
                     "加入宗门同行",
                     (
-                        SharedEntityMutation(FOLLOW_ENTITY_TYPE, group.sect_id, value, group.version),
+                        SharedEntityMutation(
+                            FOLLOW_ENTITY_TYPE, group.sect_id, value, group.version
+                        ),
                         SharedMemberMutation(
                             FOLLOW_ENTITY_TYPE,
                             user_id,
@@ -275,9 +291,15 @@ class SectService:
                     {"宗门编号": group.sect_id},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
-        return SectFollowSnapshot(group.sect_id, group.leader_user_id, members, group.version + 1)
+        return SectFollowSnapshot(
+            group.sect_id, group.leader_user_id, members, group.version + 1
+        )
 
     async def leave_follow(self, user_id: str, request_id: str) -> None:
         membership = await self.follow_membership(user_id)
@@ -289,7 +311,9 @@ class SectService:
             user_id, membership, user_id, request_id, "退出宗门同行"
         )
 
-    async def kick_follow(self, user_id: str, target_user_id: str, request_id: str) -> None:
+    async def kick_follow(
+        self, user_id: str, target_user_id: str, request_id: str
+    ) -> None:
         actor = await self._require_member(user_id)
         if actor.role != self._leader_role:
             raise SectConflictError("not_leader")
@@ -313,10 +337,14 @@ class SectService:
             SharedEntityMutation(FOLLOW_ENTITY_TYPE, group.sect_id, None, group.version)
         ]
         for member_id in group.member_user_ids:
-            record = await self._database.get_shared_member(FOLLOW_ENTITY_TYPE, member_id)
+            record = await self._database.get_shared_member(
+                FOLLOW_ENTITY_TYPE, member_id
+            )
             if record is not None:
                 operations.append(
-                    SharedMemberMutation(FOLLOW_ENTITY_TYPE, member_id, None, "", 1, record.version)
+                    SharedMemberMutation(
+                        FOLLOW_ENTITY_TYPE, member_id, None, "", 1, record.version
+                    )
                 )
         try:
             await self._database.commit(
@@ -328,7 +356,11 @@ class SectService:
                     {"宗门编号": group.sect_id},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
 
     async def _remove_follow_member(
@@ -345,8 +377,15 @@ class SectService:
             raise SectConflictError("sect_changed")
         members = tuple(value for value in group.member_user_ids if value != target)
         operations: list[object] = [
-            SharedEntityMutation(FOLLOW_ENTITY_TYPE, group.sect_id, _follow_value(group, members), group.version),
-            SharedMemberMutation(FOLLOW_ENTITY_TYPE, target, None, "", 1, record.version),
+            SharedEntityMutation(
+                FOLLOW_ENTITY_TYPE,
+                group.sect_id,
+                _follow_value(group, members),
+                group.version,
+            ),
+            SharedMemberMutation(
+                FOLLOW_ENTITY_TYPE, target, None, "", 1, record.version
+            ),
         ]
         try:
             await self._database.commit(
@@ -358,13 +397,19 @@ class SectService:
                     {"宗门编号": group.sect_id, "目标": target},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
 
     async def pending_invitation(
         self, user_id: str, *, now: datetime | None = None
     ) -> SectInvitation | None:
-        snapshot = await self._database.get(StateAddress(_text(user_id, "user_id"), INVITATION_STATE, MAIN_KEY))
+        snapshot = await self._database.get(
+            StateAddress(_text(user_id, "user_id"), INVITATION_STATE, MAIN_KEY)
+        )
         if snapshot is None:
             return None
         value = snapshot.value
@@ -392,9 +437,15 @@ class SectService:
             raise SectConflictError("actor_busy")
         if await self.membership(user) is not None:
             raise SectConflictError("already_member")
-        if await self._database.get_shared_entity_by_name(ENTITY_TYPE, normalized_name) is not None:
+        if (
+            await self._database.get_shared_entity_by_name(ENTITY_TYPE, normalized_name)
+            is not None
+        ):
             raise SectConflictError("name_occupied")
-        if await self._database.shared_location_at(ENTITY_TYPE, entrance_xy) is not None:
+        if (
+            await self._database.shared_location_at(ENTITY_TYPE, entrance_xy)
+            is not None
+        ):
             raise SectConflictError("entrance_occupied")
         sect_id = _id("sect", user, request)
         cave_id = _id("cave", sect_id, normalized_name)
@@ -414,7 +465,9 @@ class SectService:
                     "创建宗门",
                     (
                         SharedEntityMutation(ENTITY_TYPE, sect_id, value, 0),
-                        SharedMemberMutation(ENTITY_TYPE, user, sect_id, self._leader_role, 1, 0),
+                        SharedMemberMutation(
+                            ENTITY_TYPE, user, sect_id, self._leader_role, 1, 0
+                        ),
                         SharedLocationMutation(ENTITY_TYPE, sect_id, entrance_xy, 0),
                     ),
                     {"宗门编号": sect_id, "名称": normalized_name},
@@ -427,7 +480,9 @@ class SectService:
             raise SectConflictError("sect_changed") from exc
         return SectSnapshot(sect_id, normalized_name, user, cave_id, entrance_xy, 1)
 
-    async def invite(self, inviter: str, target: str, request_id: str, *, now: datetime | None = None) -> SectInvitation:
+    async def invite(
+        self, inviter: str, target: str, request_id: str, *, now: datetime | None = None
+    ) -> SectInvitation:
         self._require_initialized()
         inviter = _text(inviter, "inviter_user_id")
         target = _text(target, "target_user_id")
@@ -440,7 +495,9 @@ class SectService:
             raise SectConflictError("not_leader")
         if await self.membership(target) is not None:
             raise SectConflictError("target_already_member")
-        existing = await self._database.get(StateAddress(target, INVITATION_STATE, MAIN_KEY))
+        existing = await self._database.get(
+            StateAddress(target, INVITATION_STATE, MAIN_KEY)
+        )
         current = _utc(now)
         if existing is not None:
             pending = await self.pending_invitation(target, now=current)
@@ -463,15 +520,33 @@ class SectService:
                     inviter,
                     _text(request_id, "request_id"),
                     "宗门邀请",
-                    (StateMutation(target, INVITATION_STATE, MAIN_KEY, value, existing.version if existing else 0),),
+                    (
+                        StateMutation(
+                            target,
+                            INVITATION_STATE,
+                            MAIN_KEY,
+                            value,
+                            existing.version if existing else 0,
+                        ),
+                    ),
                     {"宗门编号": sect.sect_id, "目标": target},
                 )
             )
         except (StateConflictError, IdempotencyConflictError) as exc:
             raise SectConflictError("sect_changed") from exc
-        return SectInvitation(sect.sect_id, sect.name, inviter, target, expires, (existing.version if existing else 0) + 1, False)
+        return SectInvitation(
+            sect.sect_id,
+            sect.name,
+            inviter,
+            target,
+            expires,
+            (existing.version if existing else 0) + 1,
+            False,
+        )
 
-    async def accept(self, user_id: str, request_id: str, *, now: datetime | None = None) -> SectSnapshot:
+    async def accept(
+        self, user_id: str, request_id: str, *, now: datetime | None = None
+    ) -> SectSnapshot:
         target = _text(user_id, "user_id")
         invitation = await self.pending_invitation(target, now=now)
         if invitation is None:
@@ -492,14 +567,29 @@ class SectService:
                     _text(request_id, "request_id"),
                     "接受宗门邀请",
                     (
-                        SharedEntityMutation(ENTITY_TYPE, sect.sect_id, value, sect.version),
-                        SharedMemberMutation(ENTITY_TYPE, target, sect.sect_id, self._member_role, len(members) + 1, 0),
-                        StateMutation(target, INVITATION_STATE, MAIN_KEY, None, invitation.version),
+                        SharedEntityMutation(
+                            ENTITY_TYPE, sect.sect_id, value, sect.version
+                        ),
+                        SharedMemberMutation(
+                            ENTITY_TYPE,
+                            target,
+                            sect.sect_id,
+                            self._member_role,
+                            len(members) + 1,
+                            0,
+                        ),
+                        StateMutation(
+                            target, INVITATION_STATE, MAIN_KEY, None, invitation.version
+                        ),
                     ),
                     {"宗门编号": sect.sect_id, "邀请者": invitation.inviter_user_id},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
         return sect
 
@@ -514,7 +604,11 @@ class SectService:
                     target,
                     _text(request_id, "request_id"),
                     "拒绝宗门邀请",
-                    (StateMutation(target, INVITATION_STATE, MAIN_KEY, None, invitation.version),),
+                    (
+                        StateMutation(
+                            target, INVITATION_STATE, MAIN_KEY, None, invitation.version
+                        ),
+                    ),
                     {"宗门编号": invitation.sect_id},
                 )
             )
@@ -538,7 +632,9 @@ class SectService:
             raise SectConflictError("cannot_remove_leader")
         await self._commit_member_delete(member, request_id, "逐出宗门")
 
-    async def transfer(self, user_id: str, target: str, request_id: str) -> SectSnapshot:
+    async def transfer(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectSnapshot:
         actor = await self._require_member(user_id)
         if actor.role != self._leader_role:
             raise SectConflictError("not_leader")
@@ -553,9 +649,25 @@ class SectService:
         value = dict(sect_record.value)
         value["宗主"] = target
         operations = [
-            SharedEntityMutation(ENTITY_TYPE, actor.sect_id, value, sect_record.version),
-            SharedMemberMutation(ENTITY_TYPE, actor.user_id, actor.sect_id, self._member_role, actor.join_order, actor.version),
-            SharedMemberMutation(ENTITY_TYPE, target, actor.sect_id, self._leader_role, member.join_order, member.version),
+            SharedEntityMutation(
+                ENTITY_TYPE, actor.sect_id, value, sect_record.version
+            ),
+            SharedMemberMutation(
+                ENTITY_TYPE,
+                actor.user_id,
+                actor.sect_id,
+                self._member_role,
+                actor.join_order,
+                actor.version,
+            ),
+            SharedMemberMutation(
+                ENTITY_TYPE,
+                target,
+                actor.sect_id,
+                self._leader_role,
+                member.join_order,
+                member.version,
+            ),
         ]
         operations.extend(await self._follow_delete_operations(actor.sect_id))
         try:
@@ -568,21 +680,36 @@ class SectService:
                     {"宗门编号": actor.sect_id, "新宗主": target},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
-        return SectSnapshot(sect_record.entity_id, _text(value.get("名称"), "宗门.名称"), target, _text(value.get("洞天编号"), "宗门.洞天编号"), tuple(value["入口坐标"]), sect_record.version + 1)
+        return SectSnapshot(
+            sect_record.entity_id,
+            _text(value.get("名称"), "宗门.名称"),
+            target,
+            _text(value.get("洞天编号"), "宗门.洞天编号"),
+            tuple(value["入口坐标"]),
+            sect_record.version + 1,
+        )
 
     async def disband(self, user_id: str, request_id: str) -> None:
         member = await self._require_member(user_id)
         if member.role != self._leader_role:
             raise SectConflictError("not_leader")
-        sect_record = await self._database.get_shared_entity(ENTITY_TYPE, member.sect_id)
+        sect_record = await self._database.get_shared_entity(
+            ENTITY_TYPE, member.sect_id
+        )
         location = await self._database.get_shared_location(ENTITY_TYPE, member.sect_id)
         if sect_record is None or location is None:
             raise SectConflictError("sect_changed")
         members = await self.members(member.sect_id)
         operations = [
-            SharedEntityMutation(ENTITY_TYPE, member.sect_id, None, sect_record.version),
+            SharedEntityMutation(
+                ENTITY_TYPE, member.sect_id, None, sect_record.version
+            ),
             SharedLocationMutation(ENTITY_TYPE, member.sect_id, None, location.version),
         ] + [
             SharedMemberMutation(ENTITY_TYPE, value.user_id, None, "", 1, value.version)
@@ -590,11 +717,25 @@ class SectService:
         ]
         operations.extend(await self._follow_delete_operations(member.sect_id))
         try:
-            await self._database.commit(TransactionCommand(member.user_id, _text(request_id, "request_id"), "解散宗门", tuple(operations), {"宗门编号": member.sect_id}))
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+            await self._database.commit(
+                TransactionCommand(
+                    member.user_id,
+                    _text(request_id, "request_id"),
+                    "解散宗门",
+                    tuple(operations),
+                    {"宗门编号": member.sect_id},
+                )
+            )
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
 
-    async def _commit_member_delete(self, member: SectMember, request_id: str, business_type: str) -> None:
+    async def _commit_member_delete(
+        self, member: SectMember, request_id: str, business_type: str
+    ) -> None:
         sect = await self.sect(member.sect_id)
         if sect is None:
             raise SectConflictError("sect_changed")
@@ -650,7 +791,11 @@ class SectService:
                     {"宗门编号": member.sect_id, "目标": member.user_id},
                 )
             )
-        except (SharedConstraintError, StateConflictError, IdempotencyConflictError) as exc:
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
             raise SectConflictError("sect_changed") from exc
 
     async def _follow_delete_operations(
@@ -714,7 +859,11 @@ def _positive_int(value: object, label: str) -> int:
 
 def _utc(value: datetime | None) -> datetime:
     current = value or datetime.now(timezone.utc)
-    return current.replace(tzinfo=timezone.utc) if current.tzinfo is None else current.astimezone(timezone.utc)
+    return (
+        current.replace(tzinfo=timezone.utc)
+        if current.tzinfo is None
+        else current.astimezone(timezone.utc)
+    )
 
 
 def _time(value: object, label: str) -> datetime:

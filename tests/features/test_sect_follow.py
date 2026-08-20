@@ -69,14 +69,21 @@ def _services(tmp_path: Path):
     follow_feature.initialize()
     travel = TravelFeature(world, character, location, action_group)
     travel.initialize()
-    return create, team, sect, action_group, location, sect_feature, follow_feature, travel
+    return (
+        create,
+        team,
+        sect,
+        action_group,
+        location,
+        sect_feature,
+        follow_feature,
+        travel,
+    )
 
 
 def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
     _run(
-        create.create(
-            CreateCharacterRequest(user_id, f"create-{user_id}", name, "男")
-        )
+        create.create(CreateCharacterRequest(user_id, f"create-{user_id}", name, "男"))
     )
 
 
@@ -100,7 +107,9 @@ def test_assemble_join_travel_and_end_follow(tmp_path: Path) -> None:
         _run(action_group.participants("qq-2"))
 
     public = _run(sect.public_follow_many(("qq-1", "qq-2")))
-    assert [(value.following, value.leading, value.member_count) for value in public] == [
+    assert [
+        (value.following, value.leading, value.member_count) for value in public
+    ] == [
         (True, True, 2),
         (True, False, 2),
     ]
@@ -113,7 +122,9 @@ def test_assemble_join_travel_and_end_follow(tmp_path: Path) -> None:
     assert _run(action_group.participants("qq-1")) == ("qq-1",)
 
 
-def test_team_and_sect_follow_are_rejected_as_conflicting_states(tmp_path: Path) -> None:
+def test_team_and_sect_follow_are_rejected_as_conflicting_states(
+    tmp_path: Path,
+) -> None:
     create, team, _, _, _, sect_feature, follow, _ = _services(tmp_path)
     _create(create, "qq-1", "林远")
     _create(create, "qq-2", "白川")

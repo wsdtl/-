@@ -56,7 +56,13 @@ class HostingService:
             raise JsonDataError("托管.同行类型必须完整包含personal、team、sect")
         if set(role_names) != {"personal", "leader", "follower"}:
             raise JsonDataError("托管.托管身份定义不完整")
-        if context_fields != {"托管编号", "托管身份", "托管领队", "同行类型", "同行编号"}:
+        if context_fields != {
+            "托管编号",
+            "托管身份",
+            "托管领队",
+            "同行类型",
+            "同行编号",
+        }:
             raise JsonDataError("托管.上下文字段定义不完整")
         for name, state_id in control_states.items():
             state = self._data.entity("人物状态", state_id)
@@ -102,10 +108,14 @@ class HostingService:
         session_id = f"host-{user_id}-{request_id}"
         operations = []
         for snapshot in snapshots:
-            role = self._role_names["personal"] if group.mode == "personal" else (
-                self._role_names["leader"]
-                if snapshot.user_id == group.leader_user_id
-                else self._role_names["follower"]
+            role = (
+                self._role_names["personal"]
+                if group.mode == "personal"
+                else (
+                    self._role_names["leader"]
+                    if snapshot.user_id == group.leader_user_id
+                    else self._role_names["follower"]
+                )
             )
             plan = await self._player_state.plan_transition(
                 StateTransitionCommand(
@@ -116,7 +126,9 @@ class HostingService:
                     {
                         "托管编号": session_id,
                         "托管身份": role,
-                        "托管领队": group.leader_user_id if group.mode != "personal" else None,
+                        "托管领队": group.leader_user_id
+                        if group.mode != "personal"
+                        else None,
                         "同行类型": self._mode_names[group.mode],
                         "同行编号": group.group_id or None,
                     },
@@ -138,7 +150,9 @@ class HostingService:
                 },
             )
         )
-        return HostingSession(session_id, group.mode, group.leader_user_id, group.participant_user_ids)
+        return HostingSession(
+            session_id, group.mode, group.leader_user_id, group.participant_user_ids
+        )
 
     async def cancel(self, user_id: str, request_id: str) -> HostingSession:
         self._require_initialized()
@@ -157,14 +171,15 @@ class HostingService:
         hosting = [
             snapshot
             for snapshot in snapshots
-            if snapshot.states[CONTROL_TYPE].state_id
-            == self._control_states["托管中"]
+            if snapshot.states[CONTROL_TYPE].state_id == self._control_states["托管中"]
         ]
         if not hosting:
             raise HostingError("not_hosting")
         session_id = str(hosting[0].states[CONTROL_TYPE].context.get("托管编号") or "")
         self._validate_session(group, hosting, session_id)
-        actor_snapshot = next(snapshot for snapshot in snapshots if snapshot.user_id == user_id)
+        actor_snapshot = next(
+            snapshot for snapshot in snapshots if snapshot.user_id == user_id
+        )
         actor_context = actor_snapshot.states[CONTROL_TYPE].context
         leader = str(actor_context.get("托管领队") or user_id)
         if group.mode != "personal" and user_id != leader:
@@ -199,15 +214,16 @@ class HostingService:
                 },
             )
         )
-        return HostingSession(session_id, group.mode, group.leader_user_id, group.participant_user_ids)
+        return HostingSession(
+            session_id, group.mode, group.leader_user_id, group.participant_user_ids
+        )
 
     async def current(self, user_id: str) -> HostingSession | None:
         self._require_initialized()
         snapshot = await self._player_state.current(user_id)
         if (
             snapshot is None
-            or snapshot.states[CONTROL_TYPE].state_id
-            != self._control_states["托管中"]
+            or snapshot.states[CONTROL_TYPE].state_id != self._control_states["托管中"]
         ):
             return None
         context = snapshot.states[CONTROL_TYPE].context
@@ -222,7 +238,9 @@ class HostingService:
             if value.states[CONTROL_TYPE].state_id == self._control_states["托管中"]
         ]
         self._validate_session(group, hosting, session_id)
-        return HostingSession(session_id, group.mode, group.leader_user_id, group.participant_user_ids)
+        return HostingSession(
+            session_id, group.mode, group.leader_user_id, group.participant_user_ids
+        )
 
     def _validate_session(self, group, snapshots, session_id: str) -> None:
         if not session_id or len(snapshots) != len(group.participant_user_ids):
@@ -292,6 +310,10 @@ def _strings(value: object, label: str) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise JsonDataError(f"{label}必须是字符串数组")
     result = tuple(str(item or "").strip() for item in value)
-    if not result or any(not item for item in result) or len(result) != len(set(result)):
+    if (
+        not result
+        or any(not item for item in result)
+        or len(result) != len(set(result))
+    ):
         raise JsonDataError(f"{label}不能包含空值或重复值")
     return result

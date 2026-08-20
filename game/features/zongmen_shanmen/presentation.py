@@ -10,7 +10,9 @@ from game.core.data import JsonDataError, JsonDataService
 from .contracts import GateAction, GateCopy
 
 
-def load_presentation(data: JsonDataService) -> tuple[GateCopy, tuple[Mapping[str, str], ...]]:
+def load_presentation(
+    data: JsonDataService,
+) -> tuple[GateCopy, tuple[Mapping[str, str], ...]]:
     dataset = data.dataset("山门展示")
     raw_text = dataset.get("文本")
     if not isinstance(raw_text, Mapping):
@@ -18,7 +20,10 @@ def load_presentation(data: JsonDataService) -> tuple[GateCopy, tuple[Mapping[st
     text = MappingProxyType(
         {
             str(section): MappingProxyType(
-                {str(key): str(value) for key, value in _mapping(raw, str(section)).items()}
+                {
+                    str(key): str(value)
+                    for key, value in _mapping(raw, str(section)).items()
+                }
             )
             for section, raw in raw_text.items()
         }
@@ -30,7 +35,10 @@ def load_presentation(data: JsonDataService) -> tuple[GateCopy, tuple[Mapping[st
         raise JsonDataError("山门按钮必须是字典列表")
     buttons = tuple(
         MappingProxyType(
-            {key: str(_mapping(raw, "山门按钮[]").get(key) or "").strip() for key in ("位置", "编号", "名称", "命令", "行为", "样式")}
+            {
+                key: str(_mapping(raw, "山门按钮[]").get(key) or "").strip()
+                for key in ("位置", "编号", "名称", "命令", "行为", "样式")
+            }
         )
         for raw in raw_buttons
     )
@@ -41,7 +49,9 @@ def load_presentation(data: JsonDataService) -> tuple[GateCopy, tuple[Mapping[st
     return GateCopy(text), buttons
 
 
-def actions(buttons: tuple[Mapping[str, str], ...], position: str) -> tuple[GateAction, ...]:
+def actions(
+    buttons: tuple[Mapping[str, str], ...], position: str
+) -> tuple[GateAction, ...]:
     return tuple(
         GateAction(
             button["编号"],

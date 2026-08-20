@@ -159,6 +159,8 @@ class PositionFeature:
         self._require_initialized()
         current = await self._location.current(user_id)
         location = self._world.locate(LocationQuery(xy=current.xy))
+        if current.space_type != "地表":
+            return self.position_actions(())
         return self.position_actions(
             location.available_functions,
             plant_pool=location.plant_pool,
@@ -318,7 +320,9 @@ class PositionFeature:
                 current.location_name,
                 exclude_companion_ids=(active.companion_id,) if active else (),
             )
-            if page == 1 and current.companion_pool
+            if page == 1
+            and candidates.origin.space_type == "地表"
+            and current.companion_pool
             else ()
         )
         return NearbyCultivatorPage(

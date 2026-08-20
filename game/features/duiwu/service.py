@@ -56,9 +56,7 @@ class TeamFeature:
         self.copy()
         return actions(self._buttons, page)
 
-    async def page(
-        self, user_id: str, *, now: datetime | None = None
-    ) -> TeamPage:
+    async def page(self, user_id: str, *, now: datetime | None = None) -> TeamPage:
         self.copy()
         current_time = _utc(now)
         try:
@@ -71,7 +69,9 @@ class TeamFeature:
                 inviter = await self._profile(invitation.inviter_user_id)
                 remaining = max(
                     1,
-                    math.ceil((invitation.expires_at - current_time).total_seconds() / 60),
+                    math.ceil(
+                        (invitation.expires_at - current_time).total_seconds() / 60
+                    ),
                 )
                 return TeamPage(
                     "待处理邀请",
@@ -178,9 +178,7 @@ class TeamFeature:
             raise TeamFeatureError("invitation_expired")
         return invitation
 
-    async def _resolve_nearby(
-        self, user_id: str, query: str
-    ) -> CharacterPublicProfile:
+    async def _resolve_nearby(self, user_id: str, query: str) -> CharacterPublicProfile:
         normalized = str(query or "").strip()
         if not normalized:
             raise TeamFeatureError("target_missing")
@@ -203,9 +201,7 @@ class TeamFeature:
             raise TeamFeatureError("target_ambiguous")
         return matches[0]
 
-    async def _resolve_member(
-        self, user_id: str, query: str
-    ) -> CharacterPublicProfile:
+    async def _resolve_member(self, user_id: str, query: str) -> CharacterPublicProfile:
         normalized = str(query or "").strip()
         if not normalized:
             raise TeamFeatureError("target_missing")

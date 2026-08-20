@@ -42,8 +42,6 @@ SESSION_STATE = "retreat_session"
 LATEST_STATE = "retreat_latest"
 SETTLEMENT_STATE = "retreat_settlement"
 LATEST_KEY = "main"
-RETREAT_STATE_ID = "520004"
-MAXIMUM_PARTICIPANTS = 15
 
 
 class RetreatService:
@@ -74,6 +72,8 @@ class RetreatService:
         self._pool = pool
         self._initialized = False
         self._rules: Mapping[str, object] = {}
+        self._maximum_participants = 0
+        self._state_id = ""
         self._experience_base = 0
         self._experience_per_level = 0
         self._health_ratio = 0.0
@@ -89,6 +89,12 @@ class RetreatService:
         duration = _positive_int(self._rules.get("持续秒数"), "闭关.持续秒数")
         if seconds * maximum != duration:
             raise JsonDataError("闭关持续秒数必须等于每轮秒数乘最多轮数")
+        self._maximum_participants = _positive_int(
+            self._rules.get("参与用户上限"), "闭关.参与用户上限"
+        )
+        self._state_id = _text(self._rules.get("行为状态"), "闭关.行为状态")
+        if self._player_state.state_type(self._state_id) != "行为":
+            raise JsonDataError("闭关.行为状态必须引用行为状态")
         if self._rules.get("允许提前出关") is not True:
             raise JsonDataError("当前闭关实现要求允许提前出关")
         if self._rules.get("提前出关轮数") != "向下取整":
@@ -147,7 +153,9 @@ class RetreatService:
     async def start(self, command: RetreatStartCommand) -> RetreatStarted:
         self._require_initialized()
         owner = _user_id(command.owner_user_id)
-        participants = _participants(owner, command.participant_user_ids)
+        participants = _participants(
+            owner, command.participant_user_ids, self._maximum_participants
+        )
         replay = await self._start_replay(owner, command.request_id)
         if replay is not None:
             return replay
@@ -165,8 +173,13 @@ class RetreatService:
         ).hexdigest()[:24]
 
         locations = [await self._location.current(user_id) for user_id in participants]
-        if len({value.xy for value in locations}) != 1:
-            raise RetreatConflictError("同行修士必须位于同一坐标")
+        if (
+            len({(value.space_type, value.space_id, value.xy) for value in locations})
+            != 1
+        ):
+            raise RetreatConflictError("同行修士必须位于同一空间和坐标")
+        if locations[0].space_type != "地表":
+            raise RetreatConflictError("宗门洞天内不能进行闭关")
         location = self._world.locate(LocationQuery(xy=locations[0].xy))
         if not location.location_key or "闭关" not in location.available_functions:
             raise RetreatConflictError("当前位置不能闭关")
@@ -185,7 +198,7 @@ class RetreatService:
                         user_id=user_id,
                         request_id=command.request_id,
                         state_type="行为",
-                        target_state_id=RETREAT_STATE_ID,
+                        target_state_id=self._state_id,
                         context={
                             "闭关编号": session_id,
                             "发起者": owner,
@@ -613,14 +626,14 @@ def _insight_outcome(value: object) -> str:
     return outcome
 
 
-def _participants(owner: str, values: tuple[str, ...]) -> tuple[str, ...]:
+def _participants(owner: str, values: tuple[str, ...], maximum: int) -> tuple[str, ...]:
     normalized = tuple(_user_id(value) for value in values) or (owner,)
     if normalized[0] != owner:
         raise ValueError("发起者必须位于参与用户首位")
     if len(normalized) != len(set(normalized)):
         raise ValueError("参与用户不能重复")
-    if len(normalized) > MAXIMUM_PARTICIPANTS:
-        raise ValueError(f"一次闭关最多{MAXIMUM_PARTICIPANTS}名用户")
+    if len(normalized) > maximum:
+        raise ValueError(f"一次闭关最多{maximum}名用户")
     return normalized
 
 

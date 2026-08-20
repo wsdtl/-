@@ -82,9 +82,7 @@ class HerbGatheringFeature:
         self, user_id: str, request_id: str, *, now: datetime | None = None
     ) -> GatheringSettlement:
         try:
-            return await self._gathering.settle(
-                KIND, user_id, request_id, now=now
-            )
+            return await self._gathering.settle(KIND, user_id, request_id, now=now)
         except (GatheringError, ValueError) as exc:
             raise HerbGatheringFeatureError(str(exc)) from exc
 

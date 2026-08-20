@@ -27,7 +27,7 @@ from . import reply
             "宗门 转让 角色名或user_id",
             "宗门 解散",
         ),
-        side_effect="宗门入口取当前地表坐标；建筑、仓库和宗门同行另行开放",
+        side_effect="宗门入口取当前地表坐标；建筑、仓库另行开放",
         order=36,
     ),
 )

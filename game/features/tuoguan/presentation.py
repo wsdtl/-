@@ -17,7 +17,10 @@ def load_presentation(data: JsonDataService) -> HostingCopy:
     text = MappingProxyType(
         {
             str(section): MappingProxyType(
-                {str(key): str(value) for key, value in _mapping(value, str(section)).items()}
+                {
+                    str(key): str(value)
+                    for key, value in _mapping(value, str(section)).items()
+                }
             )
             for section, value in raw.items()
         }

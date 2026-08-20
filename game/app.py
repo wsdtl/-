@@ -488,11 +488,25 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         database,
     )
     tongquetai.initialize()
-    guiyuan = GuiyuanFeature(data, medicine, companion, asset, player_state, location, world, database)
+    guiyuan = GuiyuanFeature(
+        data, medicine, companion, asset, player_state, location, world, database
+    )
     guiyuan.initialize()
-    butian = ButianFeature(data, medicine, character, companion, asset, player_state, location, world, database)
+    butian = ButianFeature(
+        data,
+        medicine,
+        character,
+        companion,
+        asset,
+        player_state,
+        location,
+        world,
+        database,
+    )
     butian.initialize()
-    yixing = YixingFeature(data, medicine, character, asset, player_state, location, world, database)
+    yixing = YixingFeature(
+        data, medicine, character, asset, player_state, location, world, database
+    )
     yixing.initialize()
     zongmen = SectFeature(data, sect, character, location, world, player_state)
     zongmen.initialize()
@@ -500,9 +514,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         data, sect, character, location, player_state, team
     )
     zongmen_tongxing.initialize()
-    zongmen_shanmen = GateFeature(
-        data, sect, location, player_state, action_group
-    )
+    zongmen_shanmen = GateFeature(data, sect, location, player_state, action_group)
     zongmen_shanmen.initialize()
     tuoguan = HostingFeature(data, hosting)
     tuoguan.initialize()

@@ -22,7 +22,15 @@ from .presentation import actions, load_presentation
 
 
 class SectFeature:
-    def __init__(self, data, sect: SectService, character: CharacterService, location: LocationService, world: WorldService, player_state: PlayerStateService) -> None:
+    def __init__(
+        self,
+        data,
+        sect: SectService,
+        character: CharacterService,
+        location: LocationService,
+        world: WorldService,
+        player_state: PlayerStateService,
+    ) -> None:
         self._data = data
         self._sect = sect
         self._character = character
@@ -53,15 +61,24 @@ class SectFeature:
         if member is None:
             if invitation is not None and not invitation.expired:
                 current = now or datetime.now(timezone.utc)
-                remaining = max(1, math.ceil((invitation.expires_at - current).total_seconds() / 60))
+                remaining = max(
+                    1, math.ceil((invitation.expires_at - current).total_seconds() / 60)
+                )
                 inviter = await self._profile(invitation.inviter_user_id)
-                return SectPage("待处理邀请", invitation_name=invitation.sect_name, invitation_inviter_name=inviter.name, invitation_minutes=remaining)
+                return SectPage(
+                    "待处理邀请",
+                    invitation_name=invitation.sect_name,
+                    invitation_inviter_name=inviter.name,
+                    invitation_minutes=remaining,
+                )
             return SectPage("未加入")
         sect = await self._sect.sect(member.sect_id)
         if sect is None:
             raise SectFeatureError("宗门变化")
         members = await self._sect.members(member.sect_id)
-        profiles = await self._character.public_profiles(tuple(value.user_id for value in members))
+        profiles = await self._character.public_profiles(
+            tuple(value.user_id for value in members)
+        )
         names = {value.user_id: value.name for value in profiles}
         place = self._world.locate(LocationQuery(xy=sect.entrance_xy))
         return SectPage(
@@ -70,19 +87,30 @@ class SectFeature:
             names.get(sect.leader_user_id, sect.leader_user_id),
             f"{place.location_name} · ({sect.entrance_xy[0]}, {sect.entrance_xy[1]})",
             sect.cave_id,
-            tuple(SectMemberView(value.user_id, names.get(value.user_id, value.user_id), value.role) for value in members),
+            tuple(
+                SectMemberView(
+                    value.user_id, names.get(value.user_id, value.user_id), value.role
+                )
+                for value in members
+            ),
         )
 
-    async def create(self, user_id: str, request_id: str, name: str) -> SectOperationResult:
+    async def create(
+        self, user_id: str, request_id: str, name: str
+    ) -> SectOperationResult:
         await self._require_same_location_target(user_id, user_id)
         current = await self._location.current(user_id)
+        if current.space_type != "地表":
+            raise SectFeatureError("not_surface")
         try:
             sect = await self._sect.create(user_id, request_id, name, current.xy)
         except SectConflictError as exc:
             raise SectFeatureError(exc.code) from exc
         return SectOperationResult("创建", sect.name, await self.page(user_id))
 
-    async def invite(self, user_id: str, target: str, request_id: str) -> SectOperationResult:
+    async def invite(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectOperationResult:
         profile = await self._resolve_nearby(user_id, target)
         await self._require_mutable(profile.user_id)
         try:
@@ -121,7 +149,9 @@ class SectFeature:
             raise SectFeatureError(exc.code) from exc
         return SectOperationResult("退出", "", await self.page(user_id))
 
-    async def kick(self, user_id: str, target: str, request_id: str) -> SectOperationResult:
+    async def kick(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectOperationResult:
         member = await self._resolve_member(user_id, target)
         try:
             await self._sect.kick(user_id, member.user_id, request_id)
@@ -129,7 +159,9 @@ class SectFeature:
             raise SectFeatureError(exc.code) from exc
         return SectOperationResult("逐出", member.name, await self.page(user_id))
 
-    async def transfer(self, user_id: str, target: str, request_id: str) -> SectOperationResult:
+    async def transfer(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectOperationResult:
         member = await self._resolve_member(user_id, target)
         try:
             await self._sect.transfer(user_id, member.user_id, request_id)
@@ -149,7 +181,9 @@ class SectFeature:
         if not normalized:
             raise SectFeatureError("target_missing")
         nearby = await self._location.nearby_players(user_id)
-        same_place = tuple(value.user_id for value in nearby.values if value.xy == nearby.origin.xy)
+        same_place = tuple(
+            value.user_id for value in nearby.values if value.xy == nearby.origin.xy
+        )
         profiles = await self._profiles(same_place)
         exact = next((value for value in profiles if value.user_id == normalized), None)
         if exact is not None:
@@ -168,7 +202,9 @@ class SectFeature:
         normalized = str(query or "").strip()
         if not normalized:
             raise SectFeatureError("target_missing")
-        profiles = await self._profiles(tuple(value.user_id for value in await self._sect.members(member.sect_id)))
+        profiles = await self._profiles(
+            tuple(value.user_id for value in await self._sect.members(member.sect_id))
+        )
         exact = next((value for value in profiles if value.user_id == normalized), None)
         if exact is not None:
             return exact

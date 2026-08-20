@@ -76,15 +76,23 @@ class GateFeature:
         if group.mode != "personal" and group.leader_user_id != user_id:
             raise GateFeatureError("not_leader")
         locations = [
-            await self._location.current(value)
-            for value in group.participant_user_ids
+            await self._location.current(value) for value in group.participant_user_ids
         ]
         await self._require_mutable_group(group.participant_user_ids)
-        if any(value.space_type != "地表" or value.xy != sect.entrance_xy for value in locations):
+        if any(
+            value.space_type != "地表" or value.xy != sect.entrance_xy
+            for value in locations
+        ):
             raise GateFeatureError("not_at_gate")
         try:
             await self._location.change_space(
-                SpaceChangeCommand(user_id, request_id, group.participant_user_ids, self._space_type, sect.cave_id)
+                SpaceChangeCommand(
+                    user_id,
+                    request_id,
+                    group.participant_user_ids,
+                    self._space_type,
+                    sect.cave_id,
+                )
             )
         except LocationConflictError as exc:
             raise GateFeatureError("space_conflict") from exc
@@ -97,15 +105,19 @@ class GateFeature:
         if group.mode != "personal" and group.leader_user_id != user_id:
             raise GateFeatureError("not_leader")
         locations = [
-            await self._location.current(value)
-            for value in group.participant_user_ids
+            await self._location.current(value) for value in group.participant_user_ids
         ]
         await self._require_mutable_group(group.participant_user_ids)
-        if any(value.space_type != self._space_type or value.space_id != sect.cave_id for value in locations):
+        if any(
+            value.space_type != self._space_type or value.space_id != sect.cave_id
+            for value in locations
+        ):
             raise GateFeatureError("not_in_cave")
         try:
             await self._location.change_space(
-                SpaceChangeCommand(user_id, request_id, group.participant_user_ids, "地表", "")
+                SpaceChangeCommand(
+                    user_id, request_id, group.participant_user_ids, "地表", ""
+                )
             )
         except LocationConflictError as exc:
             raise GateFeatureError("space_conflict") from exc
@@ -128,7 +140,9 @@ class GateFeature:
             raise GateFeatureError("sect_changed")
         return sect
 
-    async def _require_group_same_sect(self, user_ids: tuple[str, ...], sect_id: str) -> None:
+    async def _require_group_same_sect(
+        self, user_ids: tuple[str, ...], sect_id: str
+    ) -> None:
         for user_id in user_ids:
             member = await self._sect.membership(user_id)
             if member is None or member.sect_id != sect_id:

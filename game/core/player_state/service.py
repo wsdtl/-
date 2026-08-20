@@ -115,6 +115,16 @@ class PlayerStateService:
             guard_rule_count=len(self._guard_rules),
         )
 
+    def state_type(self, state_id: str) -> str:
+        """返回一个状态编号所属的状态槽类型。"""
+
+        self._require_initialized()
+        normalized = _text(state_id, "状态编号")
+        try:
+            return self._state_types_by_id[normalized]
+        except KeyError as exc:
+            raise PlayerStateRuleError(f"未知状态编号：{normalized}") from exc
+
     def initial_mutation(self, user_id: str) -> StateMutation:
         """返回创建人物总事务所需的三槽初始快照。"""
 

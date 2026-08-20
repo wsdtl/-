@@ -77,9 +77,7 @@ def _services(tmp_path: Path):
 
 def _create(create: CreateCharacterFeature, user_id: str, name: str) -> None:
     _run(
-        create.create(
-            CreateCharacterRequest(user_id, f"create-{user_id}", name, "男")
-        )
+        create.create(CreateCharacterRequest(user_id, f"create-{user_id}", name, "男"))
     )
 
 

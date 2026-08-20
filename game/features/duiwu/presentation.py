@@ -19,7 +19,10 @@ def load_presentation(
     text = MappingProxyType(
         {
             str(section): MappingProxyType(
-                {str(key): str(value) for key, value in _mapping(raw, str(section)).items()}
+                {
+                    str(key): str(value)
+                    for key, value in _mapping(raw, str(section)).items()
+                }
             )
             for section, raw in raw_text.items()
         }
@@ -42,7 +45,10 @@ def load_presentation(
     identities = tuple(button["编号"] for button in buttons)
     if len(identities) != len(set(identities)):
         raise JsonDataError("队伍按钮编号不能重复")
-    if any(button["页面"] not in {"未组队", "待处理邀请", "队长", "队员"} for button in buttons):
+    if any(
+        button["页面"] not in {"未组队", "待处理邀请", "队长", "队员"}
+        for button in buttons
+    ):
         raise JsonDataError("队伍按钮使用了未知页面")
     return TeamCopy(text), buttons
 
