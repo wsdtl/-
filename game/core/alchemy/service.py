@@ -25,6 +25,7 @@ from game.core.world import LocationQuery, WorldService
 
 from .contracts import (
     Alchemist,
+    AlchemyAssessment,
     AlchemyConflictError,
     AlchemyError,
     AlchemyMaterial,
@@ -106,6 +107,7 @@ class AlchemyService:
         self._alchemists: Mapping[str, Alchemist] = MappingProxyType({})
         self._herbs: Mapping[str, _HerbIdentity] = MappingProxyType({})
         self._beast_ids: frozenset[str] = frozenset()
+        self._town_max_grade_id = ""
         self._page_limit = 0
 
     def initialize(self) -> AlchemyStatus:
@@ -124,6 +126,11 @@ class AlchemyService:
         self._methods = MappingProxyType(self._load_methods(rules.get("炉法")))
         self._difficulties = MappingProxyType(
             self._load_difficulties(rules.get("难度"))
+        )
+        dan_rule = _mapping(rules.get("丹则"), "炼药规则.丹则")
+        self._town_max_grade_id = _text(
+            _mapping(dan_rule.get("成丹"), "丹则.成丹").get("城镇最高品级"),
+            "丹则.成丹.城镇最高品级",
         )
         self._herbs = MappingProxyType(self._load_herbs(rules.get("归脉")))
         self._beast_ids = frozenset(_item_ids(self._data, "兽宝"))
@@ -158,6 +165,50 @@ class AlchemyService:
             len(self._alchemists),
             len(self._beast_ids),
             len(self._herbs),
+        )
+
+    def recipes(self, category: str) -> tuple[AlchemyRecipe, ...]:
+        self._require_initialized()
+        normalized = str(category or "").strip()
+        if normalized not in _CATEGORIES:
+            raise AlchemyError(f"未知丹药分类：{normalized or '<空>'}")
+        return tuple(
+            sorted(
+                (recipe for recipe in self._recipes.values() if recipe.category == normalized),
+                key=lambda value: value.recipe_id,
+            )
+        )
+
+    def assess(
+        self, identifier: str, entries: tuple[AssetEntry, ...]
+    ) -> AlchemyAssessment:
+        self._require_initialized()
+        recipe = self._resolve_recipe(identifier)
+        difficulty = self._difficulties[recipe.difficulty]
+        beast = self._select_beast(entries, difficulty.beast_grade_id)
+        herbs, missing, secondary_count = self._match_herbs(
+            self._methods[recipe.method], entries, difficulty.herb_grade_id
+        )
+        missing_values = list(missing)
+        if beast is None:
+            missing_values.insert(0, AlchemyMissingMaterial("药引", "兽宝", 1))
+        if not missing_values and secondary_count > difficulty.secondary_limit:
+            missing_values.append(
+                AlchemyMissingMaterial(
+                    "辅材", "本脉灵植", secondary_count - difficulty.secondary_limit
+                )
+            )
+        grade_id, grade_name = self._medicine_grade(difficulty, beast, herbs)
+        return AlchemyAssessment(
+            recipe,
+            grade_id,
+            grade_name,
+            beast,
+            herbs,
+            tuple(missing_values),
+            secondary_count,
+            difficulty.secondary_limit,
+            not missing_values,
         )
 
     async def overview(self, user_id: str) -> AlchemyOverview:
@@ -351,35 +402,24 @@ class AlchemyService:
         recipe: AlchemyRecipe,
         entries: tuple[AssetEntry, ...],
     ) -> AlchemyPreview:
-        difficulty = self._difficulties[recipe.difficulty]
-        beast = self._select_beast(entries, difficulty.beast_grade_id)
-        traits = self._methods[recipe.method]
-        herbs, missing, secondary_count = self._match_herbs(
-            traits, entries, difficulty.herb_grade_id
-        )
-        missing_values = list(missing)
-        if beast is None:
-            missing_values.insert(0, AlchemyMissingMaterial("药引", "兽宝", 1))
-        if not missing_values and secondary_count > difficulty.secondary_limit:
-            missing_values.append(
-                AlchemyMissingMaterial(
-                    "辅材", "本脉灵植", secondary_count - difficulty.secondary_limit
-                )
-            )
-        grade_id, grade_name = self._medicine_grade(difficulty, beast, herbs)
+        value = self.assess(recipe.recipe_id, entries)
+        grade = self._asset.grade(value.medicine_grade_id)
+        town_max_grade = self._asset.grade(self._town_max_grade_id)
+        if grade.order > town_max_grade.order:
+            grade = town_max_grade
         return AlchemyPreview(
             user_id,
             location_name,
             alchemist,
-            recipe,
-            grade_id,
-            grade_name,
-            beast,
-            herbs,
-            tuple(missing_values),
-            secondary_count,
-            difficulty.secondary_limit,
-            not missing_values,
+            value.recipe,
+            grade.grade_id,
+            grade.name,
+            value.beast_material,
+            value.herb_materials,
+            value.missing_materials,
+            value.secondary_substitutions,
+            value.secondary_substitution_limit,
+            value.can_refine,
         )
 
     def _select_beast(
@@ -659,6 +699,8 @@ class AlchemyService:
         output = _mapping(dan_rule.get("成丹"), "丹则.成丹")
         if output.get("基础数量") != 1:
             raise JsonDataError("炼丹核心只支持每炉基础产出一枚丹药")
+        if output.get("城镇最高品级") != "04":
+            raise JsonDataError("城镇炼丹最高品级必须为天品")
 
     def _require_initialized(self) -> None:
         if not self._initialized:

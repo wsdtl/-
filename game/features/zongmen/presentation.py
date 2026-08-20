@@ -44,7 +44,7 @@ def load_presentation(
     if len({button["编号"] for button in buttons}) != len(buttons):
         raise JsonDataError("宗门按钮编号不能重复")
     if any(
-        button["页面"] not in {"未加入", "待处理邀请", "宗主", "成员"}
+        button["页面"] not in {"未加入", "待处理邀请", "宗主", "长老", "弟子"}
         for button in buttons
     ):
         raise JsonDataError("宗门按钮使用了未知页面")

@@ -24,6 +24,8 @@ from . import reply
             "宗门 拒绝",
             "宗门 退出",
             "宗门 逐出 角色名或user_id",
+            "宗门 任命长老 角色名或user_id",
+            "宗门 罢免长老 角色名或user_id",
             "宗门 转让 角色名或user_id",
             "宗门 解散",
         ),
@@ -55,6 +57,10 @@ async def sect_command(*, user_id: str, message: str, message_context, manager) 
             result = await feature.leave(user_id, request_id)
         elif action == "逐出" and target and not extra:
             result = await feature.kick(user_id, target, request_id)
+        elif action == "任命长老" and target and not extra:
+            result = await feature.appoint_elder(user_id, target, request_id)
+        elif action == "罢免长老" and target and not extra:
+            result = await feature.remove_elder(user_id, target, request_id)
         elif action == "转让" and target and not extra:
             result = await feature.transfer(user_id, target, request_id)
         elif action == "解散" and not target:

@@ -29,6 +29,7 @@ from game.core.world import LocationQuery, WorldService
 from .contracts import (
     FormationActivationPlan,
     FormationArmResult,
+    FormationAssessment,
     FormationBattleProfile,
     FormationConflictError,
     FormationDefinition,
@@ -80,6 +81,7 @@ class FormationService:
         self._formations: Mapping[str, FormationDefinition] = MappingProxyType({})
         self._formation_by_name: Mapping[str, str] = MappingProxyType({})
         self._masters: Mapping[str, FormationMaster] = MappingProxyType({})
+        self._town_max_grade_name = ""
         self._page_limit = 0
 
     def initialize(self) -> FormationStatus:
@@ -96,6 +98,9 @@ class FormationService:
                 raise RuntimeError(f"{label}必须先于阵法核心启动")
         self._rules = MappingProxyType(
             dict(_mapping(self._data.dataset("阵法规则").get("炼制"), "阵法规则.炼制"))
+        )
+        self._town_max_grade_name = _text(
+            self._rules.get("城镇最高品级"), "阵法规则.城镇最高品级"
         )
         raw_formations = {
             formation_id: _mapping(raw, f"阵法 {formation_id}")
@@ -139,6 +144,49 @@ class FormationService:
             str(self._rules.get("无上限品级") or ""),
         )
 
+    def formations(self, master_location: str = "") -> tuple[FormationDefinition, ...]:
+        self._require_initialized()
+        if master_location:
+            master = next(
+                (value for value in self._masters.values() if value.location_name == master_location),
+                None,
+            )
+            if master is None:
+                raise FormationUnavailableError("此地没有能够主持炼阵的阵师")
+            return tuple(self._formations[item] for item in master.formation_ids)
+        return tuple(sorted(self._formations.values(), key=lambda value: value.formation_id))
+
+    def assess(
+        self,
+        identifier: str,
+        grade: str,
+        entries: tuple[AssetEntry, ...],
+        investments: Mapping[str, int] | None = None,
+    ) -> FormationAssessment:
+        self._require_initialized()
+        formation = self._resolve_formation(identifier)
+        grade_name = _grade_name(grade)
+        required = self._required_materials(formation.formation_id, grade_name, investments)
+        materials, requirements = self._select_materials(entries, required)
+        profile = self.battle_profile(
+            formation.formation_id,
+            grade_name,
+            {item.category: item.required for item in requirements},
+        )
+        grade_value = self._asset.grade(_GRADE_IDS[grade_name])
+        return FormationAssessment(
+            formation,
+            grade_value.grade_id,
+            grade_name,
+            materials,
+            requirements,
+            profile.capacity,
+            profile.impact,
+            profile.nodes,
+            profile.transmission,
+            all(not item.missing for item in requirements),
+        )
+
     async def overview(self, user_id: str, page: int = 1) -> FormationOverview:
         normalized = _request_text(user_id, "user_id")
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
@@ -171,31 +219,30 @@ class FormationService:
         location_name, master = await self._current_master(normalized)
         if formation.formation_id not in master.formation_ids:
             raise FormationUnavailableError("这座阵台没有开放该阵法")
-        required = self._required_materials(formation.formation_id, grade_name, investments)
         entries = await self._material_entries(normalized)
-        materials, requirements = self._select_materials(entries, required)
-        profile = self.battle_profile(
-            formation.formation_id,
-            grade_name,
-            {item.category: item.required for item in requirements},
+        value = self.assess(formation.formation_id, grade_name, entries, investments)
+        if _grade_order(value.grade_name) > _grade_order(self._town_max_grade_name):
+            raise FormationUnavailableError("城镇炼阵最高支持天品")
+        request_text = _request_expression(
+            value.formation.name,
+            value.grade_name,
+            {item.category: item.required for item in value.requirements},
         )
-        grade_value = self._asset.grade(_GRADE_IDS[grade_name])
-        request_text = _request_expression(formation.name, grade_name, required)
         return FormationPreview(
             normalized,
             location_name,
             master,
-            formation,
-            grade_value.grade_id,
-            grade_name,
+            value.formation,
+            value.grade_id,
+            value.grade_name,
             request_text,
-            materials,
-            requirements,
-            profile.capacity,
-            profile.impact,
-            profile.nodes,
-            profile.transmission,
-            all(not item.missing for item in requirements),
+            value.materials,
+            value.requirements,
+            value.capacity,
+            value.impact,
+            value.nodes,
+            value.transmission,
+            value.can_form,
         )
 
     async def form(
@@ -795,6 +842,13 @@ def _grade_name(value: object) -> str:
     if result not in _GRADES:
         raise FormationError(f"阵法品级必须是{'、'.join(_GRADES)}")
     return result
+
+
+def _grade_order(value: str) -> int:
+    try:
+        return _GRADES.index(value)
+    except ValueError as exc:
+        raise JsonDataError(f"未知阵法品级：{value}") from exc
 
 
 def _formation_grade_name(grade_id: str) -> str:

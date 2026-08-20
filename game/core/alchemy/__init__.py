@@ -2,6 +2,7 @@
 
 from .contracts import (
     Alchemist,
+    AlchemyAssessment,
     AlchemyConflictError,
     AlchemyError,
     AlchemyMaterial,
@@ -20,6 +21,7 @@ from .service import AlchemyService
 
 __all__ = [
     "Alchemist",
+    "AlchemyAssessment",
     "AlchemyConflictError",
     "AlchemyError",
     "AlchemyMaterial",

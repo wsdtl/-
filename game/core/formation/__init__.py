@@ -3,6 +3,7 @@
 from .contracts import (
     FormationActivationPlan,
     FormationArmResult,
+    FormationAssessment,
     FormationBattleProfile,
     FormationConflictError,
     FormationDefinition,
@@ -26,6 +27,7 @@ from .service import FormationService
 __all__ = [
     "FormationActivationPlan",
     "FormationArmResult",
+    "FormationAssessment",
     "FormationBattleProfile",
     "FormationConflictError",
     "FormationDefinition",

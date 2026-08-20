@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from game.core.database import SharedEntityMutation
+
 
 class SectAssetError(RuntimeError):
     """宗门公共资产无法完成当前操作。"""
@@ -49,6 +51,32 @@ class SectAssetTransfer:
     replayed: bool
 
 
+@dataclass(frozen=True)
+class SectMaterialCost:
+    category: str
+    content_id: str
+    grade_id: str
+    quantity: int
+
+
+@dataclass(frozen=True)
+class SectProductGain:
+    category: str
+    content_id: str
+    grade_id: str = ""
+    quantity: int = 1
+    materials: tuple[tuple[str, int], ...] = ()
+    instance_key: str = ""
+
+
+@dataclass(frozen=True)
+class SectProductionAssetPlan:
+    operations: tuple[SharedEntityMutation, ...]
+    spirit_stones_before: int
+    spirit_stones_after: int
+    product_entry: SectAssetEntry | None
+
+
 __all__ = [
     "SectAssetConflictError",
     "SectAssetEntry",
@@ -56,4 +84,7 @@ __all__ = [
     "SectAssetStatus",
     "SectAssetTransfer",
     "SectAssetVault",
+    "SectMaterialCost",
+    "SectProductGain",
+    "SectProductionAssetPlan",
 ]

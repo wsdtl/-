@@ -32,6 +32,7 @@ from .core.pool import PoolService
 from .core.retreat import RetreatService
 from .core.sect import SectService
 from .core.sect_assets import SectAssetService
+from .core.sect_facilities import SectFacilityService
 from .core.sect_library import SectLibraryService
 from .core.team import TeamService
 from .core.trade import TradeService
@@ -66,6 +67,7 @@ from .features.zongmen import SectFeature
 from .features.zongmen_cangjing import CangjingFeature
 from .features.zongmen_lingcang import LingcangFeature
 from .features.zongmen_shanmen import GateFeature
+from .features.zongmen_sheshi import SectFacilityFeature
 from .features.zongmen_tongxing import SectFollowFeature
 from .features.zongmen_wanzhen import WanzhenFeature
 from .startup import validate_startup_contracts
@@ -93,6 +95,7 @@ class CoreServices:
     sect: SectService
     sect_library: SectLibraryService
     sect_assets: SectAssetService
+    sect_facilities: SectFacilityService
     action_group: ActionGroupService
     hosting: HostingService
     character: CharacterService
@@ -140,6 +143,7 @@ class FeatureServices:
     zongmen_cangjing: CangjingFeature
     zongmen_tongxing: SectFollowFeature
     zongmen_shanmen: GateFeature
+    zongmen_sheshi: SectFacilityFeature
     tuoguan: HostingFeature
 
 
@@ -370,6 +374,25 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("products", len(sect_assets_status.product_categories)),
         )
     )
+    sect_facilities = SectFacilityService(
+        data,
+        database,
+        sect,
+        sect_assets,
+        asset,
+        alchemy,
+        forging,
+        formation,
+        location,
+    )
+    sect_facilities_status = sect_facilities.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("宗门洞天设施核心微服务已启动"),
+            C.kv("facilities", len(sect_facilities_status.facilities)),
+            C.kv("roles", len(sect_facilities_status.roles)),
+        )
+    )
     trade = TradeService(data, database, world, location, character, asset)
     trade_status = trade.initialize()
     logger.opt(colors=True).success(
@@ -465,6 +488,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         sect=sect,
         sect_library=sect_library,
         sect_assets=sect_assets,
+        sect_facilities=sect_facilities,
         action_group=action_group,
         hosting=hosting,
         character=character,
@@ -568,6 +592,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     zongmen_wanzhen.initialize()
     zongmen_cangjing = CangjingFeature(data, sect_library, sect, location, player_state)
     zongmen_cangjing.initialize()
+    zongmen_sheshi = SectFacilityFeature(data, sect_facilities)
+    zongmen_sheshi.initialize()
     tuoguan = HostingFeature(data, hosting)
     tuoguan.initialize()
     weizhi = PositionFeature(
@@ -664,6 +690,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         zongmen_cangjing=zongmen_cangjing,
         zongmen_tongxing=zongmen_tongxing,
         zongmen_shanmen=zongmen_shanmen,
+        zongmen_sheshi=zongmen_sheshi,
         tuoguan=tuoguan,
     )
     return GameServices(core=core, features=features)

@@ -157,4 +157,7 @@ def test_gate_buttons_follow_current_space(tmp_path: Path) -> None:
         "灵藏",
         "万珍殿",
         "藏经阁",
+        "百炼堂",
+        "丹鼎阁",
+        "演阵台",
     )

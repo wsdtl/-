@@ -56,7 +56,9 @@ class SectService:
         self._invitation_seconds = 0
         self._guard_rule = ""
         self._leader_role = ""
-        self._member_role = ""
+        self._elder_role = ""
+        self._disciple_role = ""
+        self._officer_roles: frozenset[str] = frozenset()
         self._name_min = 0
         self._name_max = 0
         self._name_pattern = ""
@@ -85,7 +87,15 @@ class SectService:
         )
         self._guard_rule = _text(creation.get("状态守卫"), "宗门.创建.状态守卫")
         self._leader_role = _text(roles.get("宗主"), "宗门.身份.宗主")
-        self._member_role = _text(roles.get("成员"), "宗门.身份.成员")
+        self._elder_role = _text(roles.get("长老"), "宗门.身份.长老")
+        self._disciple_role = _text(roles.get("弟子"), "宗门.身份.弟子")
+        if roles.get("新入宗门") != self._disciple_role:
+            raise JsonDataError("新入宗门成员必须是弟子")
+        if roles.get("宗主转让后") != self._elder_role:
+            raise JsonDataError("宗主转让后必须成为长老")
+        if len({self._leader_role, self._elder_role, self._disciple_role}) != 3:
+            raise JsonDataError("宗主、长老和弟子身份必须互不相同")
+        self._officer_roles = frozenset({self._leader_role, self._elder_role})
         self._initialized = True
         return self.status()
 
@@ -110,6 +120,14 @@ class SectService:
             record.join_order,
             record.version,
         )
+
+    def is_leader(self, role: str) -> bool:
+        self._require_initialized()
+        return role == self._leader_role
+
+    def is_officer(self, role: str) -> bool:
+        self._require_initialized()
+        return role in self._officer_roles
 
     async def sect(self, sect_id: str) -> SectSnapshot | None:
         self._require_initialized()
@@ -283,7 +301,7 @@ class SectService:
                             FOLLOW_ENTITY_TYPE,
                             user_id,
                             group.sect_id,
-                            self._member_role,
+                            "成员",
                             len(members),
                             0,
                         ),
@@ -491,8 +509,8 @@ class SectService:
         own = await self.membership(inviter)
         if own is None:
             raise SectConflictError("not_member")
-        if own.role != self._leader_role:
-            raise SectConflictError("not_leader")
+        if own.role not in self._officer_roles:
+            raise SectConflictError("not_officer")
         if await self.membership(target) is not None:
             raise SectConflictError("target_already_member")
         existing = await self._database.get(
@@ -574,7 +592,7 @@ class SectService:
                             ENTITY_TYPE,
                             target,
                             sect.sect_id,
-                            self._member_role,
+                            self._disciple_role,
                             len(members) + 1,
                             0,
                         ),
@@ -623,14 +641,42 @@ class SectService:
 
     async def kick(self, user_id: str, target: str, request_id: str) -> None:
         actor = await self._require_member(user_id)
-        if actor.role != self._leader_role:
-            raise SectConflictError("not_leader")
+        if actor.role not in self._officer_roles:
+            raise SectConflictError("not_officer")
         member = await self.membership(target)
         if member is None or member.sect_id != actor.sect_id:
             raise SectConflictError("target_not_member")
         if member.role == self._leader_role:
             raise SectConflictError("cannot_remove_leader")
+        if member.role == self._elder_role:
+            raise SectConflictError("elder_must_be_removed_first")
         await self._commit_member_delete(member, request_id, "逐出宗门")
+
+    async def appoint_elder(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectMember:
+        actor = await self._require_member(user_id)
+        if actor.role != self._leader_role:
+            raise SectConflictError("not_leader")
+        member = await self.membership(target)
+        if member is None or member.sect_id != actor.sect_id:
+            raise SectConflictError("target_not_member")
+        if member.role != self._disciple_role:
+            raise SectConflictError("target_not_disciple")
+        return await self._change_role(actor, member, self._elder_role, request_id, "任命长老")
+
+    async def remove_elder(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectMember:
+        actor = await self._require_member(user_id)
+        if actor.role != self._leader_role:
+            raise SectConflictError("not_leader")
+        member = await self.membership(target)
+        if member is None or member.sect_id != actor.sect_id:
+            raise SectConflictError("target_not_member")
+        if member.role != self._elder_role:
+            raise SectConflictError("target_not_elder")
+        return await self._change_role(actor, member, self._disciple_role, request_id, "罢免长老")
 
     async def transfer(
         self, user_id: str, target: str, request_id: str
@@ -656,7 +702,7 @@ class SectService:
                 ENTITY_TYPE,
                 actor.user_id,
                 actor.sect_id,
-                self._member_role,
+                self._elder_role,
                 actor.join_order,
                 actor.version,
             ),
@@ -693,6 +739,47 @@ class SectService:
             _text(value.get("洞天编号"), "宗门.洞天编号"),
             tuple(value["入口坐标"]),
             sect_record.version + 1,
+        )
+
+    async def _change_role(
+        self,
+        actor: SectMember,
+        member: SectMember,
+        role: str,
+        request_id: str,
+        business_type: str,
+    ) -> SectMember:
+        try:
+            receipt = await self._database.commit(
+                TransactionCommand(
+                    actor.user_id,
+                    _text(request_id, "request_id"),
+                    business_type,
+                    (
+                        SharedMemberMutation(
+                            ENTITY_TYPE,
+                            member.user_id,
+                            member.sect_id,
+                            role,
+                            member.join_order,
+                            member.version,
+                        ),
+                    ),
+                    {"宗门编号": member.sect_id, "目标": member.user_id, "身份": role},
+                )
+            )
+        except (
+            SharedConstraintError,
+            StateConflictError,
+            IdempotencyConflictError,
+        ) as exc:
+            raise SectConflictError("sect_changed") from exc
+        return SectMember(
+            member.sect_id,
+            member.user_id,
+            role,
+            member.join_order,
+            member.version + (0 if receipt.replayed else 1),
         )
 
     async def disband(self, user_id: str, request_id: str) -> None:

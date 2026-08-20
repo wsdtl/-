@@ -82,7 +82,7 @@ class SectFeature:
         names = {value.user_id: value.name for value in profiles}
         place = self._world.locate(LocationQuery(xy=sect.entrance_xy))
         return SectPage(
-            "宗主" if member.role == "宗主" else "成员",
+            member.role,
             sect.name,
             names.get(sect.leader_user_id, sect.leader_user_id),
             f"{place.location_name} · ({sect.entrance_xy[0]}, {sect.entrance_xy[1]})",
@@ -168,6 +168,26 @@ class SectFeature:
         except SectConflictError as exc:
             raise SectFeatureError(exc.code) from exc
         return SectOperationResult("转让", member.name, await self.page(user_id))
+
+    async def appoint_elder(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectOperationResult:
+        member = await self._resolve_member(user_id, target)
+        try:
+            await self._sect.appoint_elder(user_id, member.user_id, request_id)
+        except SectConflictError as exc:
+            raise SectFeatureError(exc.code) from exc
+        return SectOperationResult("任命长老", member.name, await self.page(user_id))
+
+    async def remove_elder(
+        self, user_id: str, target: str, request_id: str
+    ) -> SectOperationResult:
+        member = await self._resolve_member(user_id, target)
+        try:
+            await self._sect.remove_elder(user_id, member.user_id, request_id)
+        except SectConflictError as exc:
+            raise SectFeatureError(exc.code) from exc
+        return SectOperationResult("罢免长老", member.name, await self.page(user_id))
 
     async def disband(self, user_id: str, request_id: str) -> SectOperationResult:
         try:

@@ -88,7 +88,7 @@ def test_create_invite_accept_transfer_leave_and_disband(tmp_path: Path) -> None
     assert _run(sect.membership("qq-3")) is None
 
     transferred = _run(feature.transfer("qq-1", "白川", "sect-transfer"))
-    assert transferred.page.page == "成员"
+    assert transferred.page.page == "长老"
     assert _run(sect.membership("qq-2")).role == "宗主"
     _run(feature.leave("qq-1", "sect-leave"))
     assert _run(sect.membership("qq-1")) is None

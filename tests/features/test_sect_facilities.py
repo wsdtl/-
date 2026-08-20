@@ -8,8 +8,10 @@ import game.app as game_app
 from game.config import GameConfig, GameDatabaseConfig
 from game.core.asset import CultivationAcquisition, InventoryAdjustment
 from game.core.database import TransactionCommand
+from game.core.sect_facilities import SectFacilityError
 from game.features.chuangjian_renwu import CreateCharacterRequest
 from game.features.zongmen import SectFeatureError
+from game.features.zongmen_sheshi import SectFacilityFeatureError
 
 
 def _run(awaitable):
@@ -50,6 +52,31 @@ def _commit(services, user_id: str, request_id: str, operations) -> None:
     _run(
         services.core.database.commit(
             TransactionCommand(user_id, request_id, "测试准备", tuple(operations), {})
+        )
+    )
+
+
+def _seed_facility_resources(services) -> None:
+    data = services.core.data
+    items = tuple(
+        InventoryAdjustment(content_id, "05", 15_000)
+        for content_id in data.entities("物品")
+        if data.entity_record("物品", content_id).number_category
+        in {"灵植", "灵矿", "兽宝"}
+    )
+    inventory = _run(services.core.asset.plan_inventory_changes("qq-1", items))
+    stones = _run(
+        services.core.character.plan_spirit_stone_change("qq-1", delta=30_000_000)
+    )
+    _commit(
+        services,
+        "qq-1",
+        "prepare-facility-resources",
+        (*inventory.operations, stones.operation),
+    )
+    _run(
+        services.features.zongmen_lingcang.donate_stones(
+            "qq-1", "facility-stones", 30_000_000
         )
     )
 
@@ -164,3 +191,170 @@ def test_cangjing_uses_highest_grade_and_invalidates_borrowing_after_kick(
     _run(services.features.zongmen.kick("qq-1", "白川", "sect-kick"))
     equipped_after = _run(services.core.character.profile("qq-2")).equipped_content
     assert all(value.content_id != technique_id for value in equipped_after)
+
+
+def test_sect_facility_roles_follow_officer_rules(services) -> None:
+    _create_sect(services)
+    facilities = services.features.zongmen_sheshi
+
+    with pytest.raises(SectFacilityFeatureError, match="不能调用宗门灵藏材料"):
+        _run(facilities.page("炼丹", "qq-2", "宗门"))
+    with pytest.raises(SectFacilityError, match="不能炼制圣品"):
+        services.core.sect_facilities.authorize("弟子", "个人纳戒", "圣品")
+
+    _run(services.features.zongmen.appoint_elder("qq-1", "白川", "appoint-elder"))
+    page = _run(facilities.page("炼丹", "qq-2", "宗门"))
+    assert page.role == "长老"
+    assert page.material_source == "宗门灵藏"
+
+    _run(services.features.zongmen.remove_elder("qq-1", "白川", "remove-elder"))
+    with pytest.raises(SectFacilityFeatureError, match="不能调用宗门灵藏材料"):
+        _run(facilities.page("炼丹", "qq-2", "宗门"))
+
+
+def test_sect_alchemy_keeps_personal_and_sect_outputs_separate(services) -> None:
+    _create_sect(services)
+    _seed_facility_resources(services)
+    facilities = services.features.zongmen_sheshi
+
+    page = _run(facilities.page("炼丹", "qq-1", "个人", "恢复丹"))
+    recipe = next(entry for entry in page.entries if entry.available)
+    preview = _run(facilities.preview("炼丹", "qq-1", "个人", recipe.content_id))
+    before = _run(
+        services.core.asset.inventory_stacks(
+            "qq-1", preview.assessment.recipe.medicine_id
+        )
+    )
+    result = _run(
+        facilities.craft(
+            "炼丹", "qq-1", "personal-alchemy", "个人", recipe.content_id
+        )
+    )
+    after = _run(
+        services.core.asset.inventory_stacks(
+            "qq-1", preview.assessment.recipe.medicine_id
+        )
+    )
+    assert result.destination == "纳戒"
+    assert sum(value.quantity for value in after) == sum(
+        value.quantity for value in before
+    ) + 1
+
+    sect_preview = _run(
+        facilities.preview("炼丹", "qq-1", "个人", recipe.content_id)
+    )
+    materials = (
+        (sect_preview.assessment.beast_material, "兽宝"),
+        *((value, "灵植") for value in sect_preview.assessment.herb_materials),
+    )
+    for index, (material, category) in enumerate(materials):
+        assert material is not None
+        _run(
+            services.features.zongmen_lingcang.donate_material(
+                "qq-1",
+                f"sect-material-{index}",
+                category,
+                material.item_id,
+                material.grade_id,
+                material.quantity,
+            )
+        )
+    stones_before = _run(services.core.sect_assets.lingcang("qq-1")).spirit_stones
+    sect_result = _run(
+        facilities.craft(
+            "炼丹", "qq-1", "sect-alchemy", "宗门", recipe.content_id
+        )
+    )
+    vault = _run(services.core.sect_assets.wanzhen("qq-1"))
+    assert sect_result.destination == "万珍殿"
+    assert any(
+        entry.category == "丹药"
+        and entry.content_id == sect_preview.assessment.recipe.medicine_id
+        for entry in vault.entries
+    )
+    assert sect_result.spirit_stones_after == stones_before - sect_result.spirit_stone_cost
+
+
+def test_sect_forging_keeps_personal_and_sect_outputs_separate(services) -> None:
+    _create_sect(services)
+    _seed_facility_resources(services)
+    facilities = services.features.zongmen_sheshi
+
+    page = _run(facilities.page("炼器", "qq-1", "个人", "灵器"))
+    law = next(entry for entry in page.entries if entry.available)
+    personal = _run(
+        facilities.craft("炼器", "qq-1", "personal-forging", "个人", law.content_id)
+    )
+    assert personal.destination == "器藏"
+    assert _run(services.core.asset.law_reserve_stack("qq-1", law.content_id)).quantity == 1
+
+    preview = _run(facilities.preview("炼器", "qq-1", "个人", law.content_id))
+    materials = (
+        *((material, "兽宝") for material in preview.assessment.beast_materials),
+        *((material, "灵矿") for material in preview.assessment.mineral_materials),
+    )
+    for index, (material, category) in enumerate(materials):
+        _run(
+            services.features.zongmen_lingcang.donate_material(
+                "qq-1",
+                f"forging-material-{index}",
+                category,
+                material.item_id,
+                material.grade_id,
+                material.quantity,
+            )
+        )
+    sect = _run(
+        facilities.craft("炼器", "qq-1", "sect-forging", "宗门", law.content_id)
+    )
+    vault = _run(services.core.sect_assets.wanzhen("qq-1"))
+    assert sect.destination == "万珍殿"
+    assert any(
+        entry.category == "器律" and entry.content_id == law.content_id
+        for entry in vault.entries
+    )
+
+
+def test_sacred_sect_formations_are_stored_as_independent_instances(services) -> None:
+    _create_sect(services)
+    _seed_facility_resources(services)
+    facilities = services.features.zongmen_sheshi
+
+    formation = _run(facilities.page("炼阵", "qq-1", "个人")).entries[0]
+    preview = _run(
+        facilities.preview("炼阵", "qq-1", "个人", formation.content_id, "圣")
+    )
+    for index, material in enumerate(preview.assessment.materials):
+        _run(
+            services.features.zongmen_lingcang.donate_material(
+                "qq-1",
+                f"sacred-material-{index}",
+                material.category,
+                material.item_id,
+                material.grade_id,
+                material.quantity * 2,
+            )
+        )
+
+    first = _run(
+        facilities.craft(
+            "炼阵", "qq-1", "sacred-formation-1", "宗门", formation.content_id, "圣"
+        )
+    )
+    second = _run(
+        facilities.craft(
+            "炼阵", "qq-1", "sacred-formation-2", "宗门", formation.content_id, "圣"
+        )
+    )
+    entries = tuple(
+        entry
+        for entry in _run(services.core.sect_assets.wanzhen("qq-1")).entries
+        if entry.category == "阵法"
+        and entry.content_id == formation.content_id
+        and entry.grade_id == "05"
+    )
+    assert first.destination == second.destination == "万珍殿"
+    assert len(entries) == 2
+    assert all(entry.quantity == 1 for entry in entries)
+    assert len({entry.entry_key for entry in entries}) == 2
+    assert all(entry.materials for entry in entries)

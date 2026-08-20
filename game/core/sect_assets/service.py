@@ -29,6 +29,9 @@ from .contracts import (
     SectAssetStatus,
     SectAssetTransfer,
     SectAssetVault,
+    SectMaterialCost,
+    SectProductGain,
+    SectProductionAssetPlan,
 )
 
 LINGCANG_TYPE = "宗门灵藏"
@@ -215,8 +218,8 @@ class SectAssetService:
         quantity: int = 1,
     ) -> SectAssetTransfer:
         actor = await self._member(user_id)
-        if actor.role != "宗主":
-            raise SectAssetError("只有宗主可以发放万珍殿物资")
+        if not self._sect.is_officer(actor.role):
+            raise SectAssetError("只有宗主或长老可以发放万珍殿物资")
         target = await self._member(target_user_id)
         if target.sect_id != actor.sect_id:
             raise SectAssetError("只能向本宗成员发放物资")
@@ -264,6 +267,88 @@ class SectAssetService:
             },
         )
         return SectAssetTransfer("万珍殿", "发放", entry, 0, receipt.replayed)
+
+    async def plan_production(
+        self,
+        sect_id: str,
+        spirit_stones: int,
+        *,
+        materials: tuple[SectMaterialCost, ...] = (),
+        product: SectProductGain | None = None,
+    ) -> SectProductionAssetPlan:
+        """规划一次宗门生产的公共资产变化，由调用方与个人资产一起提交。"""
+
+        self._require_initialized()
+        normalized_sect_id = str(sect_id or "").strip()
+        if not normalized_sect_id:
+            raise SectAssetError("宗门编号不能为空")
+        cost = _positive_int(spirit_stones, "宗门灵石消耗")
+        record = await self._database.get_shared_entity(LINGCANG_TYPE, normalized_sect_id)
+        value = (
+            dict(record.value)
+            if record is not None
+            else {"名称": f"灵藏-{normalized_sect_id}", "宗门编号": normalized_sect_id, "灵石": 0, "条目": {}}
+        )
+        before_stones = int(value.get("灵石") or 0)
+        if before_stones < cost:
+            raise SectAssetError(f"宗门灵石不足：现有{before_stones}，需要{cost}")
+        entries = dict(_mapping(value.get("条目", {}), "灵藏.条目"))
+        totals: dict[tuple[str, str, str], int] = {}
+        for material in materials:
+            if material.category not in self._materials:
+                raise SectAssetError("宗门炼制使用了非基础材料")
+            quantity = _positive_int(material.quantity, "宗门材料数量")
+            key = (material.category, material.content_id, material.grade_id)
+            totals[key] = totals.get(key, 0) + quantity
+        for (category, content_id, grade_id), quantity in totals.items():
+            entry_key = f"{category}:{content_id}:{grade_id}"
+            raw = entries.get(entry_key)
+            if not isinstance(raw, Mapping):
+                raise SectAssetError("灵藏中缺少炼制材料")
+            current = self._entry(entry_key, raw)
+            if current.quantity < quantity:
+                raise SectAssetError(
+                    f"灵藏中的{current.grade_name}{current.name}不足：现有{current.quantity}，需要{quantity}"
+                )
+            after = current.quantity - quantity
+            if after:
+                updated = dict(raw)
+                updated["数量"] = after
+                entries[entry_key] = updated
+            else:
+                entries.pop(entry_key)
+        value["灵石"] = before_stones - cost
+        value["条目"] = entries
+        operations: list[SharedEntityMutation] = [
+            SharedEntityMutation(
+                LINGCANG_TYPE,
+                normalized_sect_id,
+                value,
+                record.version if record is not None else 0,
+            )
+        ]
+        product_entry = None
+        if product is not None:
+            if product.category not in self._products:
+                raise SectAssetError("宗门炼制产出了万珍殿不支持的类别")
+            mutation, product_entry = await self._change_entry(
+                WANZHEN_TYPE,
+                normalized_sect_id,
+                "万珍殿",
+                category=product.category,
+                content_id=product.content_id,
+                grade_id=product.grade_id,
+                quantity_delta=_positive_int(product.quantity, "宗门产出数量"),
+                materials=product.materials,
+                instance_key=product.instance_key,
+            )
+            operations.append(mutation)
+        return SectProductionAssetPlan(
+            tuple(operations),
+            before_stones,
+            before_stones - cost,
+            product_entry,
+        )
 
     async def has_assets(self, sect_id: str) -> bool:
         for entity_type in (LINGCANG_TYPE, WANZHEN_TYPE):
@@ -403,6 +488,8 @@ class SectAssetService:
         entries = dict(_mapping(value.get("条目", {}), f"{name}.条目"))
         grade = self._asset.grade(grade_id) if grade_id else None
         sacred = category == "阵法" and grade_id == "05"
+        if sacred and not str(instance_key or "").strip():
+            raise SectAssetError("圣品阵法产出必须具有独立实例编号")
         key = (
             f"{category}:{content_id}:{grade_id}:{instance_key}"
             if sacred

@@ -74,6 +74,20 @@ class FormationRequirement:
 
 
 @dataclass(frozen=True)
+class FormationAssessment:
+    formation: FormationDefinition
+    grade_id: str
+    grade_name: str
+    materials: tuple[FormationMaterial, ...]
+    requirements: tuple[FormationRequirement, ...]
+    capacity: float
+    impact: float
+    nodes: int
+    transmission: float
+    can_form: bool
+
+
+@dataclass(frozen=True)
 class FormationPreview:
     user_id: str
     location_name: str
@@ -173,6 +187,7 @@ class FormationActivationPlan:
 __all__ = [
     "FormationActivationPlan",
     "FormationArmResult",
+    "FormationAssessment",
     "FormationBattleProfile",
     "FormationConflictError",
     "FormationDefinition",

@@ -38,5 +38,29 @@
     "命令": "藏经阁",
     "行为": "callback",
     "样式": "secondary"
+  },
+  {
+    "位置": "宗门洞天",
+    "编号": "sect_forging_hall",
+    "名称": "百炼堂",
+    "命令": "百炼堂",
+    "行为": "callback",
+    "样式": "primary"
+  },
+  {
+    "位置": "宗门洞天",
+    "编号": "sect_alchemy_pavilion",
+    "名称": "丹鼎阁",
+    "命令": "丹鼎阁",
+    "行为": "callback",
+    "样式": "primary"
+  },
+  {
+    "位置": "宗门洞天",
+    "编号": "sect_formation_platform",
+    "名称": "演阵台",
+    "命令": "演阵台",
+    "行为": "callback",
+    "样式": "primary"
   }
 ]

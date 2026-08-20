@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from game.core.alchemy import AlchemyService
 from game.core.asset import AssetService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService, TransactionCommand
-from game.core.formation import FormationService
+from game.core.formation import FormationService, FormationUnavailableError
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
 
@@ -84,6 +86,8 @@ def test_alchemy_refines_once_and_replays_without_reconsuming(tmp_path: Path) ->
         recipe = _run(alchemy.list_recipes("qq-1", category)).entries[0].recipe
         preview = _run(alchemy.preview("qq-1", recipe.recipe_id))
         assert preview.can_refine is True
+        assert preview.medicine_grade_id == "04"
+        assert preview.medicine_grade_name == "天品"
         assert preview.beast_material is not None
         assert len({item.item_id for item in preview.herb_materials}) == len(
             preview.herb_materials
@@ -109,6 +113,8 @@ def test_formation_forms_arms_and_consumes_prepared_state(tmp_path: Path) -> Non
         assert status.unlimited_grade == "圣"
 
         entry = _run(formation.overview("qq-1")).entries[0]
+        with pytest.raises(FormationUnavailableError, match="最高支持天品"):
+            _run(formation.preview("qq-1", entry.formation.formation_id, "圣"))
         preview = _run(
             formation.preview("qq-1", entry.formation.formation_id, "黄")
         )

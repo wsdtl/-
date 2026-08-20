@@ -2,6 +2,7 @@
 
 from .contracts import (
     ForgingArtisan,
+    ForgingAssessment,
     ForgingConflictError,
     ForgingError,
     ForgingLaw,
@@ -22,6 +23,7 @@ from .service import ForgingService
 
 __all__ = [
     "ForgingArtisan",
+    "ForgingAssessment",
     "ForgingConflictError",
     "ForgingError",
     "ForgingLaw",

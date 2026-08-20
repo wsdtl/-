@@ -26,6 +26,7 @@ from game.core.world import LocationQuery, WorldService
 
 from .contracts import (
     ForgingArtisan,
+    ForgingAssessment,
     ForgingConflictError,
     ForgingError,
     ForgingLaw,
@@ -150,6 +151,57 @@ class ForgingService:
             len(self._beast_materials),
             len(self._mineral_materials),
             int(self._weapon_rule.get("等级上限") or 0),
+        )
+
+    def laws(self, stage: str) -> tuple[ForgingLaw, ...]:
+        self._require_initialized()
+        normalized = str(stage or "").strip()
+        if normalized not in _LAW_STAGES:
+            raise ForgingError(f"未知器律器阶：{normalized or '<空>'}")
+        return tuple(
+            sorted(
+                (law for law in self._laws.values() if law.stage == normalized),
+                key=lambda value: value.law_id,
+            )
+        )
+
+    def assess(
+        self, identifier: str, entries: tuple[AssetEntry, ...]
+    ) -> ForgingAssessment:
+        self._require_initialized()
+        law = self._resolve_law(identifier)
+        stage = self._stage_by_name[law.stage]
+        beasts, missing_beasts, _ = self._match(
+            law.beast_traits,
+            entries,
+            self._beast_materials,
+            stage.minimum_beast_grade_id,
+            allow_secondary=False,
+        )
+        minerals, missing_minerals, secondary_count = self._match(
+            law.mineral_traits,
+            entries,
+            self._mineral_materials,
+            stage.minimum_mineral_grade_id,
+            allow_secondary=True,
+        )
+        missing = list(missing_beasts + missing_minerals)
+        if not missing and secondary_count > stage.secondary_substitution_limit:
+            missing.append(
+                ForgingMissingMaterial(
+                    "灵矿",
+                    "本脉材料",
+                    secondary_count - stage.secondary_substitution_limit,
+                )
+            )
+        return ForgingAssessment(
+            law,
+            beasts,
+            minerals,
+            tuple(missing),
+            secondary_count,
+            stage.secondary_substitution_limit,
+            not missing,
         )
 
     def initial_weapon_level(self) -> int:
@@ -409,41 +461,18 @@ class ForgingService:
         law: ForgingLaw,
         entries: tuple[AssetEntry, ...],
     ) -> ForgingPreview:
-        stage = self._stage_by_name[law.stage]
-        beasts, missing_beasts, _ = self._match(
-            law.beast_traits,
-            entries,
-            self._beast_materials,
-            stage.minimum_beast_grade_id,
-            allow_secondary=False,
-        )
-        minerals, missing_minerals, secondary_count = self._match(
-            law.mineral_traits,
-            entries,
-            self._mineral_materials,
-            stage.minimum_mineral_grade_id,
-            allow_secondary=True,
-        )
-        missing = list(missing_beasts + missing_minerals)
-        if not missing and secondary_count > stage.secondary_substitution_limit:
-            missing.append(
-                ForgingMissingMaterial(
-                    "灵矿",
-                    "本脉材料",
-                    secondary_count - stage.secondary_substitution_limit,
-                )
-            )
+        value = self.assess(law.law_id, entries)
         return ForgingPreview(
             user_id,
             location_name,
             artisan,
-            law,
-            beasts,
-            minerals,
-            tuple(missing),
-            secondary_count,
-            stage.secondary_substitution_limit,
-            not missing,
+            value.law,
+            value.beast_materials,
+            value.mineral_materials,
+            value.missing_materials,
+            value.secondary_substitutions,
+            value.secondary_substitution_limit,
+            value.can_forge,
         )
 
     def _match(

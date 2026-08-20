@@ -98,6 +98,17 @@ class ForgingMissingMaterial:
 
 
 @dataclass(frozen=True)
+class ForgingAssessment:
+    law: ForgingLaw
+    beast_materials: tuple[ForgingMaterial, ...]
+    mineral_materials: tuple[ForgingMaterial, ...]
+    missing_materials: tuple[ForgingMissingMaterial, ...]
+    secondary_substitutions: int
+    secondary_substitution_limit: int
+    can_forge: bool
+
+
+@dataclass(frozen=True)
 class ForgingPreview:
     user_id: str
     location_name: str
@@ -145,6 +156,7 @@ class ForgingResult:
 
 __all__ = [
     "ForgingArtisan",
+    "ForgingAssessment",
     "ForgingConflictError",
     "ForgingError",
     "ForgingLaw",

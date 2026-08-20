@@ -74,6 +74,19 @@ class AlchemyMissingMaterial:
 
 
 @dataclass(frozen=True)
+class AlchemyAssessment:
+    recipe: AlchemyRecipe
+    medicine_grade_id: str
+    medicine_grade_name: str
+    beast_material: AlchemyMaterial | None
+    herb_materials: tuple[AlchemyMaterial, ...]
+    missing_materials: tuple[AlchemyMissingMaterial, ...]
+    secondary_substitutions: int
+    secondary_substitution_limit: int
+    can_refine: bool
+
+
+@dataclass(frozen=True)
 class AlchemyPreview:
     user_id: str
     location_name: str
@@ -125,6 +138,7 @@ class AlchemyResult:
 
 __all__ = [
     "Alchemist",
+    "AlchemyAssessment",
     "AlchemyConflictError",
     "AlchemyError",
     "AlchemyMaterial",

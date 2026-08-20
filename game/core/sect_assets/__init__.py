@@ -7,6 +7,9 @@ from .contracts import (
     SectAssetStatus,
     SectAssetTransfer,
     SectAssetVault,
+    SectMaterialCost,
+    SectProductGain,
+    SectProductionAssetPlan,
 )
 from .service import SectAssetService
 
@@ -18,4 +21,7 @@ __all__ = [
     "SectAssetStatus",
     "SectAssetTransfer",
     "SectAssetVault",
+    "SectMaterialCost",
+    "SectProductGain",
+    "SectProductionAssetPlan",
 ]
