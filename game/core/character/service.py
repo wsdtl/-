@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from game.core.asset import AssetService, AssetStateError
 from game.core.combat import CombatantSpec, CombatBuildRef
@@ -20,6 +21,9 @@ from game.core.growth import GrowthError, GrowthService
 from game.core.location import LocationService
 from game.core.medicine import PreparedBattleMedicine
 from game.core.player_state import PlayerStateService
+
+if TYPE_CHECKING:
+    from game.core.sect_library import SectLibraryService
 
 from .contracts import (
     CharacterAbsorptionPlan,
@@ -66,6 +70,7 @@ class CharacterService:
         asset: AssetService,
         growth: GrowthService,
         forging: ForgingService,
+        sect_library: SectLibraryService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -74,6 +79,7 @@ class CharacterService:
         self._asset = asset
         self._growth = growth
         self._forging = forging
+        self._sect_library = sect_library
         self._initialized = False
         self._role_rule: Mapping[str, object] = {}
         self._gender_values: tuple[str, ...] = ()
@@ -175,6 +181,10 @@ class CharacterService:
             self._data.entity("境界", realm_id).get("名称"),
             f"境界 {realm_id}.名称",
         )
+        if self._sect_library is not None:
+            cultivation = await self._sect_library.effective_cultivation(
+                normalized_user_id, cultivation
+            )
         cultivation_slots, equipped_content = self._cultivation_profile(cultivation)
         weapon_profile = self._weapon_profile(weapon)
         inventory = _inventory_summary(states)
@@ -470,7 +480,9 @@ class CharacterService:
         percent = _positive_number(recovery_percent, "恢复百分比")
         attributes = _state_mapping(character.get("属性"), "人物.属性")
         resources = dict(_state_mapping(character.get("资源"), "人物.资源"))
-        maximum = _number(attributes.get(f"{normalized_resource}上限"), f"{normalized_resource}上限")
+        maximum = _number(
+            attributes.get(f"{normalized_resource}上限"), f"{normalized_resource}上限"
+        )
         before = _bounded_resource(
             resources.get(normalized_resource), maximum, f"当前{normalized_resource}"
         )
@@ -848,6 +860,8 @@ class CharacterService:
             if raw is None:
                 continue
             entry = dict(_state_mapping(raw, f"功法槽[{index + 1}]"))
+            if isinstance(entry.get("藏经阁借阅"), Mapping):
+                continue
             content_id = _state_text(entry.get("编号"), "功法槽.编号")
             target_grade_id = highest.get(content_id)
             if target_grade_id is None:
@@ -1026,8 +1040,12 @@ class CharacterService:
         _, permanent = self._breakthrough_medicine(source_medicine_id, realm_id)
         if len(permanent) != 1:
             raise CharacterCultivationError("补正丹必须只提供一项永久属性")
-        attributes = _add_numbers(_state_mapping(character.get("属性"), "人物.属性"), permanent)
-        bonuses = _add_numbers(_state_mapping(character.get("属性加成"), "人物.属性加成"), permanent)
+        attributes = _add_numbers(
+            _state_mapping(character.get("属性"), "人物.属性"), permanent
+        )
+        bonuses = _add_numbers(
+            _state_mapping(character.get("属性加成"), "人物.属性加成"), permanent
+        )
         record["补正来源丹药"] = str(source_medicine_id).strip()
         character["属性"] = attributes
         character["属性加成"] = bonuses
@@ -1036,7 +1054,9 @@ class CharacterService:
             realm_id,
             str(source_medicine_id).strip(),
             tuple((str(key), value) for key, value in permanent.items()),
-            StateMutation(normalized_user_id, "character", "main", character, snapshot.version),
+            StateMutation(
+                normalized_user_id, "character", "main", character, snapshot.version
+            ),
         )
 
     async def plan_gender_change(self, user_id: str) -> CharacterGenderPlan:
@@ -1058,7 +1078,9 @@ class CharacterService:
         return CharacterGenderPlan(
             before,
             choices[0],
-            StateMutation(normalized_user_id, "character", "main", character, snapshot.version),
+            StateMutation(
+                normalized_user_id, "character", "main", character, snapshot.version
+            ),
         )
 
     async def _growth_snapshots(self, user_id: str):

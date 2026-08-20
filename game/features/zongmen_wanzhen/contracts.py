@@ -1,0 +1,51 @@
+"""宗门万珍殿玩法的稳定结果。"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+from game.core.sect_assets import SectAssetEntry
+
+
+class WanzhenFeatureError(RuntimeError):
+    """当前玩家无法完成万珍殿操作。"""
+
+
+@dataclass(frozen=True)
+class WanzhenAction:
+    action_id: str
+    label: str
+    command: str
+    behavior: str
+    style: str
+
+
+@dataclass(frozen=True)
+class WanzhenPage:
+    category: str
+    page: int
+    page_count: int
+    total_entries: int
+    entries: tuple[SectAssetEntry, ...]
+
+
+@dataclass(frozen=True)
+class WanzhenTransferResult:
+    action: str
+    entry: SectAssetEntry
+    target_name: str = ""
+
+
+@dataclass(frozen=True)
+class WanzhenCopy:
+    text: Mapping[str, str]
+
+
+__all__ = [
+    "WanzhenAction",
+    "WanzhenCopy",
+    "WanzhenFeatureError",
+    "WanzhenPage",
+    "WanzhenTransferResult",
+]

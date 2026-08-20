@@ -30,6 +30,7 @@ _ERROR_KEYS = {
     "cannot_remove_leader": "不能操作宗主",
     "cannot_transfer_self": "不能转让自己",
     "sect_changed": "宗门变化",
+    "storage_not_empty": "宗藏非空",
 }
 
 

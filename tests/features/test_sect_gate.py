@@ -154,4 +154,7 @@ def test_gate_buttons_follow_current_space(tmp_path: Path) -> None:
     _run(gate.enter("qq-1", "gate-enter"))
     assert tuple(value.command for value in _run(gate.gate_actions("qq-1"))) == (
         "出山门",
+        "灵藏",
+        "万珍殿",
+        "藏经阁",
     )

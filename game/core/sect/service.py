@@ -699,6 +699,15 @@ class SectService:
         member = await self._require_member(user_id)
         if member.role != self._leader_role:
             raise SectConflictError("not_leader")
+        for entity_type in ("宗门灵藏", "宗门万珍殿"):
+            storage = await self._database.get_shared_entity(
+                entity_type, member.sect_id
+            )
+            if storage is not None and (
+                int(storage.value.get("灵石") or 0) > 0
+                or bool(storage.value.get("条目"))
+            ):
+                raise SectConflictError("storage_not_empty")
         sect_record = await self._database.get_shared_entity(
             ENTITY_TYPE, member.sect_id
         )
