@@ -811,6 +811,16 @@ class SectService:
             SharedMemberMutation(ENTITY_TYPE, value.user_id, None, "", 1, value.version)
             for value in members
         ]
+        for entity_type in ("宗门灵脉", "宗门灵田"):
+            production = await self._database.get_shared_entity(
+                entity_type, member.sect_id
+            )
+            if production is not None:
+                operations.append(
+                    SharedEntityMutation(
+                        entity_type, member.sect_id, None, production.version
+                    )
+                )
         operations.extend(await self._follow_delete_operations(member.sect_id))
         try:
             await self._database.commit(

@@ -99,6 +99,28 @@ class PoolService:
             entries=tuple(entries),
         )
 
+    def draw_item_category(
+        self, category: str, *, seed: int, count: int = 1
+    ) -> tuple[str, ...]:
+        """从全体物品中的一个基础材料类别按权重抽取编号。"""
+
+        if not self._initialized:
+            raise RuntimeError("资源池微服务尚未初始化")
+        normalized = str(category or "").strip()
+        candidates = tuple(
+            entity_id
+            for entity_id in self._weights["物品"]
+            if self._data.entity_record("物品", entity_id).number_category
+            == normalized
+        )
+        if not candidates:
+            raise ValueError(f"物品类别没有可抽取候选：{normalized or '<空>'}")
+        weights = tuple(self._weights["物品"][entity_id] for entity_id in candidates)
+        selected = inverse_weighted_sample(
+            random.Random(seed), candidates, weights, count=count, replace=True
+        )
+        return tuple(selected)
+
     def _candidates(
         self,
         source_files: tuple[str, ...],

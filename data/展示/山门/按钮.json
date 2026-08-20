@@ -62,5 +62,21 @@
     "命令": "演阵台",
     "行为": "callback",
     "样式": "primary"
+  },
+  {
+    "位置": "宗门洞天",
+    "编号": "sect_spirit_vein",
+    "名称": "灵脉",
+    "命令": "灵脉",
+    "行为": "callback",
+    "样式": "secondary"
+  },
+  {
+    "位置": "宗门洞天",
+    "编号": "sect_spirit_field",
+    "名称": "灵田",
+    "命令": "灵田",
+    "行为": "callback",
+    "样式": "secondary"
   }
 ]

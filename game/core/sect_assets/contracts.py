@@ -77,6 +77,14 @@ class SectProductionAssetPlan:
     product_entry: SectAssetEntry | None
 
 
+@dataclass(frozen=True)
+class SectResourceGainPlan:
+    operations: tuple[SharedEntityMutation, ...]
+    spirit_stones_before: int
+    spirit_stones_after: int
+    entries: tuple[SectAssetEntry, ...]
+
+
 __all__ = [
     "SectAssetConflictError",
     "SectAssetEntry",
@@ -87,4 +95,5 @@ __all__ = [
     "SectMaterialCost",
     "SectProductGain",
     "SectProductionAssetPlan",
+    "SectResourceGainPlan",
 ]

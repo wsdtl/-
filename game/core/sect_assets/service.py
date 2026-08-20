@@ -32,6 +32,7 @@ from .contracts import (
     SectMaterialCost,
     SectProductGain,
     SectProductionAssetPlan,
+    SectResourceGainPlan,
 )
 
 LINGCANG_TYPE = "宗门灵藏"
@@ -348,6 +349,88 @@ class SectAssetService:
             before_stones,
             before_stones - cost,
             product_entry,
+        )
+
+    async def plan_resource_gain(
+        self,
+        sect_id: str,
+        spirit_stones: int,
+        materials: tuple[SectMaterialCost, ...] = (),
+    ) -> SectResourceGainPlan:
+        """规划灵脉、灵田等宗门资源设施的公共资源增量。"""
+
+        self._require_initialized()
+        normalized_sect_id = str(sect_id or "").strip()
+        if not normalized_sect_id:
+            raise SectAssetError("宗门编号不能为空")
+        if isinstance(spirit_stones, bool) or not isinstance(spirit_stones, int) or spirit_stones < 0:
+            raise SectAssetError("灵石增量必须是非负整数")
+        record = await self._database.get_shared_entity(LINGCANG_TYPE, normalized_sect_id)
+        value = (
+            dict(record.value)
+            if record is not None
+            else {
+                "名称": f"灵藏-{normalized_sect_id}",
+                "宗门编号": normalized_sect_id,
+                "灵石": 0,
+                "条目": {},
+            }
+        )
+        before_stones = int(value.get("灵石") or 0)
+        entries = dict(_mapping(value.get("条目", {}), "灵藏.条目"))
+        totals: dict[tuple[str, str, str], int] = {}
+        for material in materials:
+            if material.category not in self._materials:
+                raise SectAssetError("资源生产使用了未登记的基础材料类别")
+            if (
+                isinstance(material.quantity, bool)
+                or not isinstance(material.quantity, int)
+                or material.quantity < 1
+            ):
+                raise SectAssetError("资源生产数量必须是正整数")
+            self._asset.grade(material.grade_id)
+            key = (material.category, material.content_id, material.grade_id)
+            totals[key] = totals.get(key, 0) + material.quantity
+        generated_entries: list[SectAssetEntry] = []
+        for (category, content_id, grade_id), quantity in sorted(totals.items()):
+            entry_key = f"{category}:{content_id}:{grade_id}"
+            raw = entries.get(entry_key)
+            before = int(raw.get("数量") or 0) if isinstance(raw, Mapping) else 0
+            after = before + quantity
+            entry_value = {
+                "类别": category,
+                "编号": content_id,
+                "名称": _entity_name(self._data, category, content_id),
+                "品级": grade_id,
+                "数量": after,
+                "实际投入": dict(raw.get("实际投入", {})) if isinstance(raw, Mapping) else {},
+            }
+            entries[entry_key] = entry_value
+            grade = self._asset.grade(grade_id)
+            generated_entries.append(
+                SectAssetEntry(
+                    entry_key,
+                    category,
+                    content_id,
+                    str(entry_value["名称"]),
+                    grade_id,
+                    grade.name,
+                    quantity,
+                )
+            )
+        value["灵石"] = before_stones + spirit_stones
+        value["条目"] = entries
+        mutation = SharedEntityMutation(
+            LINGCANG_TYPE,
+            normalized_sect_id,
+            value,
+            record.version if record is not None else 0,
+        )
+        return SectResourceGainPlan(
+            (mutation,),
+            before_stones,
+            before_stones + spirit_stones,
+            tuple(generated_entries),
         )
 
     async def has_assets(self, sect_id: str) -> bool:
