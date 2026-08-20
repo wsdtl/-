@@ -68,6 +68,7 @@ def overview(result: CharacterOverviewResult):
         .row(("性别", character.gender), ("身份", character.character_type))
         .row(("境界", character.realm_name), ("等级", character.level))
         .row(("经验", character.experience), ("灵石", character.spirit_stones))
+        .field("宗门贡献", character.sect_contribution)
         .section("当前状态", icon="status")
         .row(*result.states)
         .section("所在之地", icon="map")

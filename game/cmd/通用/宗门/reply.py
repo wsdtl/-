@@ -51,6 +51,11 @@ def page(copy: SectCopy, value: SectPage, actions: tuple[SectAction, ...], *, no
         builder.section(_text(copy, "查看", "成员"), icon=_text(copy, "图标", "成员"))
         for index, member in enumerate(value.members, start=1):
             builder.item(index, _text(copy, "格式", "成员").format(姓名=member.name, 身份=member.role))
+        builder.section(_text(copy, "查看", "进境")).field(_text(copy, "查看", "等级"), f"{value.sect_level} / {value.maximum_sect_level}").field(_text(copy, "查看", "总贡献"), str(value.total_contribution))
+        if value.next_level_contribution is not None:
+            builder.field(_text(copy, "查看", "距下级"), str(value.next_level_contribution - value.total_contribution))
+        builder.field(_text(copy, "查看", "资源增益"), f"生产 x{value.production_multiplier:g}；采集 x{value.gathering_multiplier:g}")
+        builder.field(_text(copy, "查看", "炼制消耗"), f"灵石 x{value.facility_cost_multiplier:g}")
     return builder.actions(message_actions(actions)).build()
 
 

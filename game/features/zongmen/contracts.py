@@ -39,6 +39,13 @@ class SectPage:
     invitation_name: str = ""
     invitation_inviter_name: str = ""
     invitation_minutes: int = 0
+    sect_level: int = 0
+    maximum_sect_level: int = 0
+    total_contribution: int = 0
+    next_level_contribution: int | None = None
+    production_multiplier: float = 1.0
+    gathering_multiplier: float = 1.0
+    facility_cost_multiplier: float = 1.0
 
 
 @dataclass(frozen=True)

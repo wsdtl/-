@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from decimal import ROUND_FLOOR, Decimal
 
 from game.core.asset import AssetService, AssetStateError, InventoryAdjustment
 from game.core.character import (
@@ -58,6 +59,10 @@ class SectAssetService:
         self._initialized = False
         self._materials: tuple[str, ...] = ()
         self._products: tuple[str, ...] = ()
+        self._stone_contribution_unit = 0
+        self._stone_contribution_value = 0
+        self._material_reference_field = ""
+        self._material_contribution_divisor = 0
 
     def initialize(self) -> SectAssetStatus:
         if self._initialized:
@@ -74,6 +79,29 @@ class SectAssetService:
             raise JsonDataError("灵藏基础材料必须是灵植、灵矿和兽宝")
         if self._products != ("丹药", "真意", "气机", "器律", "阵法"):
             raise JsonDataError("万珍殿成品类别与正式资产分类不一致")
+        sect_rule = _mapping(rules.get("宗门"), "宗门/宗门.json")
+        contribution = _mapping(sect_rule.get("贡献"), "宗门.贡献")
+        sources = _mapping(contribution.get("来源"), "宗门.贡献.来源")
+        stones = _mapping(sources.get("灵石"), "宗门.贡献.来源.灵石")
+        materials = _mapping(sources.get("基础材料"), "宗门.贡献.来源.基础材料")
+        self._stone_contribution_unit = _rule_positive_int(
+            stones.get("每份灵石"), "宗门.贡献.来源.灵石.每份灵石"
+        )
+        self._stone_contribution_value = _rule_positive_int(
+            stones.get("贡献"), "宗门.贡献.来源.灵石.贡献"
+        )
+        self._material_reference_field = _rule_text(
+            materials.get("计价字段"), "宗门.贡献.来源.基础材料.计价字段"
+        )
+        if materials.get("使用品级价格系数") is not True:
+            raise JsonDataError("基础材料贡献必须使用品级价格系数")
+        self._material_contribution_divisor = _rule_positive_int(
+            materials.get("贡献除数"), "宗门.贡献.来源.基础材料.贡献除数"
+        )
+        if materials.get("取整") != "向下取整":
+            raise JsonDataError("基础材料贡献取整必须是向下取整")
+        if _texts(materials.get("类别"), "宗门.贡献.来源.基础材料.类别") != self._materials:
+            raise JsonDataError("基础材料贡献类别必须与灵藏基础材料一致")
         self._initialized = True
         return self.status()
 
@@ -124,11 +152,27 @@ class SectAssetService:
             grade_id=grade.grade_id,
             quantity_delta=normalized_quantity,
         )
+        contribution = _material_contribution(
+            record.value,
+            grade.price_multiplier,
+            normalized_quantity,
+            self._material_reference_field,
+            self._material_contribution_divisor,
+        )
+        contribution_operation = ()
+        if contribution:
+            try:
+                contribution_plan = await self._character.plan_contribution_change(
+                    user_id, delta=contribution
+                )
+            except (CharacterCultivationError, CharacterStateError) as exc:
+                raise SectAssetError(str(exc)) from exc
+            contribution_operation = (contribution_plan.operation,)
         receipt = await self._commit(
             user_id,
             request_id,
             "捐入灵藏",
-            personal.operations + (mutation,),
+            personal.operations + (mutation,) + contribution_operation,
             {
                 "宗门编号": member.sect_id,
                 "条目": entry.entry_key,
@@ -144,7 +188,12 @@ class SectAssetService:
         normalized = _positive_int(quantity, "灵石数量")
         try:
             personal = await self._character.plan_spirit_stone_change(
-                user_id, delta=-normalized
+                user_id,
+                delta=-normalized,
+                contribution_delta=(
+                    normalized // self._stone_contribution_unit
+                )
+                * self._stone_contribution_value,
             )
         except (CharacterCultivationError, CharacterStateError) as exc:
             raise SectAssetError(str(exc)) from exc
@@ -726,6 +775,33 @@ def _required_category(value: str, allowed: tuple[str, ...]) -> str:
     if normalized not in allowed:
         raise SectAssetError(f"不支持的类别：{normalized or '<空>'}")
     return normalized
+
+
+def _material_contribution(
+    value: Mapping[str, object],
+    price_multiplier: Decimal,
+    quantity: int,
+    reference_field: str,
+    divisor: int,
+) -> int:
+    reference = value.get(reference_field)
+    if isinstance(reference, bool) or not isinstance(reference, (int, float, str)):
+        raise SectAssetError(f"物品缺少有效{reference_field}")
+    amount = Decimal(str(reference)) * price_multiplier / Decimal(divisor)
+    return int(amount.to_integral_value(rounding=ROUND_FLOOR)) * quantity
+
+
+def _rule_text(value: object, label: str) -> str:
+    result = str(value or "").strip()
+    if not result:
+        raise JsonDataError(f"{label}必须是非空字符串")
+    return result
+
+
+def _rule_positive_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise JsonDataError(f"{label}必须是正整数")
+    return value
 
 
 def _entity_name(data: JsonDataService, category: str, content_id: str) -> str:

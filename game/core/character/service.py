@@ -32,6 +32,7 @@ from .contracts import (
     CharacterBattlePlan,
     CharacterBreakthroughCorrectionPlan,
     CharacterBreakthroughPlan,
+    CharacterContributionPlan,
     CharacterCreateCommand,
     CharacterCreationResult,
     CharacterCultivationError,
@@ -198,6 +199,7 @@ class CharacterService:
             level=_state_positive_int(character.get("等级"), "人物.等级"),
             experience=_state_nonnegative_int(character.get("经验"), "人物.经验"),
             spirit_stones=_state_nonnegative_int(character.get("灵石"), "人物.灵石"),
+            sect_contribution=_state_nonnegative_int(character.get("宗门贡献", 0), "人物.宗门贡献"),
             automatic_medicine=_state_bool(character.get("自动用药"), "人物.自动用药"),
             prepared_battle_medicine=_prepared_battle_medicine(
                 character.get("待战战丹"), "人物.待战战丹"
@@ -242,6 +244,29 @@ class CharacterService:
                 )
             )
         return tuple(result)
+
+    async def contributions(
+        self, user_ids: tuple[str, ...]
+    ) -> tuple[tuple[str, int], ...]:
+        """批量读取个人宗门贡献，供宗门等级汇总使用。"""
+
+        self._require_initialized()
+        normalized = _user_ids(user_ids)
+        snapshots = await self._database.get_many(
+            tuple(StateAddress(user_id, "character", "main") for user_id in normalized)
+        )
+        by_user = {snapshot.address.user_id: snapshot.value for snapshot in snapshots}
+        if len(by_user) != len(normalized):
+            raise CharacterStateError("宗门成员缺少人物主体")
+        return tuple(
+            (
+                user_id,
+                _state_nonnegative_int(
+                    by_user[user_id].get("宗门贡献", 0), "人物.宗门贡献"
+                ),
+            )
+            for user_id in normalized
+        )
 
     async def combatant(self, user_id: str) -> CombatantSpec:
         """把人物事实转换成战斗核心公共快照。"""
@@ -789,13 +814,16 @@ class CharacterService:
         )
 
     async def plan_spirit_stone_change(
-        self, user_id: str, *, delta: int
+        self, user_id: str, *, delta: int, contribution_delta: int = 0
     ) -> CharacterSpiritStonePlan:
-        """生成只改变人物灵石余额的状态变更。"""
+        """生成灵石余额变更，并可在同一角色状态中增加宗门贡献。"""
 
         self._require_initialized()
         normalized_user_id = _required_user_id(user_id)
         stone_delta = _request_int(delta, "灵石变化")
+        gained_contribution = _nonnegative_request_int(
+            contribution_delta, "宗门贡献变化"
+        )
         if stone_delta == 0:
             raise CharacterCultivationError("灵石变化不能为零")
         snapshot = await self._database.get(
@@ -811,10 +839,46 @@ class CharacterService:
                 f"灵石不足：现有{before}，需要{-stone_delta}"
             )
         character["灵石"] = after
+        if gained_contribution:
+            character["宗门贡献"] = _state_nonnegative_int(
+                character.get("宗门贡献", 0), "人物.宗门贡献"
+            ) + gained_contribution
         return CharacterSpiritStonePlan(
             before,
             after,
             stone_delta,
+            StateMutation(
+                normalized_user_id,
+                "character",
+                "main",
+                character,
+                snapshot.version,
+            ),
+        )
+
+    async def plan_contribution_change(
+        self, user_id: str, *, delta: int
+    ) -> CharacterContributionPlan:
+        """生成个人宗门贡献变更；贡献随角色保存，不属于宗门状态。"""
+
+        self._require_initialized()
+        normalized_user_id = _required_user_id(user_id)
+        contribution_delta = _nonnegative_request_int(delta, "宗门贡献变化")
+        if contribution_delta == 0:
+            raise CharacterCultivationError("宗门贡献变化不能为零")
+        snapshot = await self._database.get(
+            StateAddress(normalized_user_id, "character", "main")
+        )
+        if snapshot is None:
+            raise CharacterNotFoundError("尚未创建人物")
+        character = dict(_state_mapping(snapshot.value, "character/main"))
+        before = _state_nonnegative_int(character.get("宗门贡献", 0), "人物.宗门贡献")
+        after = before + contribution_delta
+        character["宗门贡献"] = after
+        return CharacterContributionPlan(
+            before,
+            after,
+            contribution_delta,
             StateMutation(
                 normalized_user_id,
                 "character",
@@ -1248,6 +1312,7 @@ class CharacterService:
             "等级": _positive_int(self._role_rule.get("等级"), "人物初始等级"),
             "经验": int(self._role_rule.get("经验") or 0),
             "灵石": int(self._role_rule.get("灵石") or 0),
+            "宗门贡献": 0,
             "属性": attributes,
             "属性加成": {},
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},

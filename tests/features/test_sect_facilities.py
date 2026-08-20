@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
+from decimal import ROUND_FLOOR, Decimal
 
 import pytest
 
 import game.app as game_app
 from game.config import GameConfig, GameDatabaseConfig
 from game.core.asset import CultivationAcquisition, InventoryAdjustment
-from game.core.database import TransactionCommand
+from game.core.database import StateAddress, TransactionCommand
+from game.core.gathering import GatheringStartCommand
+from game.core.sect_assets import SectAssetError
 from game.core.sect_facilities import SectFacilityError
 from game.features.chuangjian_renwu import CreateCharacterRequest
 from game.features.zongmen import SectFeatureError
@@ -152,6 +156,155 @@ def test_lingcang_and_wanzhen_transfer_real_personal_assets(services) -> None:
         _run(services.features.zongmen.disband("qq-1", "sect-disband"))
 
 
+def test_contribution_is_personal_and_sect_level_uses_current_members(services) -> None:
+    _create_sect(services)
+    assert _run(services.core.character.profile("qq-1")).sect_contribution == 0
+
+    stones = _run(
+        services.core.character.plan_spirit_stone_change("qq-1", delta=50_000)
+    )
+    _commit(services, "qq-1", "prepare-contribution-stones", (stones.operation,))
+    _run(
+        services.features.zongmen_lingcang.donate_stones(
+            "qq-1", "contribution-stones", 50_000
+        )
+    )
+    member = _run(services.core.sect.membership("qq-1"))
+    assert member is not None
+    progress = _run(services.core.sect_progress.snapshot(member.sect_id))
+    assert progress.level == 2
+    assert progress.total_contribution == 500
+
+    herb_id = next(
+        content_id
+        for content_id in services.core.data.entities("物品")
+        if services.core.data.entity_record("物品", content_id).number_category
+        == "灵植"
+    )
+    herb = services.core.data.entity("物品", herb_id)
+    grade = services.core.asset.grade("03")
+    expected = int(
+        (
+            Decimal(str(herb["参考价"]))
+            * grade.price_multiplier
+            / Decimal(100)
+        ).to_integral_value(rounding=ROUND_FLOOR)
+    )
+    inventory = _run(
+        services.core.asset.plan_inventory_changes(
+            "qq-2", (InventoryAdjustment(herb_id, "03", 1),)
+        )
+    )
+    _commit(services, "qq-2", "prepare-contribution-herb", inventory.operations)
+    _run(
+        services.features.zongmen_lingcang.donate_material(
+            "qq-2", "contribution-herb", "灵植", herb_id, "03", 1
+        )
+    )
+    assert _run(services.core.character.profile("qq-2")).sect_contribution == expected
+    assert (
+        _run(services.core.sect_progress.snapshot(member.sect_id)).total_contribution
+        == 500 + expected
+    )
+
+    _run(services.features.zongmen.kick("qq-1", "白川", "kick-contributor"))
+    assert _run(services.core.character.profile("qq-2")).sect_contribution == expected
+    assert (
+        _run(services.core.sect_progress.snapshot(member.sect_id)).total_contribution
+        == 500
+    )
+
+
+def test_failed_material_donation_changes_no_asset_or_contribution(services) -> None:
+    _create_sect(services)
+    herb_id = next(
+        content_id
+        for content_id in services.core.data.entities("物品")
+        if services.core.data.entity_record("物品", content_id).number_category
+        == "灵植"
+    )
+    inventory = _run(
+        services.core.asset.plan_inventory_changes(
+            "qq-1", (InventoryAdjustment(herb_id, "01", 1),)
+        )
+    )
+    _commit(services, "qq-1", "prepare-failed-donation", inventory.operations)
+
+    with pytest.raises(SectAssetError):
+        _run(
+            services.core.sect_assets.donate_material(
+                "qq-1", "failed-donation", "灵植", herb_id, "01", 2
+            )
+        )
+
+    assert _run(services.core.character.profile("qq-1")).sect_contribution == 0
+    assert _run(services.core.asset.inventory_stacks("qq-1", herb_id))[0].quantity == 1
+    assert _run(services.core.sect_assets.lingcang("qq-1")).entries == ()
+
+
+def test_resource_multipliers_reach_production_and_gathering_snapshots(services) -> None:
+    _create_sect(services)
+    _seed_facility_resources(services)
+    member = _run(services.core.sect.membership("qq-1"))
+    assert member is not None
+    progress = _run(services.core.sect_progress.snapshot(member.sect_id))
+    assert progress.production_multiplier > 1
+    assert progress.gathering_multiplier > 1
+
+    production = services.core.sect_production
+    facility = next(
+        value for value in production.status().facilities if value.kind == "灵脉"
+    )
+    started_at = datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc)
+    _run(production.collect("灵脉", "qq-1", "production-start", now=started_at))
+    expected_outputs, expected_stones = production._roll(
+        facility,
+        member.sect_id,
+        0,
+        facility.catch_up_limit,
+        progress.production_multiplier,
+    )
+    _, base_stones = production._roll(
+        facility, member.sect_id, 0, facility.catch_up_limit, 1.0
+    )
+    produced = _run(
+        production.collect(
+            "灵脉",
+            "qq-1",
+            "production-collect",
+            now=started_at
+            + timedelta(seconds=facility.period_seconds * facility.catch_up_limit),
+        )
+    )
+    assert produced.outputs == expected_outputs
+    assert produced.spirit_stones == expected_stones
+    assert produced.spirit_stones > base_stones
+
+    _run(services.features.zongmen_shanmen.leave("qq-1", "gate-leave-gathering"))
+    gathering_started = _run(
+        services.core.gathering.start(
+            GatheringStartCommand(
+                "采药",
+                "qq-1",
+                "sect-gathering",
+                ("qq-1",),
+                seed=19,
+                started_at=started_at,
+            )
+        )
+    )
+    session = _run(
+        services.core.database.get(
+            StateAddress("qq-1", "gathering_session", gathering_started.session_id)
+        )
+    )
+    assert session is not None
+    assert (
+        session.value["用户结果"]["qq-1"]["宗门采集倍率"]
+        == progress.gathering_multiplier
+    )
+
+
 def test_cangjing_uses_highest_grade_and_invalidates_borrowing_after_kick(
     services,
 ) -> None:
@@ -259,6 +412,15 @@ def test_sect_alchemy_keeps_personal_and_sect_outputs_separate(services) -> None
                 material.quantity,
             )
         )
+    member = _run(services.core.sect.membership("qq-1"))
+    assert member is not None
+    progress = _run(services.core.sect_progress.snapshot(member.sect_id))
+    discounted = _run(
+        facilities.preview("炼丹", "qq-1", "宗门", recipe.content_id)
+    )
+    assert discounted.spirit_stone_cost == max(
+        1, int(sect_preview.spirit_stone_cost * progress.facility_cost_multiplier)
+    )
     stones_before = _run(services.core.sect_assets.lingcang("qq-1")).spirit_stones
     sect_result = _run(
         facilities.craft(

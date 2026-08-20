@@ -150,6 +150,7 @@ def test_character_overview_combines_owned_service_results(
     assert result.xy == (15, 17)
     assert dict(character.attributes)["攻击"] == 5
     assert dict(character.resources) == {"血气": 100, "精神": 100, "护盾": 0}
+    assert character.sect_contribution == 0
     assert character.cultivation_slots == (("功法", 6), ("真意", 6), ("气机", 6))
     assert result.cultivation_usage == (
         ("功法", 0, 6),
@@ -193,6 +194,7 @@ def test_character_overview_combines_owned_service_results(
     assert "功法: 0/6" in content
     assert "无名器胚" in content
     assert "攻击: 10" in content
+    assert "宗门贡献: 0" in content
 
 
 def test_character_overview_rejects_missing_character(tmp_path: Path) -> None:

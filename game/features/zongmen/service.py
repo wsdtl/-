@@ -9,6 +9,7 @@ from game.core.character import CharacterPublicProfile, CharacterService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.sect import SectConflictError, SectService
+from game.core.sect_progress import SectProgressService
 from game.core.world import LocationQuery, WorldService
 
 from .contracts import (
@@ -30,6 +31,7 @@ class SectFeature:
         location: LocationService,
         world: WorldService,
         player_state: PlayerStateService,
+        progress: SectProgressService | None = None,
     ) -> None:
         self._data = data
         self._sect = sect
@@ -37,6 +39,7 @@ class SectFeature:
         self._location = location
         self._world = world
         self._player_state = player_state
+        self._progress = progress
         self._copy: SectCopy | None = None
         self._buttons = ()
 
@@ -81,6 +84,9 @@ class SectFeature:
         )
         names = {value.user_id: value.name for value in profiles}
         place = self._world.locate(LocationQuery(xy=sect.entrance_xy))
+        progress = (
+            await self._progress.snapshot(member.sect_id) if self._progress else None
+        )
         return SectPage(
             member.role,
             sect.name,
@@ -93,6 +99,13 @@ class SectFeature:
                 )
                 for value in members
             ),
+            sect_level=progress.level if progress else 0,
+            maximum_sect_level=progress.maximum_level if progress else 0,
+            total_contribution=progress.total_contribution if progress else 0,
+            next_level_contribution=progress.next_level_contribution if progress else None,
+            production_multiplier=progress.production_multiplier if progress else 1.0,
+            gathering_multiplier=progress.gathering_multiplier if progress else 1.0,
+            facility_cost_multiplier=progress.facility_cost_multiplier if progress else 1.0,
         )
 
     async def create(

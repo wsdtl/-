@@ -23,6 +23,8 @@ from game.core.database import (
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
 from game.core.pool import ALLOW_REPEATS, PoolRequest, PoolService
+from game.core.sect import SectService
+from game.core.sect_progress import SectProgressService
 from game.core.world import LocationQuery, LocationView, WorldService
 
 from .contracts import (
@@ -86,6 +88,8 @@ class GatheringService:
         asset: AssetService,
         player_state: PlayerStateService,
         pool: PoolService,
+        sect: SectService | None = None,
+        progress: SectProgressService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -96,6 +100,8 @@ class GatheringService:
         self._asset = asset
         self._player_state = player_state
         self._pool = pool
+        self._sect = sect
+        self._progress = progress
         self._initialized = False
         self._modes: dict[str, _Mode] = {}
 
@@ -187,15 +193,18 @@ class GatheringService:
             companion_name = await self._assisting_companion_name(user_id)
             unit_count = 1 + int(bool(companion_name))
             total_units += unit_count
+            gathering_multiplier = await self._gathering_multiplier(user_id)
             user_results[user_id] = {
                 "人物": profile.name,
                 "道侣相助": companion_name,
                 "采集单位": unit_count,
+                "宗门采集倍率": gathering_multiplier,
                 "预定收获": self._precompute_items(
                     mode,
                     pool_names,
                     unit_count,
                     source,
+                    gathering_multiplier,
                 ),
             }
 
@@ -417,6 +426,7 @@ class GatheringService:
         pool_names: tuple[str, ...],
         unit_count: int,
         source: random.Random,
+        multiplier: float = 1.0,
     ) -> list[dict[str, object]]:
         count_per_round = unit_count * mode.draws_per_unit
         draws = self._pool.draw(
@@ -436,15 +446,24 @@ class GatheringService:
                     f"{mode.kind}资源池混入{record.number_category}：{entry.entity_id}"
                 )
             grade = self._asset.draw_drop_grade(seed=source.getrandbits(64))
+            quantity = _scaled_quantity(mode.quantity_per_draw, multiplier, source)
             result.append(
                 {
                     "轮次": index // count_per_round + 1,
                     "编号": entry.entity_id,
                     "品级": grade.grade_id,
-                    "数量": mode.quantity_per_draw,
+                    "数量": quantity,
                 }
             )
         return result
+
+    async def _gathering_multiplier(self, user_id: str) -> float:
+        if self._sect is None or self._progress is None:
+            return 1.0
+        membership = await self._sect.membership(user_id)
+        if membership is None:
+            return 1.0
+        return (await self._progress.snapshot(membership.sect_id)).gathering_multiplier
 
     def _completed_rounds(
         self, mode: _Mode, started_at: datetime, current: datetime
@@ -715,6 +734,15 @@ def _number(value: object, label: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise GatheringStateError(f"{label}必须是数值")
     return value
+
+
+def _scaled_quantity(value: int, multiplier: float, source: random.Random) -> int:
+    scaled = value * multiplier
+    quantity = int(scaled)
+    fraction = scaled - quantity
+    if fraction and source.random() < fraction:
+        quantity += 1
+    return max(1, quantity)
 
 
 def _rule_mapping(value: object, label: str) -> Mapping[str, object]:

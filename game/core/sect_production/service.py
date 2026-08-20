@@ -22,6 +22,7 @@ from game.core.location import LocationService
 from game.core.pool import PoolService
 from game.core.sect import SectService
 from game.core.sect_assets import SectAssetError, SectAssetService, SectMaterialCost
+from game.core.sect_progress import SectProgressService
 
 from .contracts import (
     SectProductionError,
@@ -48,6 +49,7 @@ class SectProductionService:
         asset: AssetService,
         pool: PoolService,
         location: LocationService,
+        progress: SectProgressService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -56,6 +58,7 @@ class SectProductionService:
         self._asset = asset
         self._pool = pool
         self._location = location
+        self._progress = progress
         self._initialized = False
         self._facilities: Mapping[str, SectProductionFacility] = MappingProxyType({})
         self._rule_version = ""
@@ -145,7 +148,10 @@ class SectProductionService:
         if cycles == 0:
             view = self._view_from_record(facility, member.role, record, current)
             return SectProductionResult(view, 0, (), 0, 0, False)
-        outputs, spirit_stones = self._roll(facility, member.sect_id, sequence, cycles)
+        multiplier = 1.0
+        if self._progress is not None:
+            multiplier = (await self._progress.snapshot(member.sect_id)).production_multiplier
+        outputs, spirit_stones = self._roll(facility, member.sect_id, sequence, cycles, multiplier)
         gain = await self._assets.plan_resource_gain(
             member.sect_id,
             spirit_stones,
@@ -216,7 +222,7 @@ class SectProductionService:
         return member, facility
 
     def _roll(
-        self, facility: SectProductionFacility, sect_id: str, sequence: int, cycles: int
+        self, facility: SectProductionFacility, sect_id: str, sequence: int, cycles: int, multiplier: float = 1.0
     ) -> tuple[tuple[SectProductionOutput, ...], int]:
         totals: dict[tuple[str, str, str], int] = {}
         stones = 0
@@ -225,12 +231,24 @@ class SectProductionService:
             seed = _seed(self._rule_version, sect_id, facility.kind, cycle)
             rng = random.Random(seed)
             if facility.kind == "灵脉":
-                stones += int(rng.randint(*facility.primary_range) * facility.base_multiplier)
+                stones += _scaled_quantity(
+                    rng.randint(*facility.primary_range) * facility.base_multiplier,
+                    multiplier,
+                    rng,
+                )
                 category = "灵矿"
-                quantity = max(1, int(rng.randint(*facility.material_range) * facility.base_multiplier))
+                quantity = _scaled_quantity(
+                    rng.randint(*facility.material_range) * facility.base_multiplier,
+                    multiplier,
+                    rng,
+                )
             else:
                 category = "灵植"
-                quantity = max(1, int(rng.randint(*facility.material_range) * facility.base_multiplier))
+                quantity = _scaled_quantity(
+                    rng.randint(*facility.material_range) * facility.base_multiplier,
+                    multiplier,
+                    rng,
+                )
             item_id = self._pool.draw_item_category(category, seed=seed ^ 0xA5A5A5A5)[0]
             grade = self._asset.draw_drop_grade(seed=seed ^ 0x5A5A5A5A)
             key = (category, item_id, grade.grade_id)
@@ -276,6 +294,7 @@ class SectProductionService:
 
 def _state_value(sect_id, kind, settled_at, version, *, sequence=0):
     return {
+        "名称": kind,
         "宗门编号": sect_id,
         "设施": kind,
         "上次结算时间": settled_at.isoformat(),
@@ -339,6 +358,15 @@ def _positive_float(value, label):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise JsonDataError(f"{label}必须是正数")
     return float(value)
+
+
+def _scaled_quantity(value: float, multiplier: float, source: random.Random) -> int:
+    scaled = float(value) * multiplier
+    quantity = int(scaled)
+    fraction = scaled - quantity
+    if fraction and source.random() < fraction:
+        quantity += 1
+    return max(1, quantity)
 
 
 def _range(value, label):

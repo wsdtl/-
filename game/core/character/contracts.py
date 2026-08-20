@@ -108,6 +108,7 @@ class CharacterProfile:
     level: int
     experience: int
     spirit_stones: int
+    sect_contribution: int
     automatic_medicine: bool
     prepared_battle_medicine: PreparedBattleMedicine | None
     attributes: tuple[tuple[str, int | float], ...]
@@ -162,6 +163,14 @@ class CharacterEquipPlan:
 
 @dataclass(frozen=True)
 class CharacterSpiritStonePlan:
+    before: int
+    after: int
+    delta: int
+    operation: StateMutation
+
+
+@dataclass(frozen=True)
+class CharacterContributionPlan:
     before: int
     after: int
     delta: int
@@ -245,6 +254,7 @@ __all__ = [
     "CharacterBattlePlan",
     "CharacterBreakthroughCorrectionPlan",
     "CharacterBreakthroughPlan",
+    "CharacterContributionPlan",
     "CharacterCreateCommand",
     "CharacterCreationError",
     "CharacterCreationResult",

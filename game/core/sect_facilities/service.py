@@ -31,6 +31,7 @@ from game.core.sect_assets import (
     SectMaterialCost,
     SectProductGain,
 )
+from game.core.sect_progress import SectProgressService
 
 from .contracts import (
     FacilityPermission,
@@ -75,6 +76,7 @@ class SectFacilityService:
         forging: ForgingService | None = None,
         formation: FormationService | None = None,
         location: LocationService | None = None,
+        progress: SectProgressService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -85,6 +87,7 @@ class SectFacilityService:
         self._forging = forging
         self._formation = formation
         self._location = location
+        self._progress = progress
         self._initialized = False
         self._facilities: dict[str, SectFacility] = {}
         self._permissions: dict[str, FacilityPermission] = {}
@@ -291,12 +294,15 @@ class SectFacilityService:
         member, entries, stones = await self._context(user_id, material_source)
         assessment = self._forging.assess(identifier, entries)
         self.authorize(member.role, material_source, assessment.law.stage)
+        cost = self.cost("炼器", assessment.law.stage)
+        if material_source == "宗门灵藏":
+            cost = await self._discounted_cost(member.sect_id, cost)
         return SectForgingPreview(
             self.facility("炼器"),
             member.role,
             material_source,
             stones,
-            self.cost("炼器", assessment.law.stage),
+            cost,
             assessment,
         )
 
@@ -306,12 +312,15 @@ class SectFacilityService:
         member, entries, stones = await self._context(user_id, material_source)
         assessment = self._alchemy.assess(identifier, entries)
         self.authorize(member.role, material_source, assessment.medicine_grade_name)
+        cost = self.cost("炼丹", assessment.medicine_grade_name)
+        if material_source == "宗门灵藏":
+            cost = await self._discounted_cost(member.sect_id, cost)
         return SectAlchemyPreview(
             self.facility("炼丹"),
             member.role,
             material_source,
             stones,
-            self.cost("炼丹", assessment.medicine_grade_name),
+            cost,
             assessment,
         )
 
@@ -330,6 +339,8 @@ class SectFacilityService:
         cost = self.cost("炼阵", grade_key)
         if grade_key == "圣品":
             cost += sum(item.required for item in assessment.requirements) * 1_000
+        if material_source == "宗门灵藏":
+            cost = await self._discounted_cost(member.sect_id, cost)
         return SectFormationPreview(
             self.facility("炼阵"),
             member.role,
@@ -338,6 +349,12 @@ class SectFacilityService:
             cost,
             assessment,
         )
+
+    async def _discounted_cost(self, sect_id: str, cost: int) -> int:
+        if self._progress is None:
+            return cost
+        snapshot = await self._progress.snapshot(sect_id)
+        return max(1, int(cost * snapshot.facility_cost_multiplier))
 
     @_translate_asset_errors
     async def forge(

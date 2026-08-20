@@ -35,6 +35,7 @@ from .core.sect_assets import SectAssetService
 from .core.sect_facilities import SectFacilityService
 from .core.sect_library import SectLibraryService
 from .core.sect_production import SectProductionService
+from .core.sect_progress import SectProgressService
 from .core.team import TeamService
 from .core.trade import TradeService
 from .core.world import WorldService
@@ -99,6 +100,7 @@ class CoreServices:
     sect_assets: SectAssetService
     sect_facilities: SectFacilityService
     sect_production: SectProductionService
+    sect_progress: SectProgressService
     action_group: ActionGroupService
     hosting: HostingService
     character: CharacterService
@@ -369,6 +371,14 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
+    sect_progress = SectProgressService(data, sect, character)
+    sect_progress_status = sect_progress.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("宗门贡献等级核心微服务已启动"),
+            C.kv("maximum_level", sect_progress_status.maximum_level),
+        )
+    )
     sect_assets = SectAssetService(data, database, sect, asset, character)
     sect_assets_status = sect_assets.initialize()
     logger.opt(colors=True).success(
@@ -388,6 +398,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         forging,
         formation,
         location,
+        sect_progress,
     )
     sect_facilities_status = sect_facilities.initialize()
     logger.opt(colors=True).success(
@@ -405,6 +416,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         pool,
         location,
+        sect_progress,
     )
     sect_production_status = sect_production.initialize()
     logger.opt(colors=True).success(
@@ -481,6 +493,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         player_state,
         pool,
+        sect,
+        sect_progress,
     )
     gathering_status = gathering.initialize()
     logger.opt(colors=True).success(
@@ -510,6 +524,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         sect_assets=sect_assets,
         sect_facilities=sect_facilities,
         sect_production=sect_production,
+        sect_progress=sect_progress,
         action_group=action_group,
         hosting=hosting,
         character=character,
@@ -589,7 +604,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         data, medicine, character, asset, player_state, location, world, database
     )
     yixing.initialize()
-    zongmen = SectFeature(data, sect, character, location, world, player_state)
+    zongmen = SectFeature(data, sect, character, location, world, player_state, sect_progress)
     zongmen.initialize()
     zongmen_tongxing = SectFollowFeature(
         data, sect, character, location, player_state, team
