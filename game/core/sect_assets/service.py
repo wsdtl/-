@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from decimal import ROUND_FLOOR, Decimal
+from math import ceil
 
 from game.core.asset import AssetService, AssetStateError, InventoryAdjustment
 from game.core.character import (
@@ -20,6 +21,10 @@ from game.core.database import (
     StateConflictError,
     StateMutation,
     TransactionCommand,
+)
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
 )
 from game.core.sect import SectService
 
@@ -51,12 +56,14 @@ class SectAssetService:
         sect: SectService,
         asset: AssetService,
         character: CharacterService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._database = database
         self._sect = sect
         self._asset = asset
         self._character = character
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._materials: tuple[str, ...] = ()
         self._products: tuple[str, ...] = ()
@@ -68,6 +75,8 @@ class SectAssetService:
     def initialize(self) -> SectAssetStatus:
         if self._initialized:
             raise RuntimeError("宗门公共资产核心已经初始化")
+        if not self._innate_treasure.status().initialized:
+            raise RuntimeError("先天灵宝核心必须先于宗门公共资产核心启动")
         rules = self._data.dataset("宗门规则")
         lingcang = _mapping(rules.get("灵藏"), "宗门/灵藏.json")
         wanzhen = _mapping(rules.get("万珍殿"), "宗门/万珍殿.json")
@@ -160,6 +169,9 @@ class SectAssetService:
             self._material_reference_field,
             self._material_contribution_divisor,
         )
+        contribution, activation = await self._boost_contribution(
+            user_id, contribution
+        )
         contribution_operation = ()
         if contribution:
             try:
@@ -180,21 +192,26 @@ class SectAssetService:
                 "数量": normalized_quantity,
             },
         )
-        return SectAssetTransfer("灵藏", "捐入", entry, 0, receipt.replayed)
+        return SectAssetTransfer(
+            "灵藏", "捐入", entry, 0, receipt.replayed, contribution, activation
+        )
 
     async def donate_stones(
         self, user_id: str, request_id: str, quantity: int
     ) -> SectAssetTransfer:
         member = await self._member(user_id)
         normalized = _positive_int(quantity, "灵石数量")
+        base_contribution = (
+            normalized // self._stone_contribution_unit
+        ) * self._stone_contribution_value
+        contribution, activation = await self._boost_contribution(
+            user_id, base_contribution
+        )
         try:
             personal = await self._character.plan_spirit_stone_change(
                 user_id,
                 delta=-normalized,
-                contribution_delta=(
-                    normalized // self._stone_contribution_unit
-                )
-                * self._stone_contribution_value,
+                contribution_delta=contribution,
             )
         except (CharacterCultivationError, CharacterStateError) as exc:
             raise SectAssetError(str(exc)) from exc
@@ -206,7 +223,33 @@ class SectAssetService:
             (personal.operation, mutation),
             {"宗门编号": member.sect_id, "灵石": normalized},
         )
-        return SectAssetTransfer("灵藏", "捐入", None, after, receipt.replayed)
+        return SectAssetTransfer(
+            "灵藏", "捐入", None, after, receipt.replayed, contribution, activation
+        )
+
+    async def _boost_contribution(
+        self, user_id: str, base: int
+    ) -> tuple[int, InnateTreasureActivation | None]:
+        if base <= 0:
+            return base, None
+        treasure_effect = await self._innate_treasure.effect(
+            user_id, "宗门贡献入账"
+        )
+        if treasure_effect is None:
+            return base, None
+        treasure, effect = treasure_effect
+        if effect.ability != "提高贡献":
+            return base, None
+        added = max(
+            int(effect.values["最低数量"]),
+            ceil(base * float(effect.values["比例"])),
+        )
+        return base + added, InnateTreasureActivation(
+            treasure.treasure_id,
+            treasure.name,
+            treasure.authority,
+            f"宗门贡献 {base} → {base + added}",
+        )
 
     async def donate_product(
         self,

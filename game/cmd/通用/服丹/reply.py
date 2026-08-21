@@ -18,7 +18,13 @@ def used(feature: MedicineFeature, result: MedicineUseResult):
         资源=result.resource,
         实际恢复=_number(result.recovered),
     )
-    return M.document().section(feature.copy("服丹", "标题"), icon="status").line(line).build()
+    builder = M.document().section(feature.copy("服丹", "标题"), icon="status").line(line)
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.build()
 
 
 def setting(feature: MedicineFeature, result: AutoMedicineResult):

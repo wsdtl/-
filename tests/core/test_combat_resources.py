@@ -15,6 +15,7 @@ from game.core.database import DatabaseService
 from game.core.formation import FormationService
 from game.core.location import LocationService
 from game.core.world import WorldService
+from tests.support import innate_treasure_service
 
 
 def test_defeated_combatant_loses_all_spirit(tmp_path: Path) -> None:
@@ -29,7 +30,7 @@ def test_defeated_combatant_loses_all_spirit(tmp_path: Path) -> None:
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    formation = FormationService(data, database, asset, world, location)
+    formation = FormationService(data, database, asset, world, location, innate_treasure_service(data, database))
     formation.initialize()
     combat = CombatService(data, formation)
     combat.initialize()
@@ -90,7 +91,7 @@ def test_auto_medicine_uses_json_declared_gap_first_order(tmp_path: Path) -> Non
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    formation = FormationService(data, database, asset, world, location)
+    formation = FormationService(data, database, asset, world, location, innate_treasure_service(data, database))
     formation.initialize()
     combat = CombatService(data, formation)
     combat.initialize()

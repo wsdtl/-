@@ -21,6 +21,7 @@ from game.features.chuangjian_renwu import (
     CreateCharacterRequest,
 )
 from game.features.zongmen import SectFeature, SectFeatureError
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -45,7 +46,7 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     character = CharacterService(data, database, player_state, location, asset, growth, forging)
     character.initialize()

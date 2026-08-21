@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from math import ceil
 from types import MappingProxyType
 
 from game.core.asset import (
@@ -20,6 +21,10 @@ from game.core.database import (
     IdempotencyConflictError,
     StateConflictError,
     TransactionCommand,
+)
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
 )
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
@@ -85,12 +90,14 @@ class ForgingService:
         asset: AssetService,
         world: WorldService,
         location: LocationService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._database = database
         self._asset = asset
         self._world = world
         self._location = location
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._weapon_rule: Mapping[str, object] = MappingProxyType({})
         self._stages: tuple[WeaponStage, ...] = ()
@@ -111,6 +118,7 @@ class ForgingService:
             (self._asset.status().initialized, "玩家资产核心"),
             (self._world.status().initialized, "世界核心"),
             (self._location.status().initialized, "位置核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于炼器核心启动")
@@ -369,13 +377,53 @@ class ForgingService:
         preview = await self.preview(normalized, law.law_id)
         if not preview.can_forge:
             raise ForgingMaterialError("纳戒中的兽宝和灵矿不足以炼成该器律")
-        adjustments = tuple(
+        adjustments = [
             InventoryAdjustment(material.item_id, material.grade_id, -material.quantity)
             for material in preview.beast_materials + preview.mineral_materials
-        )
+        ]
+        activation: InnateTreasureActivation | None = None
+        treasure_effect = await self._innate_treasure.effect(normalized, "炼器成功")
+        if treasure_effect is not None:
+            treasure, effect = treasure_effect
+            if effect.ability == "返还灵矿":
+                mineral_total = sum(item.quantity for item in preview.mineral_materials)
+                return_total = min(
+                    mineral_total,
+                    max(
+                        int(effect.values["最低数量"]),
+                        ceil(mineral_total * float(effect.values["比例"])),
+                    ),
+                )
+                remaining = return_total
+                returned: list[str] = []
+                for material in sorted(
+                    preview.mineral_materials,
+                    key=lambda item: (
+                        -item.quantity,
+                        self._asset.grade(item.grade_id).order,
+                        item.item_id,
+                    ),
+                ):
+                    quantity = min(material.quantity, remaining)
+                    if quantity:
+                        adjustments.append(
+                            InventoryAdjustment(
+                                material.item_id, material.grade_id, quantity
+                            )
+                        )
+                        returned.append(f"{material.grade_name}{material.name} × {quantity}")
+                        remaining -= quantity
+                    if not remaining:
+                        break
+                activation = InnateTreasureActivation(
+                    treasure.treasure_id,
+                    treasure.name,
+                    treasure.authority,
+                    "返还" + "、".join(returned),
+                )
         try:
             inventory = await self._asset.plan_inventory_changes(
-                normalized, adjustments
+                normalized, tuple(adjustments)
             )
             reserve = await self._asset.plan_law_reserve_acquisition(
                 normalized, preview.law.law_id
@@ -388,6 +436,7 @@ class ForgingService:
                 "器藏现数量": reserve.quantity_after,
                 "兽宝": [_material_payload(item) for item in preview.beast_materials],
                 "灵矿": [_material_payload(item) for item in preview.mineral_materials],
+                "先天灵宝": _activation_payload(activation),
             }
             receipt = await self._database.commit(
                 TransactionCommand(
@@ -409,6 +458,7 @@ class ForgingService:
             reserve.quantity_before,
             reserve.quantity_after,
             receipt.replayed,
+            activation,
         )
 
     def _replayed_result(
@@ -436,6 +486,7 @@ class ForgingService:
             after = _payload_positive_int(
                 payload.get("器藏现数量"), "炼器事务.器藏现数量"
             )
+            activation = _payload_activation(payload.get("先天灵宝"))
         except (KeyError, TypeError, ValueError) as exc:
             raise ForgingConflictError("已提交炼器事务无法还原") from exc
         stage = self._stage_by_name[law.stage]
@@ -451,7 +502,7 @@ class ForgingService:
             stage.secondary_substitution_limit,
             True,
         )
-        return ForgingResult(preview, before, after, True)
+        return ForgingResult(preview, before, after, True, activation)
 
     def _build_preview(
         self,
@@ -829,6 +880,31 @@ def _material_payload(material: ForgingMaterial) -> dict[str, object]:
         "脉性": material.trait,
         "关系": material.relation,
     }
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "炼器事务.先天灵宝")
+    return InnateTreasureActivation(
+        _payload_text(raw.get("编号"), "炼器事务.先天灵宝.编号"),
+        _payload_text(raw.get("名称"), "炼器事务.先天灵宝.名称"),
+        _payload_text(raw.get("权柄"), "炼器事务.先天灵宝.权柄"),
+        _payload_text(raw.get("结果"), "炼器事务.先天灵宝.结果"),
+    )
 
 
 def _payload_materials(

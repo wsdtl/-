@@ -98,6 +98,15 @@ class SharedLocationMutation:
     expected_version: int
 
 
+DatabaseMutation = (
+    StateMutation
+    | LocationMutation
+    | SharedEntityMutation
+    | SharedMemberMutation
+    | SharedLocationMutation
+)
+
+
 @dataclass(frozen=True)
 class MutationChange:
     scope: str
@@ -114,15 +123,45 @@ class TransactionCommand:
     user_id: str
     request_id: str
     business_type: str
-    operations: tuple[
-        StateMutation
-        | LocationMutation
-        | SharedEntityMutation
-        | SharedMemberMutation
-        | SharedLocationMutation,
-        ...,
-    ]
+    operations: tuple[DatabaseMutation, ...]
     payload: JsonObject
+
+
+@dataclass(frozen=True)
+class SettlementTransactionPlan:
+    """把结算结果、奖励、状态释放和结算事实收进同一事务。"""
+
+    result_operations: tuple[DatabaseMutation, ...]
+    reward_operations: tuple[DatabaseMutation, ...]
+    release_operations: tuple[DatabaseMutation, ...]
+    record_operations: tuple[DatabaseMutation, ...]
+
+    def command(
+        self,
+        *,
+        user_id: str,
+        request_id: str,
+        business_type: str,
+        payload: JsonObject,
+    ) -> TransactionCommand:
+        if not self.result_operations:
+            raise ValueError("玩法结算必须包含角色或公共结果写入")
+        if not self.release_operations:
+            raise ValueError("玩法结算必须释放参与者行为状态")
+        if not self.record_operations:
+            raise ValueError("玩法结算必须保存不可变结算事实")
+        return TransactionCommand(
+            user_id=user_id,
+            request_id=request_id,
+            business_type=business_type,
+            operations=(
+                *self.result_operations,
+                *self.reward_operations,
+                *self.release_operations,
+                *self.record_operations,
+            ),
+            payload=payload,
+        )
 
 
 @dataclass(frozen=True)
@@ -193,12 +232,14 @@ class SharedLocationRecord:
 __all__ = [
     "CommittedTransaction",
     "DatabaseError",
+    "DatabaseMutation",
     "DatabaseStatus",
     "IdempotencyConflictError",
     "LocationMutation",
     "LocationRecord",
     "MutationChange",
     "NearbyLocationRecord",
+    "SettlementTransactionPlan",
     "SharedConstraintError",
     "SharedEntityMutation",
     "SharedEntityRecord",

@@ -34,6 +34,7 @@ from game.features.daolv_jiejiao import (
 )
 from game.features.weizhi import PositionFeature
 from message import DocumentMessage
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -64,7 +65,7 @@ def _services(tmp_path: Path):
     item_catalog.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()
@@ -83,6 +84,7 @@ def _services(tmp_path: Path):
         location,
         world,
         database,
+        innate_treasure_service(data, database),
     )
     interaction.initialize()
     position = PositionFeature(

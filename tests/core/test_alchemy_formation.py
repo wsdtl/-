@@ -12,6 +12,7 @@ from game.core.database import DatabaseService, TransactionCommand
 from game.core.formation import FormationService, FormationUnavailableError
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -30,9 +31,9 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    alchemy = AlchemyService(data, database, asset, world, location)
+    alchemy = AlchemyService(data, database, asset, world, location, innate_treasure_service(data, database))
     alchemy.initialize()
-    formation = FormationService(data, database, asset, world, location)
+    formation = FormationService(data, database, asset, world, location, innate_treasure_service(data, database))
     formation.initialize()
     return data, world, database, location, asset, alchemy, formation
 

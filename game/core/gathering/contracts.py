@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class GatheringError(RuntimeError):
     """采集无法完成请求。"""
@@ -94,6 +96,7 @@ class GatheringUserSummary:
     character_name: str
     assisting_companion_name: str
     items: tuple[GatheredItem, ...]
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

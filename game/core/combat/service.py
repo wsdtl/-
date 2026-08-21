@@ -270,6 +270,9 @@ class CombatService:
             "剩余行动": value.remaining_actions,
             "持续单位": value.duration_unit,
             "属性": dict(value.modifiers),
+            "层数": value.stacks,
+            "层数上限": value.maximum_stacks,
+            "行动限制": list(value.action_limits),
             "标签": list(value.tags),
             "监听": listeners,
             "来源": value.source,
@@ -327,7 +330,11 @@ class CombatService:
                 RuntimeBattleReportParticipant(
                     id=value.id,
                     name=value.name,
-                    title=(display.title if display and display.title else value.combatant_type),
+                    title=(
+                        display.title
+                        if display and display.title
+                        else value.combatant_type
+                    ),
                     attributes=attributes,
                     initial_health=(
                         value.health

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
@@ -796,6 +797,14 @@ class CharacterService:
                 _state_mapping(replaced, "原修行槽").get("编号"), "原修行槽.编号"
             )
         )
+        replaced_grade_id = (
+            ""
+            if replaced is None
+            else _state_text(
+                _state_mapping(replaced, "原修行槽").get("品级"),
+                "原修行槽.品级",
+            )
+        )
         return CharacterEquipPlan(
             normalized_category,
             slot,
@@ -803,6 +812,7 @@ class CharacterService:
             content_name,
             grade.grade_id,
             replaced_id,
+            replaced_grade_id,
             StateMutation(
                 normalized_user_id,
                 "cultivation",
@@ -954,7 +964,11 @@ class CharacterService:
         )
 
     async def plan_breakthrough(
-        self, user_id: str, *, medicine_id: str
+        self,
+        user_id: str,
+        *,
+        medicine_id: str,
+        permanent_attribute_ratio: float = 0.0,
     ) -> CharacterBreakthroughPlan:
         """校验突破丹并结算人物境界、永久属性和积压经验。"""
 
@@ -977,6 +991,18 @@ class CharacterService:
         medicine, permanent = self._breakthrough_medicine(
             medicine_id, next_realm.realm_id
         )
+        if (
+            isinstance(permanent_attribute_ratio, bool)
+            or not isinstance(permanent_attribute_ratio, (int, float))
+            or permanent_attribute_ratio < 0
+        ):
+            raise CharacterCultivationError("突破永久属性倍率不能为负数")
+        if permanent and permanent_attribute_ratio:
+            permanent = {
+                key: value
+                + max(1, math.ceil(float(value) * permanent_attribute_ratio))
+                for key, value in permanent.items()
+            }
         records = [
             dict(record)
             for record in _state_records(character.get("突破记录"), "人物.突破记录")
@@ -1021,6 +1047,7 @@ class CharacterService:
             next_realm.realm_id,
             next_realm.name,
             str(medicine.get("编号")),
+            tuple(sorted(permanent.items())),
             StateMutation(
                 normalized_user_id,
                 "character",

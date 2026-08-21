@@ -12,6 +12,7 @@ from game.core.database import DatabaseService, StateAddress, TransactionCommand
 from game.core.forging import ForgingMaterialError, ForgingService
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -30,7 +31,7 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     return data, world, database, location, asset, forging
 

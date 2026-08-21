@@ -157,6 +157,7 @@ class CharacterEquipPlan:
     content_name: str
     grade_id: str
     replaced_content_id: str
+    replaced_grade_id: str
     operation: StateMutation
     reserve_operation: StateMutation | None
 
@@ -189,6 +190,7 @@ class CharacterBreakthroughPlan:
     realm_after: str
     realm_name_after: str
     medicine_id: str
+    permanent_attributes: tuple[tuple[str, int | float], ...]
     operation: StateMutation
 
 

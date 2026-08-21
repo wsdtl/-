@@ -193,6 +193,8 @@ class FormationReserveStack:
     grade_name: str
     quantity: int
     materials: tuple[tuple[str, str], ...]
+    treasure_id: str
+    modifiers: tuple[tuple[str, str], ...]
     version: int
 
 

@@ -26,6 +26,7 @@ from game.features.daolv_jiejiao import (
     CompanionInvitationRequest,
 )
 from game.features.tongquetai import TongquetaiFeature, TongquetaiRequest
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -54,7 +55,7 @@ def _services(tmp_path: Path):
     catalog.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()
@@ -73,6 +74,7 @@ def _services(tmp_path: Path):
         location,
         world,
         database,
+        innate_treasure_service(data, database),
     )
     interaction.initialize()
     feature = TongquetaiFeature(
@@ -85,6 +87,7 @@ def _services(tmp_path: Path):
         location,
         world,
         database,
+        innate_treasure_service(data, database),
     )
     feature.initialize()
     return growth, database, world, location, asset, companion, character, create, interaction, feature

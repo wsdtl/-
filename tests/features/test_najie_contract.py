@@ -20,6 +20,7 @@ from game.features.chuangjian_renwu import (
 )
 from game.features.najie import NajieFeature
 from message import RenderedMessage, render_local_message
+from tests.support import innate_treasure_service
 
 najie_reply = import_module("game.cmd.通用.纳戒.reply")
 
@@ -46,7 +47,7 @@ def _services(tmp_path: Path):
     location.initialize()
     assets = AssetService(data, database)
     assets.initialize()
-    forging = ForgingService(data, database, assets, world, location)
+    forging = ForgingService(data, database, assets, world, location, innate_treasure_service(data, database))
     forging.initialize()
     character = CharacterService(
         data, database, player_state, location, assets, growth, forging

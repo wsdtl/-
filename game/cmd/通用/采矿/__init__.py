@@ -13,6 +13,7 @@ from . import reply
     scope="通用",
     cmd="采矿",
     guard_rule="自主空闲",
+    metadata={"hosting": {"activity": "采矿", "phase": "start"}},
     help=HelpSpec(
         category="行动",
         summary="按当前地形与同行修士共同采集灵矿",
@@ -66,6 +67,7 @@ async def ore_gathering_progress(*, user_id: str, manager, **_) -> None:
     scope="通用",
     cmd="结束采矿",
     guard_rule="已创建",
+    metadata={"hosting": {"activity": "采矿", "phase": "end"}},
     help=HelpSpec(
         category="行动",
         summary="按完整轮次带领同行修士结束采矿",

@@ -153,6 +153,11 @@ def gift(
             text(copy, "赠礼", "获得回礼"),
             f"{result.reward_grade.name}{result.reward_item.name} × {result.reward_quantity}",
         )
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
     return builder.actions(message_actions(actions)).build()
 
 

@@ -20,6 +20,10 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
 
@@ -92,12 +96,14 @@ class AlchemyService:
         asset: AssetService,
         world: WorldService,
         location: LocationService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._database = database
         self._asset = asset
         self._world = world
         self._location = location
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._recipes: Mapping[str, AlchemyRecipe] = MappingProxyType({})
         self._recipe_by_name: Mapping[str, str] = MappingProxyType({})
@@ -119,6 +125,7 @@ class AlchemyService:
             (self._asset.status().initialized, "玩家资产核心"),
             (self._world.status().initialized, "世界核心"),
             (self._location.status().initialized, "位置核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于炼丹核心启动")
@@ -300,17 +307,53 @@ class AlchemyService:
         if not preview.can_refine or preview.beast_material is None:
             raise AlchemyMaterialError("纳戒中的兽宝和灵植不足以炼成该丹药")
         materials = (preview.beast_material,) + preview.herb_materials
-        adjustments = tuple(
+        adjustments = [
             InventoryAdjustment(item.item_id, item.grade_id, -item.quantity)
             for item in materials
-        ) + (
+        ]
+        activation: InnateTreasureActivation | None = None
+        output_quantity = 1
+        treasure_effect = await self._innate_treasure.effect(normalized, "炼丹成功")
+        if treasure_effect is not None:
+            treasure, effect = treasure_effect
+            if effect.ability == "返还主要辅材":
+                returned = min(
+                    preview.herb_materials,
+                    key=lambda item: (-item.quantity, item.item_id, item.grade_id),
+                )
+                returned_quantity = min(
+                    returned.quantity, int(effect.values["数量"])
+                )
+                adjustments.append(
+                    InventoryAdjustment(
+                        returned.item_id, returned.grade_id, returned_quantity
+                    )
+                )
+                activation = InnateTreasureActivation(
+                    treasure.treasure_id,
+                    treasure.name,
+                    treasure.authority,
+                    f"返还{returned.grade_name}{returned.name} × {returned_quantity}",
+                )
+            elif effect.ability == "增加成丹":
+                added = int(effect.values["数量"])
+                output_quantity += added
+                activation = InnateTreasureActivation(
+                    treasure.treasure_id,
+                    treasure.name,
+                    treasure.authority,
+                    f"额外成丹 × {added}",
+                )
+        adjustments.append(
             InventoryAdjustment(
-                preview.recipe.medicine_id, preview.medicine_grade_id, 1
-            ),
+                preview.recipe.medicine_id,
+                preview.medicine_grade_id,
+                output_quantity,
+            )
         )
         try:
             inventory = await self._asset.plan_inventory_changes(
-                normalized, adjustments
+                normalized, tuple(adjustments)
             )
             output = next(
                 change
@@ -328,6 +371,7 @@ class AlchemyService:
                 "现数量": output.after_quantity,
                 "药引": _material_payload(preview.beast_material),
                 "辅材": [_material_payload(item) for item in preview.herb_materials],
+                "先天灵宝": _activation_payload(activation),
             }
             receipt = await self._database.commit(
                 TransactionCommand(
@@ -349,6 +393,7 @@ class AlchemyService:
             output.before_quantity,
             output.after_quantity,
             receipt.replayed,
+            activation,
         )
 
     def _replayed_result(
@@ -375,6 +420,7 @@ class AlchemyService:
             )
             before = _payload_nonnegative_int(payload.get("原数量"), "炼丹事务.原数量")
             after = _payload_positive_int(payload.get("现数量"), "炼丹事务.现数量")
+            activation = _payload_activation(payload.get("先天灵宝"))
         except (KeyError, TypeError, ValueError) as exc:
             raise AlchemyConflictError("已提交炼丹事务无法还原") from exc
         difficulty = self._difficulties[recipe.difficulty]
@@ -392,7 +438,7 @@ class AlchemyService:
             difficulty.secondary_limit,
             True,
         )
-        return AlchemyResult(preview, before, after, True)
+        return AlchemyResult(preview, before, after, True, activation)
 
     def _build_preview(
         self,
@@ -798,6 +844,31 @@ def _material_payload(material: AlchemyMaterial) -> dict[str, object]:
         "药脉": material.trait,
         "关系": material.relation,
     }
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "炼丹事务.先天灵宝")
+    return InnateTreasureActivation(
+        _payload_text(raw.get("编号"), "炼丹事务.先天灵宝.编号"),
+        _payload_text(raw.get("名称"), "炼丹事务.先天灵宝.名称"),
+        _payload_text(raw.get("权柄"), "炼丹事务.先天灵宝.权柄"),
+        _payload_text(raw.get("结果"), "炼丹事务.先天灵宝.结果"),
+    )
 
 
 def _payload_materials(

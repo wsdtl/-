@@ -59,9 +59,12 @@ def test_failed_guard_validation_releases_built_services(monkeypatch) -> None:
                 "gathering_latest",
                 "gathering_settlement",
             ),
-                team=_StateOwner("team", "team_invite"),
-                sect=_StateOwner("sect_invite"),
-                formation=_StateOwner("prepared_formation"),
+            team=_StateOwner("team", "team_invite"),
+            sect=_StateOwner("sect_invite"),
+            formation=_StateOwner("prepared_formation"),
+            hosting=_StateOwner("hosting_latest"),
+            injury=_StateOwner("injury"),
+            innate_treasure=_StateOwner("innate_treasure"),
         )
     )
     monkeypatch.setattr(game_app, "_services", None)

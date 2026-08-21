@@ -28,6 +28,7 @@ from game.features.chuangjian_renwu import (
 )
 from game.features.guiyuan import GuiyuanConflictError, GuiyuanError, GuiyuanFeature
 from game.features.yixing import YixingFeature
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -54,7 +55,7 @@ def _services(tmp_path: Path):
     asset.initialize()
     medicine = MedicineService(data, asset)
     medicine.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()

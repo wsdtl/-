@@ -13,6 +13,7 @@ from game.core.companion import (
     CompanionInstance,
     CompanionRelation,
 )
+from game.core.innate_treasure import InnateTreasureActivation
 from game.core.item_catalog import ItemDetail
 
 
@@ -92,6 +93,7 @@ class CompanionGiftResult:
     reward_quantity: int
     first_full: bool
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

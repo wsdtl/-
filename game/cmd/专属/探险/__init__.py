@@ -13,6 +13,7 @@ from . import reply
     scope="专属",
     cmd="探险",
     guard_rule="自主空闲",
+    metadata={"hosting": {"activity": "探险", "phase": "start"}},
     help=HelpSpec(
         category="行动",
         summary="在当前地点开始一次普通探险",
@@ -63,6 +64,7 @@ async def exploration_progress(*, user_id: str, manager, **_) -> None:
     scope="专属",
     cmd="探险结算",
     guard_rule="已创建",
+    metadata={"hosting": {"activity": "探险", "phase": "end"}},
     help=HelpSpec(
         category="行动",
         summary="探险结束后结算全部结果并按页查看",

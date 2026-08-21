@@ -27,19 +27,54 @@ class HostingFeature:
             raise RuntimeError("托管玩法微服务尚未初始化")
         return self._copy
 
-    async def start(self, user_id: str, request_id: str) -> HostingResult:
+    async def start(
+        self, user_id: str, request_id: str, activities: tuple[str, ...]
+    ) -> HostingResult:
         try:
-            session = await self._hosting.start(user_id, request_id)
+            session = await self._hosting.start(user_id, request_id, activities)
         except HostingError as exc:
             raise HostingFeatureError(exc.code) from exc
-        return HostingResult("开启", session.mode, len(session.participant_user_ids))
+        return HostingResult("开启", session)
+
+    async def current(self, user_id: str) -> HostingResult:
+        try:
+            session = await self._hosting.current(user_id)
+            if session is not None:
+                return HostingResult("查看", session)
+            latest = await self._hosting.latest(user_id)
+        except HostingError as exc:
+            raise HostingFeatureError(exc.code) from exc
+        return HostingResult("查看", latest, active=False)
+
+    async def resume(self, user_id: str, request_id: str) -> HostingResult:
+        try:
+            session = await self._hosting.resume(user_id, request_id)
+        except HostingError as exc:
+            raise HostingFeatureError(exc.code) from exc
+        return HostingResult("继续", session)
 
     async def cancel(self, user_id: str, request_id: str) -> HostingResult:
         try:
             session = await self._hosting.cancel(user_id, request_id)
         except HostingError as exc:
             raise HostingFeatureError(exc.code) from exc
-        return HostingResult("取消", session.mode, len(session.participant_user_ids))
+        return HostingResult("取消", session, active=False)
+
+    async def active_plans(self):
+        return await self._hosting.active_plans()
+
+    async def claim_execution(self, session_id: str):
+        return await self._hosting.claim_execution(session_id)
+
+    async def verify_execution(self, execution) -> bool:
+        return await self._hosting.verify_execution(execution)
+
+    async def complete_execution(
+        self, execution, *, success: bool, error: str = ""
+    ):
+        return await self._hosting.complete_execution(
+            execution, success=success, error=error
+        )
 
 
 __all__ = ["HostingFeature"]

@@ -76,6 +76,9 @@ class CombatStatusSpec:
     source: str = ""
     source_name: str = ""
     metadata: tuple[tuple[str, str | int | float], ...] = ()
+    stacks: int = 1
+    maximum_stacks: int = 1
+    action_limits: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

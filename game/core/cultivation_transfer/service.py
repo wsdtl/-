@@ -117,7 +117,9 @@ class CultivationTransferService:
         self._require_initialized()
         return self._guard_rule
 
-    def values(self, *, level: int, experience: int) -> CultivationTransferValues:
+    def values(
+        self, *, level: int, experience: int, severed_rate: int | None = None
+    ) -> CultivationTransferValues:
         self._require_initialized()
         if isinstance(level, bool) or not isinstance(level, int) or level < self._minimum_level:
             raise CultivationTransferError(
@@ -128,10 +130,13 @@ class CultivationTransferService:
         cultivation = experience + sum(
             self._growth.experience_required(current) for current in range(1, level)
         )
+        effective_severed_rate = self._severed_rate if severed_rate is None else _rate(
+            severed_rate, "铜雀台.离契转化率"
+        )
         return CultivationTransferValues(
             cultivation,
             math.floor(cultivation * self._protected_rate / 100),
-            math.floor(cultivation * self._severed_rate / 100),
+            math.floor(cultivation * effective_severed_rate / 100),
         )
 
     def _require_initialized(self) -> None:

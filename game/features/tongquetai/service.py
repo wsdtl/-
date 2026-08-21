@@ -19,6 +19,10 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.location import LocationError, LocationService
 from game.core.player_state import PlayerStateService
 from game.core.world import LocationQuery, WorldService
@@ -47,6 +51,7 @@ class TongquetaiFeature:
         location: LocationService,
         world: WorldService,
         database: DatabaseService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._transfer = transfer
@@ -57,6 +62,7 @@ class TongquetaiFeature:
         self._location = location
         self._world = world
         self._database = database
+        self._innate_treasure = innate_treasure
         self._copy: Mapping[str, object] | None = None
         self._buttons: tuple[Mapping[str, object], ...] = ()
 
@@ -72,6 +78,7 @@ class TongquetaiFeature:
             (self._location.status().initialized, "位置核心"),
             (self._world.status().initialized, "世界核心"),
             (self._database.status().initialized, "数据库核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于铜雀台玩法启动")
@@ -125,6 +132,7 @@ class TongquetaiFeature:
             self._transfer.medicine_id,
             context["medicine_name"],
             stack is not None,
+            context["treasure_activation"],
         )
 
     async def settle(self, request: TongquetaiRequest) -> TongquetaiSettlement:
@@ -184,6 +192,7 @@ class TongquetaiFeature:
                 "丹药编号": self._transfer.medicine_id if mode == "护契" else "",
                 "丹药名称": context["medicine_name"] if mode == "护契" else "",
                 "丹药品级": medicine_grade_name,
+                "先天灵宝": _activation_payload(context["treasure_activation"]),
             }
             receipt = await self._database.commit(
                 TransactionCommand(
@@ -215,9 +224,23 @@ class TongquetaiFeature:
             if self._transfer.location_function not in location.available_functions:
                 raise TongquetaiError("只有身在铜雀台才能夺元")
             active = await self._companion.active_instance(user)
+            activation: InnateTreasureActivation | None = None
+            severed_rate = None
+            treasure_effect = await self._innate_treasure.effect(user, "铜雀台夺元")
+            if treasure_effect is not None:
+                treasure, effect = treasure_effect
+                if effect.ability == "提高转化效率":
+                    severed_rate = round(float(effect.values["效率"]) * 100)
+                    activation = InnateTreasureActivation(
+                        treasure.treasure_id,
+                        treasure.name,
+                        treasure.authority,
+                        f"离契转化率提高到{severed_rate}%",
+                    )
             values = self._transfer.values(
                 level=active.instance.level,
                 experience=active.instance.experience,
+                severed_rate=severed_rate,
             )
             profile = await self._character.profile(user)
         except (LocationError, CompanionCultivationError, CultivationTransferError) as exc:
@@ -231,6 +254,7 @@ class TongquetaiFeature:
             "values": values,
             "profile": profile,
             "medicine_name": _text(medicine.get("名称"), "护契丹.名称"),
+            "treasure_activation": activation,
         }
 
     async def _outcome(self, user_id: str, mode: str, offered: int) -> TongquetaiOutcome:
@@ -263,6 +287,33 @@ def _settlement(value: Mapping[str, object], *, replayed: bool) -> TongquetaiSet
         str(value.get("丹药名称") or ""),
         str(value.get("丹药品级") or ""),
         replayed,
+        _payload_activation(value.get("先天灵宝")),
+    )
+
+
+def _activation_payload(value: object) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, InnateTreasureActivation):
+        raise TongquetaiError("铜雀台灵宝快照无效")
+    return {
+        "编号": value.treasure_id,
+        "名称": value.name,
+        "权柄": value.authority,
+        "结果": value.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TongquetaiError("夺元事务.先天灵宝必须是对象")
+    return InnateTreasureActivation(
+        _text(value.get("编号"), "夺元事务.先天灵宝.编号"),
+        _text(value.get("名称"), "夺元事务.先天灵宝.名称"),
+        _text(value.get("权柄"), "夺元事务.先天灵宝.权柄"),
+        _text(value.get("结果"), "夺元事务.先天灵宝.结果"),
     )
 
 

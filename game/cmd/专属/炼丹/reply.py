@@ -106,7 +106,7 @@ def completed(
 ):
     preview_value = value.preview
     alchemist = preview_value.alchemist
-    return (
+    builder = (
         M.document()
         .header(text(copy, "完成", "标题", 地点=preview_value.location_name))
         .section(alchemist.title, icon="item")
@@ -118,9 +118,13 @@ def completed(
             f"纳戒数量 {value.quantity_after}",
         )
         .line(text(copy, "完成", "话语"))
-        .actions(message_actions(actions))
-        .build()
     )
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.actions(message_actions(actions)).build()
 
 
 def error(copy: AlchemyCopy, message: str):

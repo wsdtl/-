@@ -42,6 +42,11 @@ def preview(feature: TongquetaiFeature, value: TongquetaiPreview):
         .line(feature.copy("预览", "保留"))
         .line(feature.copy("预览", "警示"))
     )
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
     actions = tuple(
         Action(
             str(button["编号"]),
@@ -87,6 +92,11 @@ def settled(feature: TongquetaiFeature, value: TongquetaiSettlement):
                 名称=value.companion_name,
                 地点=value.companion_origin,
             )
+        )
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
         )
     return builder.build()
 

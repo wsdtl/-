@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.core.database import SharedEntityMutation
+from game.core.innate_treasure import InnateTreasureActivation
 
 
 class SectAssetError(RuntimeError):
@@ -49,6 +50,8 @@ class SectAssetTransfer:
     entry: SectAssetEntry | None
     spirit_stones: int
     replayed: bool
+    contribution: int = 0
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

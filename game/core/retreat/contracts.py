@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class RetreatError(RuntimeError):
     """闭关无法完成请求。"""
@@ -84,6 +86,8 @@ class RetreatCharacterSummary:
     level_after: int
     health: float
     spirit: float
+    injury_changes: tuple[tuple[str, int, int], ...] = ()
+    injuries: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,7 @@ class RetreatUserSummary:
     character_name: str
     characters: tuple[RetreatCharacterSummary, ...]
     insights: tuple[RetreatInsight, ...]
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

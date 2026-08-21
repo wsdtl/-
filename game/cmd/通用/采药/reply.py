@@ -130,6 +130,11 @@ def _user_page(
     total_pages: int,
 ):
     builder = M.document().header(text(copy, "用户", "标题", 人物=value.character_name))
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
     builder.section(text(copy, "用户", "道侣相助"), icon="cultivator").line(
         value.assisting_companion_name or text(copy, "用户", "没有道侣")
     )

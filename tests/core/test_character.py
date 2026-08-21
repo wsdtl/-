@@ -13,6 +13,7 @@ from game.core.data import JsonDataService
 from game.core.database import DatabaseService, StateAddress
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
+from game.core.injury import InjuryService
 from game.core.location import (
     LocationConflictError,
     LocationMoveCommand,
@@ -33,6 +34,7 @@ from game.features.chuangjian_renwu import (
 )
 from message import DocumentMessage
 from message.renderers.plain_text import render_plain_text
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -65,15 +67,24 @@ def _features(
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     character = CharacterService(
         data, database, player_state, location, asset, growth, forging
     )
     character.initialize()
+    injury = InjuryService(data, database)
+    injury.initialize()
     feature = CreateCharacterFeature(data, world, character)
     feature.initialize()
-    overview = CharacterOverviewFeature(character, player_state, world, location)
+    overview = CharacterOverviewFeature(
+        character,
+        player_state,
+        world,
+        location,
+        injury,
+        innate_treasure_service(data, database),
+    )
     overview.initialize()
     return feature, overview, character, location, database
 

@@ -27,6 +27,10 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.item_catalog import (
     ItemCatalogService,
     ItemNameAmbiguousError,
@@ -72,6 +76,7 @@ class CompanionInteractionFeature:
         location: LocationService,
         world: WorldService,
         database: DatabaseService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._companion = companion
@@ -81,6 +86,7 @@ class CompanionInteractionFeature:
         self._location = location
         self._world = world
         self._database = database
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._copy: CompanionCopy | None = None
         self._buttons: tuple[CompanionButton, ...] = ()
@@ -97,6 +103,7 @@ class CompanionInteractionFeature:
             (self._location.status().initialized, "位置核心"),
             (self._world.status().initialized, "世界核心"),
             (self._database.status().initialized, "数据库核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not status:
                 raise RuntimeError(f"{label}必须先于道侣结交玩法启动")
@@ -178,6 +185,25 @@ class CompanionInteractionFeature:
             * grade.ability_multiplier
             * request.quantity
         ).quantize(_AFFECTION_QUANTUM, rounding=ROUND_HALF_UP)
+        activation: InnateTreasureActivation | None = None
+        if preference == "偏爱":
+            treasure_effect = await self._innate_treasure.effect(
+                request.user_id, "道侣赠礼"
+            )
+            if treasure_effect is not None:
+                treasure, effect = treasure_effect
+                if effect.ability == "提高偏爱好感":
+                    ratio = Decimal(str(effect.values["比例"]))
+                    before_treasure = affection_gain
+                    affection_gain = (affection_gain * (Decimal(1) + ratio)).quantize(
+                        _AFFECTION_QUANTUM, rounding=ROUND_HALF_UP
+                    )
+                    activation = InnateTreasureActivation(
+                        treasure.treasure_id,
+                        treasure.name,
+                        treasure.authority,
+                        f"偏爱好感 {before_treasure} → {affection_gain}",
+                    )
         base_affection = (
             self._companion.rules().base_affection_per_item * request.quantity
         )
@@ -260,6 +286,7 @@ class CompanionInteractionFeature:
                 0,
                 False,
                 True,
+                activation,
             )
         current = await self._view(
             request.user_id,
@@ -284,6 +311,7 @@ class CompanionInteractionFeature:
             reward_quantity,
             relation_plan.first_full,
             receipt.replayed,
+            activation,
         )
 
     def _gift_dialogue(self, definition, preference: str) -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.core.database import StateMutation
+from game.core.innate_treasure import InnateTreasureActivation
 
 
 class FormationError(ValueError):
@@ -127,6 +128,7 @@ class FormationResult:
     quantity_before: int
     quantity_after: int
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,8 @@ class FormationPrepared:
     grade_id: str
     grade_name: str
     materials: tuple[tuple[str, str], ...]
+    treasure_id: str
+    modifiers: tuple[tuple[str, str], ...]
     version: int
 
 

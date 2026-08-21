@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class ForgingError(ValueError):
     """炼器规则或请求无法完成。"""
@@ -152,6 +154,7 @@ class ForgingResult:
     quantity_before: int
     quantity_after: int
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 __all__ = [

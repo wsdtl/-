@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.core.character import CharacterProfile
+from game.core.innate_treasure import InnateTreasureActivation
 
 
 class CharacterCultivationFeatureError(ValueError):
@@ -54,6 +55,7 @@ class CharacterEquipResult:
     slot: int
     content_name: str
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,7 @@ class CharacterBreakthroughResult:
     medicine_name: str
     realm_name: str
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

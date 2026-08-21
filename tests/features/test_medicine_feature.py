@@ -27,6 +27,7 @@ from game.features.fudan import (
     MedicineFeatureError,
     MedicineUseRequest,
 )
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -53,7 +54,7 @@ def _services(tmp_path: Path):
     asset.initialize()
     medicine = MedicineService(data, asset)
     medicine.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()
@@ -71,6 +72,7 @@ def _services(tmp_path: Path):
         asset,
         player_state,
         database,
+        innate_treasure_service(data, database),
     )
     feature.initialize()
     return database, asset, character, companion, create, feature

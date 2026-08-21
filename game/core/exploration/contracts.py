@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class ExplorationError(RuntimeError):
     """探险无法完成请求。"""
@@ -78,6 +80,8 @@ class ExplorationCharacterSummary:
     spirit: float
     alive: bool
     weapon_experience: int
+    injury_changes: tuple[tuple[str, int, int], ...] = ()
+    injuries: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,7 @@ class ExplorationUserSummary:
     consumed: tuple[tuple[str, str, int], ...]
     drops: tuple[tuple[str, str, int], ...]
     spirit_stones: int
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

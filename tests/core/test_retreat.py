@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from game.core.action_group import ActionGroupService
+from game.core.activity import ActivityLifecycleService
 from game.core.asset import AssetService, CultivationAcquisition
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
@@ -14,6 +15,7 @@ from game.core.data import JsonDataService
 from game.core.database import DatabaseService, TransactionCommand
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
+from game.core.injury import InjuryService
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService
 from game.core.pool import PoolService
@@ -30,6 +32,7 @@ from game.features.chuangjian_renwu import (
     CreateCharacterFeature,
     CreateCharacterRequest,
 )
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -48,6 +51,10 @@ def _services(tmp_path: Path):
     world.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
+    activity = ActivityLifecycleService()
+    activity.initialize()
+    injury = InjuryService(data, database)
+    injury.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
     team = TeamService(data, database, player_state)
@@ -60,7 +67,7 @@ def _services(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     companion = CompanionService(data, database, growth, forging)
     companion.initialize()
@@ -78,6 +85,9 @@ def _services(tmp_path: Path):
         asset,
         player_state,
         pool,
+        activity,
+        injury,
+        innate_treasure_service(data, database),
     )
     retreat.initialize()
     feature = RetreatFeature(data, retreat, asset, action_group)
@@ -176,6 +186,48 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
     ]
     assert [operation.state_key for operation in duplicate.operations] == [technique_id]
     assert duplicate.operations[0].value == {"编号": technique_id, "品级": "02"}
+
+
+def test_retreat_lifecycle_survives_service_restart(tmp_path: Path) -> None:
+    services = _services(tmp_path)
+    _, database, _, _, _, _, retreat, _, create = services
+    _run(create.create(CreateCharacterRequest("qq-restart", "create", "归林", "女")))
+    started_at = datetime(2026, 8, 21, 10, 0, tzinfo=timezone.utc)
+    started = _run(
+        retreat.start(
+            RetreatStartCommand(
+                "qq-restart",
+                "retreat-restart",
+                ("qq-restart",),
+                seed=29,
+                started_at=started_at,
+            )
+        )
+    )
+    database.close()
+
+    restored = _services(tmp_path)
+    _, restored_database, _, _, _, _, restored_retreat, _, _ = restored
+    try:
+        lifecycle = _run(
+            restored_retreat.lifecycle(
+                "qq-restart", now=started_at + timedelta(minutes=5)
+            )
+        )
+        assert lifecycle.activity_id == started.session_id
+        assert lifecycle.phase == "running"
+        assert lifecycle.can_settle is True
+        settled = _run(
+            restored_retreat.settle(
+                "qq-restart",
+                "settle-after-restart",
+                now=started_at + timedelta(minutes=5),
+            )
+        )
+        assert settled.session_id == started.session_id
+        assert settled.completed_rounds == 1
+    finally:
+        restored_database.close()
 
 
 def test_team_retreat_members_only_view_and_leader_ends(tmp_path: Path) -> None:

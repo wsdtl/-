@@ -617,6 +617,8 @@ class AssetService:
         grade_id: str,
         *,
         materials: Mapping[str, str] | None = None,
+        treasure_id: str = "",
+        modifiers: Mapping[str, str] | None = None,
     ) -> FormationReserveAcquisitionPlan:
         """为炼阵事务生成固定品阵法增量或独立圣品实例。"""
 
@@ -628,6 +630,15 @@ class AssetService:
             formation, "名称", f"阵法 {normalized_formation_id}"
         )
         grade = self.grade(grade_id)
+        normalized_treasure_id = str(treasure_id or "").strip()
+        normalized_modifiers = {
+            _required_text(key, "阵法灵宝效果.字段"): _required_text(
+                value, f"阵法灵宝效果.{key}"
+            )
+            for key, value in (modifiers or {}).items()
+        }
+        if bool(normalized_treasure_id) != bool(normalized_modifiers):
+            raise AssetStateError("阵法灵宝编号和效果必须同时存在或同时为空")
         if grade.grade_id == "05":
             values = {
                 key: _required_text(value, f"圣品阵法.投入.{key}")
@@ -644,6 +655,8 @@ class AssetService:
                 grade.name,
                 1,
                 tuple((key, values[key]) for key in ("兽宝", "灵矿", "灵植")),
+                normalized_treasure_id,
+                tuple(sorted(normalized_modifiers.items())),
                 0,
             )
             return FormationReserveAcquisitionPlan(
@@ -658,13 +671,16 @@ class AssetService:
                         "阵法编号": normalized_formation_id,
                         "品级": grade.grade_id,
                         "投入": values,
+                        "灵宝编号": normalized_treasure_id,
+                        "灵宝效果": normalized_modifiers,
                     },
                     0,
                 ),
             )
         if materials:
             raise AssetStateError("天地玄黄阵法不能保存额外材料投入")
-        state_key = f"{normalized_formation_id}:{grade.grade_id}"
+        variant = normalized_treasure_id or "无灵宝"
+        state_key = f"{normalized_formation_id}:{grade.grade_id}:{variant}"
         snapshot = await self._database.get(
             StateAddress(normalized_user_id, "formation_reserve", state_key)
         )
@@ -677,6 +693,13 @@ class AssetService:
             stored_grade = self.grade(_text(value.get("品级"), "阵藏.品级"))
             if stored_grade.grade_id != grade.grade_id:
                 raise AssetStateError("阵藏状态键与品级不一致")
+            if str(value.get("灵宝编号") or "").strip() != normalized_treasure_id:
+                raise AssetStateError("阵藏状态键与灵宝编号不一致")
+            if {
+                str(key): str(raw)
+                for key, raw in _mapping(value.get("灵宝效果"), "阵藏.灵宝效果").items()
+            } != normalized_modifiers:
+                raise AssetStateError("阵藏堆叠包含不同的灵宝效果")
             before = _positive_int(value.get("数量"), "阵藏.数量")
             version = snapshot.version
         after = before + 1
@@ -688,6 +711,8 @@ class AssetService:
             grade.name,
             after,
             (),
+            normalized_treasure_id,
+            tuple(sorted(normalized_modifiers.items())),
             version,
         )
         return FormationReserveAcquisitionPlan(
@@ -702,6 +727,8 @@ class AssetService:
                     "阵法编号": normalized_formation_id,
                     "品级": grade.grade_id,
                     "数量": after,
+                    "灵宝编号": normalized_treasure_id,
+                    "灵宝效果": normalized_modifiers,
                 },
                 version,
             ),
@@ -725,6 +752,19 @@ class AssetService:
         formation = self._data.entity("阵法", formation_id)
         name = _required_entity_text(formation, "名称", f"阵法 {formation_id}")
         grade = self.grade(_text(value.get("品级"), "阵藏.品级"))
+        treasure_id = str(value.get("灵宝编号") or "").strip()
+        raw_modifiers = _mapping(value.get("灵宝效果"), "阵藏.灵宝效果")
+        modifiers = tuple(
+            sorted(
+                (
+                    _required_text(key, "阵藏.灵宝效果.字段"),
+                    _required_text(raw, f"阵藏.灵宝效果.{key}"),
+                )
+                for key, raw in raw_modifiers.items()
+            )
+        )
+        if bool(treasure_id) != bool(modifiers):
+            raise AssetStateError("阵藏灵宝编号和效果不完整")
         if grade.grade_id == "05":
             raw_materials = _mapping(value.get("投入"), "圣品阵法.投入")
             materials = tuple(
@@ -736,7 +776,8 @@ class AssetService:
             )
             quantity = 1
         else:
-            if normalized_key != f"{formation_id}:{grade.grade_id}":
+            variant = treasure_id or "无灵宝"
+            if normalized_key != f"{formation_id}:{grade.grade_id}:{variant}":
                 raise AssetStateError("固定品阵藏状态键与内容不一致")
             materials = ()
             quantity = _positive_int(value.get("数量"), "阵藏.数量")
@@ -748,6 +789,8 @@ class AssetService:
             grade.name,
             quantity,
             materials,
+            treasure_id,
+            modifiers,
             snapshot.version,
         )
 
@@ -764,6 +807,8 @@ class AssetService:
                 "阵法编号": stack.formation_id,
                 "品级": stack.grade_id,
                 "数量": after,
+                "灵宝编号": stack.treasure_id,
+                "灵宝效果": dict(stack.modifiers),
             }
         return FormationReserveConsumptionPlan(
             stack,
@@ -929,7 +974,8 @@ class AssetService:
             )
             quantity = 1
         else:
-            _expect_key(snapshot, f"{content_id}:{grade_id}")
+            treasure_id = str(value.get("灵宝编号") or "").strip()
+            _expect_key(snapshot, f"{content_id}:{grade_id}:{treasure_id or '无灵宝'}")
             quantity = _positive_int(value.get("数量"), "阵藏.数量")
         return AssetEntry(
             category,

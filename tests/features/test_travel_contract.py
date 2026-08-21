@@ -28,6 +28,7 @@ from game.features.weizhi import PositionAction
 from game.features.xinglu import TravelFeature, TravelQueryError, TravelRequest
 from message import DocumentMessage
 from message.renderers.plain_text import render_plain_text
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -60,7 +61,7 @@ def _features(
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     character = CharacterService(
         data, database, player_state, location, asset, growth, forging

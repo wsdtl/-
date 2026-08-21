@@ -32,6 +32,7 @@ from game.features.renwu_peiyang import (
     CharacterEquipRequest,
     CharacterLawRequest,
 )
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -56,7 +57,7 @@ def _services(tmp_path: Path):
     location.initialize()
     assets = AssetService(data, database)
     assets.initialize()
-    forging = ForgingService(data, database, assets, world, location)
+    forging = ForgingService(data, database, assets, world, location, innate_treasure_service(data, database))
     forging.initialize()
     items = ItemCatalogService(data)
     items.initialize()
@@ -69,7 +70,14 @@ def _services(tmp_path: Path):
     create = CreateCharacterFeature(data, world, character)
     create.initialize()
     character_feature = CharacterCultivationFeature(
-        data, character, assets, items, growth, forging, database
+        data,
+        character,
+        assets,
+        items,
+        growth,
+        forging,
+        database,
+        innate_treasure_service(data, database),
     )
     character_feature.initialize()
     companion_feature = CompanionCultivationFeature(

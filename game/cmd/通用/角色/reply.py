@@ -83,6 +83,12 @@ def overview(result: CharacterOverviewResult):
     _append_pairs(builder, character.resources)
     builder.section("人物属性", icon="skill")
     _append_pairs(builder, character.attributes)
+    builder.section("长期伤势", icon="status")
+    if result.injuries:
+        for index, (name, stacks) in enumerate(result.injuries, start=1):
+            builder.item(index, f"{name} × {stacks}")
+    else:
+        builder.line("暂无伤势")
     builder.section("修行", icon="skill").row(
         *(
             (category, f"{equipped}/{total}")
@@ -92,6 +98,14 @@ def overview(result: CharacterOverviewResult):
     for content in character.equipped_content:
         builder.field(
             f"{content.category}{content.slot}", f"{content.name} · {content.grade}"
+        )
+    builder.section("先天灵宝", icon="item")
+    if result.innate_treasure is None:
+        builder.line("未执掌")
+    else:
+        builder.field(
+            result.innate_treasure.name,
+            result.innate_treasure.authority,
         )
     weapon = character.weapon
     builder.section("本命武器", icon="weapon")

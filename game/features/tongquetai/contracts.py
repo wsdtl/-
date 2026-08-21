@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class TongquetaiError(ValueError):
     """当前位置、同行关系或资源不能完成夺元。"""
@@ -34,6 +36,7 @@ class TongquetaiPreview:
     medicine_id: str
     medicine_name: str
     has_medicine: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,7 @@ class TongquetaiSettlement:
     medicine_name: str
     medicine_grade_name: str
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 __all__ = [

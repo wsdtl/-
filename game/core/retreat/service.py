@@ -8,16 +8,27 @@ import random
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 
+from game.core.activity import (
+    ActivityFacts,
+    ActivityLifecycle,
+    ActivityLifecycleService,
+)
 from game.core.asset import AssetService, CultivationAcquisition
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import (
     DatabaseService,
+    SettlementTransactionPlan,
     StateAddress,
     StateConflictError,
     StateMutation,
     TransactionCommand,
+)
+from game.core.injury import PLAYER_KEY, InjuryService, companion_subject
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
 )
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
@@ -60,6 +71,9 @@ class RetreatService:
         asset: AssetService,
         player_state: PlayerStateService,
         pool: PoolService,
+        activity: ActivityLifecycleService,
+        injury: InjuryService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._database = database
@@ -70,6 +84,9 @@ class RetreatService:
         self._asset = asset
         self._player_state = player_state
         self._pool = pool
+        self._activity = activity
+        self._injury = injury
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._rules: Mapping[str, object] = {}
         self._maximum_participants = 0
@@ -82,6 +99,12 @@ class RetreatService:
     def initialize(self) -> RetreatStatus:
         if self._initialized:
             raise RuntimeError("闭关核心已经初始化")
+        if not self._activity.status().initialized:
+            raise RuntimeError("异步玩法生命周期核心必须先于闭关核心启动")
+        if not self._injury.status().initialized:
+            raise RuntimeError("长期伤势核心必须先于闭关核心启动")
+        if not self._innate_treasure.status().initialized:
+            raise RuntimeError("先天灵宝核心必须先于闭关核心启动")
         rules = self._data.dataset("玩法规则").get("闭关")
         self._rules = _mapping(rules, "规则/玩法/闭关.json")
         seconds = _positive_int(self._rules.get("每轮秒数"), "闭关.每轮秒数")
@@ -189,7 +212,7 @@ class RetreatService:
         user_results: dict[str, dict[str, object]] = {}
         source = random.Random(seed)
         for user_id in participants:
-            guard = await self._player_state.authorize(user_id, "自主空闲")
+            guard = await self._player_state.authorize(user_id, "空闲或托管")
             if not guard.allowed:
                 raise RetreatConflictError(f"{user_id}无法开始闭关：{guard.reason}")
             transitions.append(
@@ -209,13 +232,46 @@ class RetreatService:
             )
             profile = await self._character.profile(user_id)
             formal_count += 1
+            activation: InnateTreasureActivation | None = None
+            insight_attempts = 1
+            round_experience = self._round_experience(profile.level)
+            treatment_multiplier = 1
+            active_treasure = await self._innate_treasure.active(user_id)
+            if active_treasure is not None:
+                effect = active_treasure.effect
+                if effect.node in {"闭关开始", "闭关疗伤"}:
+                    if effect.ability == "增加每轮感悟判定":
+                        added = int(effect.values["次数"])
+                        insight_attempts += added
+                        summary = f"每轮额外感悟判定 × {added}"
+                    elif effect.ability == "提高每轮经验":
+                        ratio = float(effect.values["比例"])
+                        before = round_experience
+                        round_experience = max(
+                            before + 1, math.ceil(before * (1 + ratio))
+                        )
+                        summary = f"人物每轮经验 {before} → {round_experience}"
+                    elif effect.ability == "增加每轮疗养进度":
+                        treatment_multiplier += int(effect.values["进度"])
+                        summary = f"人物每轮疗养进度 × {treatment_multiplier}"
+                    else:
+                        summary = ""
+                    if summary:
+                        activation = InnateTreasureActivation(
+                            active_treasure.treasure_id,
+                            active_treasure.name,
+                            active_treasure.authority,
+                            summary,
+                        )
             result: dict[str, object] = {
                 "人物": {
                     "名称": profile.name,
                     "开始等级": profile.level,
-                    "每轮经验": self._round_experience(profile.level),
+                    "每轮经验": round_experience,
+                    "疗养进度倍率": treatment_multiplier,
                 },
-                "功法感悟": self._precompute_insights(source),
+                "功法感悟": self._precompute_insights(source, insight_attempts),
+                "先天灵宝": _activation_payload(activation),
             }
             active = await self._companion.active(user_id)
             if active is not None:
@@ -331,6 +387,37 @@ class RetreatService:
             own_insights,
         )
 
+    async def lifecycle(
+        self, user_id: str, *, now: datetime | None = None
+    ) -> ActivityLifecycle:
+        """从持久化会话恢复统一生命周期视图。"""
+
+        normalized = _user_id(user_id)
+        owner, session_id, session = await self._session_for(normalized)
+        settlement = await self._database.get(
+            StateAddress(owner, SETTLEMENT_STATE, session_id)
+        )
+        return self._activity.view(
+            ActivityFacts(
+                activity_type="闭关",
+                activity_id=session_id,
+                owner_id=owner,
+                participant_user_ids=_texts(session.get("参与用户"), "闭关.参与用户"),
+                settlement_user_ids=(owner,),
+                phase="settled" if settlement is not None else "running",
+                started_at=_parse_time(session.get("开始时间"), "闭关.开始时间"),
+                ends_at=_parse_time(session.get("最晚出关时间"), "闭关.最晚出关时间"),
+                completed_at=(
+                    _parse_time(settlement.value.get("出关时间"), "闭关.出关时间")
+                    if settlement is not None
+                    else None
+                ),
+                early_settlement=True,
+            ),
+            normalized,
+            now=_utc(now),
+        )
+
     async def settle(
         self,
         user_id: str,
@@ -352,7 +439,9 @@ class RetreatService:
         completed = self._completed_rounds(started_at, settled_at)
         participants = _texts(session.get("参与用户"), "闭关.参与用户")
         raw_results = _mapping(session.get("用户结果"), "闭关.用户结果")
-        operations: list[StateMutation] = []
+        result_operations: list[StateMutation] = []
+        reward_operations: list[StateMutation] = []
+        release_operations: list[StateMutation] = []
         summaries: list[dict[str, object]] = []
         recovery_rounds = min(1.0, completed * self._health_ratio)
         spirit_rounds = min(1.0, completed * self._spirit_ratio)
@@ -368,7 +457,17 @@ class RetreatService:
                 health_recovery_ratio=recovery_rounds,
                 spirit_recovery_ratio=spirit_rounds,
             )
-            operations.append(player_plan.operation)
+            result_operations.append(player_plan.operation)
+            player_treatment = await self._injury.plan_treatment(
+                participant,
+                PLAYER_KEY,
+                completed
+                * _positive_int(
+                    player.get("疗养进度倍率"), "人物.疗养进度倍率"
+                ),
+            )
+            if player_treatment.mutation is not None:
+                result_operations.append(player_treatment.mutation)
             characters = [
                 {
                     "名称": _text(player.get("名称"), "闭关.人物.名称"),
@@ -378,6 +477,13 @@ class RetreatService:
                     "现等级": player_plan.level_after,
                     "血气": player_plan.health,
                     "精神": player_plan.spirit,
+                    "疗伤": _injury_changes(player_treatment.changes),
+                    "剩余伤势": [
+                        dict(value)
+                        for value in self._injury.summary(
+                            player_treatment.state
+                        ).entries
+                    ],
                 }
             ]
             companion = raw.get("道侣")
@@ -394,7 +500,14 @@ class RetreatService:
                     health_recovery_ratio=recovery_rounds,
                     spirit_recovery_ratio=spirit_rounds,
                 )
-                operations.append(companion_plan.operation)
+                result_operations.append(companion_plan.operation)
+                companion_treatment = await self._injury.plan_treatment(
+                    participant,
+                    companion_subject(companion_plan.companion_id),
+                    completed,
+                )
+                if companion_treatment.mutation is not None:
+                    result_operations.append(companion_treatment.mutation)
                 characters.append(
                     {
                         "名称": _text(companion_value.get("名称"), "闭关.道侣.名称"),
@@ -404,6 +517,13 @@ class RetreatService:
                         "现等级": companion_plan.level_after,
                         "血气": companion_plan.health,
                         "精神": companion_plan.spirit,
+                        "疗伤": _injury_changes(companion_treatment.changes),
+                        "剩余伤势": [
+                            dict(value)
+                            for value in self._injury.summary(
+                                companion_treatment.state
+                            ).entries
+                        ],
                     }
                 )
             unlocked = _insights(raw.get("功法感悟"), completed)
@@ -414,7 +534,7 @@ class RetreatService:
                     for value in unlocked
                 ),
             )
-            operations.extend(acquisition_plan.operations)
+            reward_operations.extend(acquisition_plan.operations)
             technique_sync = await self._character.plan_technique_grade_sync(
                 participant,
                 tuple(
@@ -424,7 +544,7 @@ class RetreatService:
                 ),
             )
             if technique_sync.operation is not None:
-                operations.append(technique_sync.operation)
+                reward_operations.append(technique_sync.operation)
             insights = [
                 {
                     "轮次": source.round_number,
@@ -436,7 +556,7 @@ class RetreatService:
                     unlocked, acquisition_plan.results, strict=True
                 )
             ]
-            operations.append(
+            release_operations.append(
                 (await self._player_state.plan_finish_behavior(participant)).mutation
             )
             summaries.append(
@@ -445,6 +565,7 @@ class RetreatService:
                     "人物": _text(player.get("名称"), "闭关.人物.名称"),
                     "角色": characters,
                     "功法感悟": insights,
+                    "先天灵宝": raw.get("先天灵宝"),
                 }
             )
         settlement_value = {
@@ -456,16 +577,20 @@ class RetreatService:
             "用户结果": summaries,
             "出关时间": settled_at.isoformat(),
         }
-        operations.append(
-            StateMutation(owner, SETTLEMENT_STATE, session_id, settlement_value, 0)
+        plan = SettlementTransactionPlan(
+            result_operations=tuple(result_operations),
+            reward_operations=tuple(reward_operations),
+            release_operations=tuple(release_operations),
+            record_operations=(
+                StateMutation(owner, SETTLEMENT_STATE, session_id, settlement_value, 0),
+            ),
         )
         try:
             receipt = await self._database.commit(
-                TransactionCommand(
+                plan.command(
                     user_id=owner,
                     request_id=request_id,
                     business_type="闭关出关",
-                    operations=tuple(operations),
                     payload={"闭关编号": session_id, "完成轮数": completed},
                 )
             )
@@ -473,24 +598,27 @@ class RetreatService:
             raise RetreatConflictError(str(exc)) from exc
         return self._settlement(settlement_value, replayed=receipt.replayed)
 
-    def _precompute_insights(self, source: random.Random) -> list[dict[str, object]]:
+    def _precompute_insights(
+        self, source: random.Random, attempts_per_round: int = 1
+    ) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
         for round_number in range(1, self.status().maximum_rounds + 1):
-            if source.random() >= self.status().insight_probability:
-                continue
-            content = self._pool.draw(
-                PoolRequest(
-                    section="功法",
-                    count=1,
-                    mode=ALLOW_REPEATS,
-                    full_pool=True,
-                    seed=source.getrandbits(64),
+            for _ in range(attempts_per_round):
+                if source.random() >= self.status().insight_probability:
+                    continue
+                content = self._pool.draw(
+                    PoolRequest(
+                        section="功法",
+                        count=1,
+                        mode=ALLOW_REPEATS,
+                        full_pool=True,
+                        seed=source.getrandbits(64),
+                    )
+                ).entity_ids[0]
+                grade = self._asset.draw_drop_grade(seed=source.getrandbits(64))
+                result.append(
+                    {"轮次": round_number, "编号": content, "品级": grade.grade_id}
                 )
-            ).entity_ids[0]
-            grade = self._asset.draw_drop_grade(seed=source.getrandbits(64))
-            result.append(
-                {"轮次": round_number, "编号": content, "品级": grade.grade_id}
-            )
         return result
 
     def _round_experience(self, level: int) -> int:
@@ -576,6 +704,33 @@ def _user_summary(value: Mapping[str, object]) -> RetreatUserSummary:
             _positive_int(row.get("现等级"), "闭关结算.角色.现等级"),
             float(_number(row.get("血气"), "闭关结算.角色.血气")),
             float(_number(row.get("精神"), "闭关结算.角色.精神")),
+            tuple(
+                (
+                    _text(change.get("名称"), "闭关结算.角色.疗伤.名称"),
+                    _positive_int(change.get("原层数"), "闭关结算.角色.疗伤.原层数"),
+                    _nonnegative_int(change.get("现层数"), "闭关结算.角色.疗伤.现层数"),
+                )
+                for change in (
+                    _mapping(item, "闭关结算.角色.疗伤[]")
+                    for item in _sequence(
+                        row.get("疗伤", ()), "闭关结算.角色.疗伤", allow_empty=True
+                    )
+                )
+            ),
+            tuple(
+                (
+                    _text(injury.get("名称"), "闭关结算.角色.剩余伤势.名称"),
+                    _positive_int(injury.get("层数"), "闭关结算.角色.剩余伤势.层数"),
+                )
+                for injury in (
+                    _mapping(item, "闭关结算.角色.剩余伤势[]")
+                    for item in _sequence(
+                        row.get("剩余伤势", ()),
+                        "闭关结算.角色.剩余伤势",
+                        allow_empty=True,
+                    )
+                )
+            ),
         )
         for row in (
             _mapping(raw, "闭关结算.角色[]")
@@ -601,6 +756,7 @@ def _user_summary(value: Mapping[str, object]) -> RetreatUserSummary:
         _text(value.get("人物"), "闭关结算.人物"),
         characters,
         insights,
+        _payload_activation(value.get("先天灵宝")),
     )
 
 
@@ -616,6 +772,43 @@ def _insights(value: object, completed_rounds: int) -> tuple[RetreatInsight, ...
             for raw in _sequence(value, "功法感悟", allow_empty=True)
         )
         if _positive_int(row.get("轮次"), "功法感悟.轮次") <= completed_rounds
+    )
+
+
+def _injury_changes(values) -> list[dict[str, object]]:
+    return [
+        {
+            "编号": value.injury_id,
+            "名称": value.name,
+            "原层数": value.before_stacks,
+            "现层数": value.after_stacks,
+        }
+        for value in values
+    ]
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "闭关结算.先天灵宝")
+    return InnateTreasureActivation(
+        _text(raw.get("编号"), "闭关结算.先天灵宝.编号"),
+        _text(raw.get("名称"), "闭关结算.先天灵宝.名称"),
+        _text(raw.get("权柄"), "闭关结算.先天灵宝.权柄"),
+        _text(raw.get("结果"), "闭关结算.先天灵宝.结果"),
     )
 
 

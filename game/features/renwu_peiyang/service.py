@@ -24,6 +24,10 @@ from game.core.database import (
 )
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.item_catalog import ItemCatalogError, ItemCatalogService
 
 from .contracts import (
@@ -51,6 +55,7 @@ class CharacterCultivationFeature:
         growth: GrowthService,
         forging: ForgingService,
         database: DatabaseService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._character = character
@@ -59,6 +64,7 @@ class CharacterCultivationFeature:
         self._growth = growth
         self._forging = forging
         self._database = database
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._copy: Mapping[str, object] = {}
 
@@ -72,6 +78,7 @@ class CharacterCultivationFeature:
             (self._growth.status().initialized, "成长核心"),
             (self._forging.status().initialized, "炼器核心"),
             (self._database.status().initialized, "数据库核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于人物培养玩法启动")
@@ -113,15 +120,38 @@ class CharacterCultivationFeature:
                 grade_id=request.grade,
                 slot=request.slot,
             )
+            operations = list(
+                ((plan.reserve_operation,) if plan.reserve_operation else ())
+                + (plan.operation,)
+            )
+            activation: InnateTreasureActivation | None = None
+            if plan.category in {"真意", "气机"} and plan.replaced_content_id:
+                treasure_effect = await self._innate_treasure.effect(
+                    request.user_id, "真意气机替换"
+                )
+                if treasure_effect is not None:
+                    treasure, effect = treasure_effect
+                    if effect.ability == "保留被替换资粮":
+                        returned = await self._assets.plan_cultivation_reserve_change(
+                            request.user_id,
+                            category=plan.category,
+                            content_id=plan.replaced_content_id,
+                            grade_id=plan.replaced_grade_id,
+                            quantity_delta=1,
+                        )
+                        operations.append(returned.operation)
+                        activation = InnateTreasureActivation(
+                            treasure.treasure_id,
+                            treasure.name,
+                            treasure.authority,
+                            f"返还被替换的{returned.stack.grade.name}{returned.stack.name} × 1",
+                        )
             receipt = await self._database.commit(
                 TransactionCommand(
                     request.user_id,
                     request.request_id,
                     "人物装配",
-                    (
-                        ((plan.reserve_operation,) if plan.reserve_operation else ())
-                        + (plan.operation,)
-                    ),
+                    tuple(operations),
                     {
                         "类别": plan.category,
                         "编号": plan.content_id,
@@ -141,6 +171,7 @@ class CharacterCultivationFeature:
             raise CharacterCultivationFeatureError(str(exc)) from exc
         return CharacterEquipResult(
             profile, plan.category, plan.slot, plan.content_name, receipt.replayed
+            , activation
         )
 
     async def breakthrough(
@@ -152,9 +183,27 @@ class CharacterCultivationFeature:
             stack = await self._lowest_inventory_stack(
                 request.user_id, medicine.item_id
             )
-            character_plan = await self._character.plan_breakthrough(
-                request.user_id, medicine_id=medicine.item_id
+            activation: InnateTreasureActivation | None = None
+            permanent_ratio = 0.0
+            treasure_effect = await self._innate_treasure.effect(
+                request.user_id, "人物突破"
             )
+            if treasure_effect is not None:
+                treasure, effect = treasure_effect
+                if effect.ability == "提高永久属性":
+                    permanent_ratio = float(effect.values["比例"])
+            character_plan = await self._character.plan_breakthrough(
+                request.user_id,
+                medicine_id=medicine.item_id,
+                permanent_attribute_ratio=permanent_ratio,
+            )
+            if permanent_ratio and character_plan.permanent_attributes:
+                activation = InnateTreasureActivation(
+                    treasure.treasure_id,
+                    treasure.name,
+                    treasure.authority,
+                    "突破永久属性提高，且每项最低增加1点",
+                )
             inventory_plan = await self._assets.plan_inventory_changes(
                 request.user_id,
                 (InventoryAdjustment(medicine.item_id, stack.grade.grade_id, -1),),
@@ -184,6 +233,7 @@ class CharacterCultivationFeature:
             raise CharacterCultivationFeatureError(str(exc)) from exc
         return CharacterBreakthroughResult(
             profile, medicine.name, character_plan.realm_name_after, receipt.replayed
+            , activation
         )
 
     async def forge_law(self, request: CharacterLawRequest) -> CharacterLawResult:

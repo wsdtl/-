@@ -141,6 +141,11 @@ def _user_page(
     total_pages: int,
 ):
     builder = M.document().header(text(copy, "用户", "标题", 人物=value.character_name))
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
     for character in value.characters:
         title = text(copy, "用户", "道侣" if character.companion else "人物")
         builder.section(f"{title} · {character.name}", icon="cultivator").row(
@@ -150,6 +155,19 @@ def _user_page(
             text(copy, "用户", "武器经验"),
             f"+{character.weapon_experience}",
         )
+        if character.injury_changes:
+            builder.field(
+                text(copy, "用户", "伤势变化"),
+                "、".join(
+                    f"{name} {before}→{after}"
+                    for name, before, after in character.injury_changes
+                ),
+            )
+        if character.injuries:
+            builder.field(
+                text(copy, "用户", "当前伤势"),
+                "、".join(f"{name}×{stacks}" for name, stacks in character.injuries),
+            )
     builder.section(text(copy, "用户", "消耗"), icon="item")
     if value.consumed:
         for index, (item_id, grade_id, quantity) in enumerate(value.consumed, start=1):

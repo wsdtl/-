@@ -13,6 +13,7 @@ from . import reply
     scope="专属",
     cmd="闭关",
     guard_rule="自主空闲",
+    metadata={"hosting": {"activity": "闭关", "phase": "start"}},
     help=HelpSpec(
         category="行动",
         summary="在当前地点与同行修士共同闭关",
@@ -64,6 +65,7 @@ async def retreat_progress(*, user_id: str, manager, **_) -> None:
     scope="专属",
     cmd="出关",
     guard_rule="已创建",
+    metadata={"hosting": {"activity": "闭关", "phase": "end"}},
     help=HelpSpec(
         category="行动",
         summary="按已经完成的整轮结果带领全体出关",

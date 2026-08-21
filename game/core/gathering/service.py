@@ -20,6 +20,10 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.location import LocationService
 from game.core.player_state import PlayerStateService, StateTransitionCommand
 from game.core.pool import ALLOW_REPEATS, PoolRequest, PoolService
@@ -88,6 +92,7 @@ class GatheringService:
         asset: AssetService,
         player_state: PlayerStateService,
         pool: PoolService,
+        innate_treasure: InnateTreasureService,
         sect: SectService | None = None,
         progress: SectProgressService | None = None,
     ) -> None:
@@ -102,12 +107,15 @@ class GatheringService:
         self._pool = pool
         self._sect = sect
         self._progress = progress
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._modes: dict[str, _Mode] = {}
 
     def initialize(self) -> GatheringStatus:
         if self._initialized:
             raise RuntimeError("采集核心已经初始化")
+        if not self._innate_treasure.status().initialized:
+            raise RuntimeError("先天灵宝核心必须先于采集核心启动")
         rules = self._data.dataset("玩法规则")
         modes = {kind: _parse_mode(kind, rules.get(kind)) for kind in KINDS}
         if len({mode.state_id for mode in modes.values()}) != len(modes):
@@ -169,7 +177,7 @@ class GatheringService:
         user_results: dict[str, dict[str, object]] = {}
         source = random.Random(seed)
         for user_id in participants:
-            guard = await self._player_state.authorize(user_id, "自主空闲")
+            guard = await self._player_state.authorize(user_id, "空闲或托管")
             if not guard.allowed:
                 raise GatheringConflictError(
                     f"{user_id}无法开始{mode.kind}：{guard.reason}"
@@ -194,11 +202,29 @@ class GatheringService:
             unit_count = 1 + int(bool(companion_name))
             total_units += unit_count
             gathering_multiplier = await self._gathering_multiplier(user_id)
+            treasure_ratio = 0.0
+            activation: InnateTreasureActivation | None = None
+            active_treasure = await self._innate_treasure.active(user_id)
+            if active_treasure is not None and active_treasure.effect.node == "采集开始":
+                effect = active_treasure.effect
+                applies = effect.ability == "提高通用采集" or (
+                    effect.ability == "提高采药" and mode.kind == "采药"
+                ) or (effect.ability == "提高采矿" and mode.kind == "采矿")
+                if applies:
+                    treasure_ratio = float(effect.values["比例"])
+                    activation = InnateTreasureActivation(
+                        active_treasure.treasure_id,
+                        active_treasure.name,
+                        active_treasure.authority,
+                        f"{mode.kind}收获提高{treasure_ratio:.0%}，每种最低增加1份",
+                    )
             user_results[user_id] = {
                 "人物": profile.name,
                 "道侣相助": companion_name,
                 "采集单位": unit_count,
                 "宗门采集倍率": gathering_multiplier,
+                "灵宝增益比例": treasure_ratio,
+                "先天灵宝": _activation_payload(activation),
                 "预定收获": self._precompute_items(
                     mode,
                     pool_names,
@@ -298,12 +324,21 @@ class GatheringService:
             remaining = 0
         results = _mapping(session.get("用户结果"), "采集.用户结果")
         own = _mapping(results.get(normalized_user_id), "采集.本人结果")
-        own_items = _unlocked_items(own.get("预定收获"), completed)
+        own_items = _apply_treasure_bonus(
+            _unlocked_items(own.get("预定收获"), completed),
+            _ratio(own.get("灵宝增益比例"), "采集.灵宝增益比例"),
+        )
         group_quantity = sum(
             item.quantity
             for value in results.values()
-            for item in _unlocked_items(
-                _mapping(value, "采集.用户结果[]").get("预定收获"), completed
+            for item in _apply_treasure_bonus(
+                _unlocked_items(
+                    _mapping(value, "采集.用户结果[]").get("预定收获"), completed
+                ),
+                _ratio(
+                    _mapping(value, "采集.用户结果[]").get("灵宝增益比例"),
+                    "采集.灵宝增益比例",
+                ),
             )
         )
         return GatheringProgress(
@@ -349,7 +384,10 @@ class GatheringService:
         summaries: list[dict[str, object]] = []
         for participant in participants:
             raw = _mapping(raw_results.get(participant), f"采集.用户结果.{participant}")
-            items = _unlocked_items(raw.get("预定收获"), completed)
+            items = _apply_treasure_bonus(
+                _unlocked_items(raw.get("预定收获"), completed),
+                _ratio(raw.get("灵宝增益比例"), "采集.灵宝增益比例"),
+            )
             inventory = await self._asset.plan_inventory_changes(
                 participant,
                 tuple(
@@ -378,6 +416,7 @@ class GatheringService:
                         }
                         for item in items
                     ],
+                    "先天灵宝": raw.get("先天灵宝"),
                 }
             )
         settlement_value = {
@@ -628,6 +667,7 @@ def _user_summary(value: Mapping[str, object]) -> GatheringUserSummary:
                 )
             )
         ),
+        _payload_activation(value.get("先天灵宝")),
     )
 
 
@@ -647,6 +687,46 @@ def _unlocked_items(value: object, completed_rounds: int) -> tuple[GatheredItem,
     return tuple(
         GatheredItem(item_id, grade_id, quantity)
         for (item_id, grade_id), quantity in sorted(totals.items())
+    )
+
+
+def _apply_treasure_bonus(
+    items: tuple[GatheredItem, ...], ratio: float
+) -> tuple[GatheredItem, ...]:
+    if ratio <= 0:
+        return items
+    return tuple(
+        GatheredItem(
+            item.item_id,
+            item.grade_id,
+            item.quantity + max(1, math.ceil(item.quantity * ratio)),
+        )
+        for item in items
+    )
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "采集结算.先天灵宝")
+    return InnateTreasureActivation(
+        _text(raw.get("编号"), "采集结算.先天灵宝.编号"),
+        _text(raw.get("名称"), "采集结算.先天灵宝.名称"),
+        _text(raw.get("权柄"), "采集结算.先天灵宝.权柄"),
+        _text(raw.get("结果"), "采集结算.先天灵宝.结果"),
     )
 
 
@@ -734,6 +814,13 @@ def _number(value: object, label: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise GatheringStateError(f"{label}必须是数值")
     return value
+
+
+def _ratio(value: object, label: str) -> float:
+    number = float(_number(value, label))
+    if not 0 <= number <= 1:
+        raise GatheringStateError(f"{label}必须在0至1之间")
+    return number
 
 
 def _scaled_quantity(value: int, multiplier: float, source: random.Random) -> int:

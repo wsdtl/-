@@ -10,6 +10,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+from game.core.activity import (
+    ActivityFacts,
+    ActivityLifecycle,
+    ActivityLifecycleService,
+)
 from game.core.asset import AssetService, InventoryAdjustment
 from game.core.character import CharacterService
 from game.core.combat import (
@@ -26,6 +31,7 @@ from game.core.companion import CompanionService
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
+    SettlementTransactionPlan,
     StateAddress,
     StateConflictError,
     StateMutation,
@@ -33,6 +39,11 @@ from game.core.database import (
 )
 from game.core.enemy import EnemyInstance, EnemyService
 from game.core.formation import FormationService
+from game.core.injury import PLAYER_KEY, InjuryService, companion_subject
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.location import LocationService
 from game.core.medicine import MedicineService, RecoveryMedicineStack
 from game.core.player_state import (
@@ -82,7 +93,10 @@ class ExplorationService:
         enemy: EnemyService,
         formation: FormationService,
         combat: CombatService,
+        activity: ActivityLifecycleService,
+        innate_treasure: InnateTreasureService,
         medicine: MedicineService | None = None,
+        injury: InjuryService | None = None,
     ) -> None:
         self._data = data
         self._database = database
@@ -95,7 +109,10 @@ class ExplorationService:
         self._enemy = enemy
         self._formation = formation
         self._combat = combat
+        self._activity = activity
+        self._innate_treasure = innate_treasure
         self._medicine = medicine
+        self._injury = injury
         self._initialized = False
         self._rules: Mapping[str, object] = {}
         self._maximum_participants = 0
@@ -106,6 +123,12 @@ class ExplorationService:
             raise RuntimeError("探险核心已经初始化")
         if self._medicine is None or not self._medicine.status().initialized:
             raise RuntimeError("丹药核心必须先于探险核心启动")
+        if self._injury is None or not self._injury.status().initialized:
+            raise RuntimeError("长期伤势核心必须先于探险核心启动")
+        if not self._activity.status().initialized:
+            raise RuntimeError("异步玩法生命周期核心必须先于探险核心启动")
+        if not self._innate_treasure.status().initialized:
+            raise RuntimeError("先天灵宝核心必须先于探险核心启动")
         rules = self._data.dataset("玩法规则").get("探险")
         self._rules = _mapping(rules, "规则/玩法/探险.json")
         seconds = _positive_int(self._rules.get("每场秒数"), "探险.每场秒数")
@@ -186,8 +209,12 @@ class ExplorationService:
         medicines: dict[str, tuple[RecoveryMedicineStack, ...]] = {}
         character_names: dict[str, str] = {}
         battle_medicine_operations: list[StateMutation] = []
+        injury_states = {}
+        combatant_realms: dict[str, str] = {}
+        treasure_snapshots: dict[str, dict[str, object] | None] = {}
+        medicine_ratios: dict[str, float] = {}
         for user_id in participants:
-            guard = await self._player_state.authorize(user_id, "自主空闲")
+            guard = await self._player_state.authorize(user_id, "空闲或托管")
             if not guard.allowed:
                 raise ExplorationConflictError(f"{user_id}无法开始探险：{guard.reason}")
             transition_plans.append(
@@ -206,7 +233,28 @@ class ExplorationService:
                 )
             )
             profile = await self._character.profile(user_id)
+            active_treasure = await self._innate_treasure.active(user_id)
+            treasure_snapshots[user_id] = (
+                {
+                    "编号": active_treasure.treasure_id,
+                    "名称": active_treasure.name,
+                    "权柄": active_treasure.authority,
+                    "节点": active_treasure.effect.node,
+                    "能力": active_treasure.effect.ability,
+                    "数值": dict(active_treasure.effect.values),
+                }
+                if active_treasure is not None
+                else None
+            )
+            medicine_ratios[user_id] = (
+                float(active_treasure.effect.values["比例"])
+                if active_treasure is not None
+                and active_treasure.effect.node == "恢复丹生效"
+                and active_treasure.effect.ability == "提高恢复量"
+                else 0.0
+            )
             player = await self._character.combatant(user_id)
+            player_injuries = await self._injury.state(user_id, PLAYER_KEY)
             if profile.prepared_battle_medicine is not None:
                 definition = self._medicine.battle(
                     profile.prepared_battle_medicine.medicine_id,
@@ -223,11 +271,23 @@ class ExplorationService:
                         )
                     ).operation
                 )
+            player = replace(
+                player,
+                prepared_statuses=(
+                    *player.prepared_statuses,
+                    *self._injury.prepared_statuses(player_injuries),
+                ),
+            )
+            injury_states[player.id] = player_injuries
+            combatant_realms[player.id] = profile.realm_id
             character_names[user_id] = player.name
             combatants.append(player)
             companion = await self._companion.combatant(user_id)
             if companion is not None:
                 current_companion = await self._companion.active_instance(user_id)
+                companion_injuries = await self._injury.state(
+                    user_id, companion_subject(current_companion.instance.companion_id)
+                )
                 prepared = current_companion.instance.prepared_battle_medicine
                 if prepared is not None:
                     definition = self._medicine.battle(
@@ -245,16 +305,28 @@ class ExplorationService:
                             )
                         ).operations
                     )
+                companion = replace(
+                    companion,
+                    prepared_statuses=(
+                        *companion.prepared_statuses,
+                        *self._injury.prepared_statuses(companion_injuries),
+                    ),
+                )
+                injury_states[companion.id] = companion_injuries
+                combatant_realms[companion.id] = current_companion.instance.realm_id
                 combatants.append(companion)
             medicines[user_id] = await self._medicine.recovery_stacks(user_id)
 
         initial_unit_count = len(combatants)
         source = random.Random(seed)
         virtual_inventory = {
-            user_id: {stack.stack_key: stack.quantity for stack in stacks}
+            user_id: {
+                _owner_stack_key(user_id, stack.stack_key): stack.quantity
+                for stack in stacks
+            }
             for user_id, stacks in medicines.items()
         }
-        medicine_definitions = _medicine_definitions(medicines)
+        medicine_definitions = _medicine_definitions(medicines, medicine_ratios)
         user_results = {
             user_id: {
                 "人物": character_names[user_id],
@@ -262,6 +334,8 @@ class ExplorationService:
                 "消耗": Counter(),
                 "掉落": Counter(),
                 "灵石": 0,
+                "灵宝快照": treasure_snapshots[user_id],
+                "先天灵宝": None,
             }
             for user_id in participants
         }
@@ -269,6 +343,16 @@ class ExplorationService:
             user_results[combatant.owner_id]["角色"][combatant.id] = {
                 "名称": combatant.name,
                 "道侣": combatant.id.startswith("companion:"),
+                "主体": injury_states[combatant.id].subject_key,
+                "伤势": self._injury.serialize(injury_states[combatant.id]),
+                "伤势版本": injury_states[combatant.id].version,
+                "伤势变化": [],
+                "剩余伤势": [
+                    dict(value)
+                    for value in self._injury.summary(
+                        injury_states[combatant.id]
+                    ).entries
+                ],
                 "血气": _initial_resource(combatant, "血气"),
                 "精神": _initial_resource(combatant, "精神"),
                 "存活": _initial_resource(combatant, "血气") > 0,
@@ -292,7 +376,6 @@ class ExplorationService:
                 living,
                 virtual_inventory,
                 self._medicine.auto_medicine_threshold,
-                include_prepared=battle_index == 1,
             )
             result = await self._combat.execute(
                 CombatRequest(
@@ -355,13 +438,22 @@ class ExplorationService:
             current = {}
             for value in formal_left_results:
                 before = living_by_id[value.id]
+                evolution = self._injury.evolve(
+                    injury_states[value.id],
+                    realm_id=combatant_realms[value.id],
+                    combatant_result=value,
+                    events=result.events,
+                    enemy_ids=tuple(enemy_by_id),
+                    battle_id=f"{session_id}:{battle_index:02d}",
+                )
+                injury_states[value.id] = evolution.state
                 current[value.id] = replace(
                     before,
                     health=value.health,
                     spirit=value.spirit,
                     shield=0,
                     statuses=(),
-                    prepared_statuses=(),
+                    prepared_statuses=self._injury.prepared_statuses(evolution.state),
                     cooldowns={},
                     inventory={},
                     skill_cursor=0,
@@ -371,12 +463,30 @@ class ExplorationService:
                     {
                         "名称": value.name,
                         "道侣": value.id.startswith("companion:"),
+                        "主体": evolution.state.subject_key,
                         "武器经验": 0,
                     },
                 )
                 record["血气"] = value.health
                 record["精神"] = value.spirit
                 record["存活"] = value.alive
+                record["伤势"] = self._injury.serialize(evolution.state)
+                record["伤势版本"] = evolution.state.version
+                record.setdefault("伤势变化", []).extend(
+                    [
+                        {
+                            "编号": change.injury_id,
+                            "名称": change.name,
+                            "原层数": change.before_stacks,
+                            "现层数": change.after_stacks,
+                            "类别": change.category,
+                        }
+                        for change in evolution.changes
+                    ]
+                )
+                record["剩余伤势"] = [
+                    dict(item) for item in self._injury.summary(evolution.state).entries
+                ]
                 user_results[value.owner_id]["消耗"].update(value.consumed_items)
             for user_id in participants:
                 owner_results = [
@@ -401,6 +511,12 @@ class ExplorationService:
         ends_at = started_at + timedelta(
             seconds=battle_count * self.status().seconds_per_battle
         )
+        for user_id in participants:
+            _apply_treasure_reward(
+                user_results[user_id],
+                self._data,
+                self._asset,
+            )
         normalized_results = _normalize_user_results(user_results, current)
         consumptions = _consumption_adjustments(medicines, virtual_inventory)
         inventory_plans = {
@@ -538,6 +654,35 @@ class ExplorationService:
             can_settle=_user_id(user_id) == owner,
         )
 
+    async def lifecycle(
+        self, user_id: str, *, now: datetime | None = None
+    ) -> ActivityLifecycle:
+        """从持久化会话恢复统一生命周期视图。"""
+
+        owner, session_id, session = await self._session_for(user_id)
+        settlement = await self._database.get(
+            StateAddress(owner, SETTLEMENT_STATE, session_id)
+        )
+        return self._activity.view(
+            ActivityFacts(
+                activity_type="探险",
+                activity_id=session_id,
+                owner_id=owner,
+                participant_user_ids=_texts(session.get("参与用户"), "探险.参与用户"),
+                settlement_user_ids=(owner,),
+                phase="settled" if settlement is not None else "running",
+                started_at=_parse_time(session.get("开始时间"), "探险.开始时间"),
+                ends_at=_parse_time(session.get("结束时间"), "探险.结束时间"),
+                completed_at=(
+                    _parse_time(settlement.value.get("结算时间"), "探险.结算时间")
+                    if settlement is not None
+                    else None
+                ),
+            ),
+            user_id,
+            now=_utc(now),
+        )
+
     async def settle(
         self,
         user_id: str,
@@ -559,7 +704,9 @@ class ExplorationService:
             raise ExplorationNotFinishedError("探险尚未结束")
         user_values = _mapping(session.get("用户结果"), "探险.用户结果")
         participants = _texts(session.get("参与用户"), "探险.参与用户")
-        operations: list[StateMutation] = []
+        result_operations: list[StateMutation] = []
+        reward_operations: list[StateMutation] = []
+        release_operations: list[StateMutation] = []
         summaries: list[dict[str, object]] = []
         for participant in participants:
             value = _mapping(user_values.get(participant), f"用户结果.{participant}")
@@ -578,7 +725,17 @@ class ExplorationService:
                     player.get("武器经验"), "人物.武器经验"
                 ),
             )
-            operations.extend(player_plan.operations)
+            result_operations.extend(player_plan.operations)
+            player_injury = self._injury.restore(
+                _mapping(player.get("伤势"), "人物.伤势"),
+                user_id=participant,
+                subject_key=_text(player.get("主体"), "人物.伤势主体"),
+                version=_nonnegative_int(player.get("伤势版本"), "人物.伤势版本"),
+            )
+            if player_injury.entries or player_injury.version:
+                result_operations.append(
+                    self._injury.settlement_mutation(player_injury)
+                )
             companion = next(
                 (
                     _mapping(raw, "角色")
@@ -596,7 +753,19 @@ class ExplorationService:
                         companion.get("武器经验"), "道侣.武器经验"
                     ),
                 )
-                operations.append(companion_plan.operation)
+                result_operations.append(companion_plan.operation)
+                companion_injury = self._injury.restore(
+                    _mapping(companion.get("伤势"), "道侣.伤势"),
+                    user_id=participant,
+                    subject_key=_text(companion.get("主体"), "道侣.伤势主体"),
+                    version=_nonnegative_int(
+                        companion.get("伤势版本"), "道侣.伤势版本"
+                    ),
+                )
+                if companion_injury.entries or companion_injury.version:
+                    result_operations.append(
+                        self._injury.settlement_mutation(companion_injury)
+                    )
             drops = tuple(
                 InventoryAdjustment(
                     _text(raw.get("编号"), "掉落.编号"),
@@ -611,12 +780,12 @@ class ExplorationService:
                 )
             )
             if drops:
-                operations.extend(
+                reward_operations.extend(
                     (
                         await self._asset.plan_inventory_changes(participant, drops)
                     ).operations
                 )
-            operations.append(
+            release_operations.append(
                 (await self._player_state.plan_finish_behavior(participant)).mutation
             )
             summaries.append(materialize(value))
@@ -629,16 +798,20 @@ class ExplorationService:
             "用户结果": summaries,
             "结算时间": settled_at.isoformat(),
         }
-        operations.append(
-            StateMutation(owner, SETTLEMENT_STATE, session_id, settlement_value, 0)
+        plan = SettlementTransactionPlan(
+            result_operations=tuple(result_operations),
+            reward_operations=tuple(reward_operations),
+            release_operations=tuple(release_operations),
+            record_operations=(
+                StateMutation(owner, SETTLEMENT_STATE, session_id, settlement_value, 0),
+            ),
         )
         try:
             receipt = await self._database.commit(
-                TransactionCommand(
+                plan.command(
                     user_id=owner,
                     request_id=request_id,
                     business_type="普通探险结算",
-                    operations=tuple(operations),
                     payload={"探险编号": session_id},
                 )
             )
@@ -747,8 +920,6 @@ def _attach_inventory(
     combatants: Sequence[CombatantSpec],
     inventory: Mapping[str, Mapping[str, int]],
     threshold: float,
-    *,
-    include_prepared: bool,
 ) -> list[CombatantSpec]:
     seen: set[str] = set()
     result: list[CombatantSpec] = []
@@ -762,7 +933,7 @@ def _attach_inventory(
                 inventory=current,
                 medicine_threshold=threshold,
                 statuses=(),
-                prepared_statuses=value.prepared_statuses if include_prepared else (),
+                prepared_statuses=value.prepared_statuses,
                 cooldowns={},
                 shield=0,
                 skill_cursor=0,
@@ -773,22 +944,24 @@ def _attach_inventory(
 
 def _medicine_definitions(
     values: Mapping[str, tuple[RecoveryMedicineStack, ...]],
+    recovery_ratios: Mapping[str, float],
 ) -> tuple[CombatMedicineSpec, ...]:
     result: dict[str, CombatMedicineSpec] = {}
-    for stacks in values.values():
+    for user_id, stacks in values.items():
         for stack in stacks:
+            owner_stack_key = _owner_stack_key(user_id, stack.stack_key)
             definition = CombatMedicineSpec(
-                stack.stack_key,
+                owner_stack_key,
                 stack.medicine_id,
                 stack.grade_id,
                 stack.resource,
-                stack.recovery_percent,
+                stack.recovery_percent * (1 + recovery_ratios.get(user_id, 0.0)),
                 stack.grade_order,
             )
-            previous = result.get(stack.stack_key)
+            previous = result.get(owner_stack_key)
             if previous is not None and previous != definition:
                 raise ExplorationStateError("相同丹药堆叠键对应了不同恢复定义")
-            result[stack.stack_key] = definition
+            result[owner_stack_key] = definition
     return tuple(result.values())
 
 
@@ -911,8 +1084,71 @@ def _normalize_user_results(
             "消耗": _stack_rows(raw["消耗"]),
             "掉落": _drop_rows(raw["掉落"]),
             "灵石": int(raw["灵石"]),
+            "先天灵宝": raw.get("先天灵宝"),
         }
     return result
+
+
+def _apply_treasure_reward(
+    raw: Mapping[str, object], data: JsonDataService, asset: AssetService
+) -> None:
+    if not isinstance(raw, dict):
+        raise ExplorationStateError("探险用户预计算结果必须可写")
+    snapshot_value = raw.get("灵宝快照")
+    if snapshot_value is None:
+        return
+    snapshot = _mapping(snapshot_value, "探险.灵宝快照")
+    node = _text(snapshot.get("节点"), "探险.灵宝快照.节点")
+    ability = _text(snapshot.get("能力"), "探险.灵宝快照.能力")
+    values = _mapping(snapshot.get("数值"), "探险.灵宝快照.数值")
+    summary = ""
+    drops = raw.get("掉落")
+    if not isinstance(drops, Counter):
+        raise ExplorationStateError("探险预计算掉落必须是计数器")
+    if node == "探险奖励分配" and ability == "最低品战利品升品":
+        candidates = sorted(
+            (
+                (item_id, grade_id)
+                for (item_id, grade_id), quantity in drops.items()
+                if quantity > 0 and asset.grade(grade_id).order < asset.grade("05").order
+            ),
+            key=lambda key: (asset.grade(key[1]).order, key[0]),
+        )
+        if candidates:
+            item_id, grade_id = candidates[0]
+            next_grade_id = f"{int(grade_id) + 1:02d}"
+            drops[(item_id, grade_id)] -= 1
+            drops[(item_id, next_grade_id)] += int(values["数量"])
+            item_name = str(data.entity("物品", item_id).get("名称") or item_id)
+            summary = (
+                f"{asset.grade(grade_id).name}{item_name} × 1升为"
+                f"{asset.grade(next_grade_id).name}品"
+            )
+    elif node == "探险奖励分配" and ability == "增加兽宝":
+        candidates = sorted(
+            (
+                (item_id, grade_id)
+                for (item_id, grade_id), quantity in drops.items()
+                if quantity > 0
+                and data.entity_record("物品", item_id).number_category == "兽宝"
+            ),
+            key=lambda key: (asset.grade(key[1]).order, key[0]),
+        )
+        if candidates:
+            item_id, grade_id = candidates[0]
+            quantity = int(values["数量"])
+            drops[(item_id, grade_id)] += quantity
+            item_name = str(data.entity("物品", item_id).get("名称") or item_id)
+            summary = f"额外获得{asset.grade(grade_id).name}{item_name} × {quantity}"
+    elif node == "恢复丹生效" and ability == "提高恢复量" and raw.get("消耗"):
+        summary = f"自动恢复丹恢复量提高{float(values['比例']):.0%}"
+    if summary:
+        raw["先天灵宝"] = {
+            "编号": _text(snapshot.get("编号"), "探险.灵宝快照.编号"),
+            "名称": _text(snapshot.get("名称"), "探险.灵宝快照.名称"),
+            "权柄": _text(snapshot.get("权柄"), "探险.灵宝快照.权柄"),
+            "结果": summary,
+        }
 
 
 def _consumption_adjustments(
@@ -923,7 +1159,11 @@ def _consumption_adjustments(
     for user_id, stacks in medicines.items():
         consumed = []
         for stack in stacks:
-            quantity = stack.quantity - int(remaining[user_id].get(stack.stack_key, 0))
+            quantity = stack.quantity - int(
+                remaining[user_id].get(
+                    _owner_stack_key(user_id, stack.stack_key), 0
+                )
+            )
             if quantity > 0:
                 consumed.append((stack.medicine_id, stack.grade_id, quantity))
         result[user_id] = tuple(consumed)
@@ -931,11 +1171,22 @@ def _consumption_adjustments(
 
 
 def _stack_rows(values: Counter[str]) -> list[dict[str, object]]:
+    normalized: Counter[str] = Counter()
+    for stack_key, quantity in values.items():
+        normalized[_base_stack_key(stack_key)] += quantity
     result = []
-    for stack_key, quantity in sorted(values.items()):
+    for stack_key, quantity in sorted(normalized.items()):
         item_id, grade_id = stack_key.rsplit(":", 1)
         result.append({"编号": item_id, "品级": grade_id, "数量": quantity})
     return result
+
+
+def _owner_stack_key(user_id: str, stack_key: str) -> str:
+    return f"{stack_key}|{user_id}"
+
+
+def _base_stack_key(stack_key: str) -> str:
+    return stack_key.split("|", 1)[0]
 
 
 def _drop_rows(values: Counter[tuple[str, str]]) -> list[dict[str, object]]:
@@ -955,6 +1206,31 @@ def _user_summary(value: Mapping[str, object]) -> ExplorationUserSummary:
             float(_number(raw.get("精神"), "角色.精神")),
             bool(raw.get("存活")),
             _nonnegative_int(raw.get("武器经验"), "角色.武器经验"),
+            tuple(
+                (
+                    _text(change.get("名称"), "角色.伤势变化.名称"),
+                    _nonnegative_int(change.get("原层数"), "角色.伤势变化.原层数"),
+                    _nonnegative_int(change.get("现层数"), "角色.伤势变化.现层数"),
+                )
+                for change in (
+                    _mapping(item, "角色.伤势变化[]")
+                    for item in _sequence(
+                        raw.get("伤势变化", ()), "角色.伤势变化", allow_empty=True
+                    )
+                )
+            ),
+            tuple(
+                (
+                    _text(injury.get("名称"), "角色.剩余伤势.名称"),
+                    _positive_int(injury.get("层数"), "角色.剩余伤势.层数"),
+                )
+                for injury in (
+                    _mapping(item, "角色.剩余伤势[]")
+                    for item in _sequence(
+                        raw.get("剩余伤势", ()), "角色.剩余伤势", allow_empty=True
+                    )
+                )
+            ),
         )
         for raw in (
             _mapping(item, "角色[]")
@@ -974,6 +1250,19 @@ def _user_summary(value: Mapping[str, object]) -> ExplorationUserSummary:
             for item in _sequence(value.get("掉落"), "用户.掉落", allow_empty=True)
         ),
         _nonnegative_int(value.get("灵石"), "用户.灵石"),
+        _payload_activation(value.get("先天灵宝")),
+    )
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "探险结算.先天灵宝")
+    return InnateTreasureActivation(
+        _text(raw.get("编号"), "探险结算.先天灵宝.编号"),
+        _text(raw.get("名称"), "探险结算.先天灵宝.名称"),
+        _text(raw.get("权柄"), "探险结算.先天灵宝.权柄"),
+        _text(raw.get("结果"), "探险结算.先天灵宝.结果"),
     )
 
 

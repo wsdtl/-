@@ -49,12 +49,13 @@ def equipped(feature: CharacterCultivationFeature, result: CharacterEquipResult)
     text = feature.copy("装配", "人物成功").format(
         名称=result.content_name, 类别=result.category, 槽位=result.slot
     )
-    return (
-        M.document()
-        .section("人物装配", icon="skill")
-        .line(text)
-        .build()
-    )
+    builder = M.document().section("人物装配", icon="skill").line(text)
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.build()
 
 
 def breakthrough(
@@ -63,7 +64,13 @@ def breakthrough(
     text = feature.copy("突破", "人物成功").format(
         丹药=result.medicine_name, 境界=result.realm_name
     )
-    return M.document().section("人物突破", icon="status").line(text).build()
+    builder = M.document().section("人物突破", icon="status").line(text)
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.build()
 
 
 def forged(feature: CharacterCultivationFeature, result: CharacterLawResult):

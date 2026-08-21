@@ -23,6 +23,10 @@ from game.core.database import (
     StateMutation,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
 
@@ -69,12 +73,14 @@ class FormationService:
         asset: AssetService,
         world: WorldService,
         location: LocationService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._database = database
         self._asset = asset
         self._world = world
         self._location = location
+        self._innate_treasure = innate_treasure
         self._initialized = False
         self._rules: Mapping[str, object] = MappingProxyType({})
         self._raw_formations: Mapping[str, Mapping[str, object]] = MappingProxyType({})
@@ -93,6 +99,7 @@ class FormationService:
             (self._asset.status().initialized, "玩家资产核心"),
             (self._world.status().initialized, "世界核心"),
             (self._location.status().initialized, "位置核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于阵法核心启动")
@@ -274,6 +281,29 @@ class FormationService:
             for item in preview.materials
         )
         actual = {item.category: item.required for item in preview.requirements}
+        activation: InnateTreasureActivation | None = None
+        modifiers: dict[str, str] = {}
+        treasure_effect = await self._innate_treasure.effect(normalized, "阵法成形")
+        if treasure_effect is not None:
+            treasure, effect = treasure_effect
+            if effect.ability == "提高总势":
+                ratio = float(effect.values["比例"])
+                modifiers = {"总势倍率": str(1.0 + ratio)}
+                summary = f"阵法总势提高{ratio:.0%}"
+            elif effect.ability == "提高材料阵势":
+                material = str(effect.values["材料"])
+                ratio = float(effect.values["比例"])
+                modifiers = {"材料": material, "材料倍率": str(1.0 + ratio)}
+                summary = f"{material}阵势提高{ratio:.0%}"
+            else:
+                summary = ""
+            if summary:
+                activation = InnateTreasureActivation(
+                    treasure.treasure_id,
+                    treasure.name,
+                    treasure.authority,
+                    summary,
+                )
         try:
             inventory = await self._asset.plan_inventory_changes(normalized, adjustments)
             reserve = await self._asset.plan_formation_reserve_acquisition(
@@ -285,6 +315,8 @@ class FormationService:
                     if preview.grade_id == "05"
                     else None
                 ),
+                treasure_id=activation.treasure_id if activation else "",
+                modifiers=modifiers,
             )
             payload = {
                 "地点": preview.location_name,
@@ -296,6 +328,8 @@ class FormationService:
                 "阵藏现数量": reserve.quantity_after,
                 "投入": {key: actual[key] for key in _CATEGORIES},
                 "材料": [_material_payload(item) for item in preview.materials],
+                "先天灵宝": _activation_payload(activation),
+                "灵宝效果": modifiers,
             }
             receipt = await self._database.commit(
                 TransactionCommand(
@@ -318,6 +352,7 @@ class FormationService:
             reserve.quantity_before,
             reserve.quantity_after,
             receipt.replayed,
+            activation,
         )
 
     async def arm(
@@ -347,6 +382,8 @@ class FormationService:
                 "阵法编号": stack.formation_id,
                 "品级": stack.grade_id,
                 "投入": materials,
+                "灵宝编号": stack.treasure_id,
+                "灵宝效果": dict(stack.modifiers),
             }
             prepared = FormationPrepared(
                 normalized,
@@ -356,6 +393,8 @@ class FormationService:
                 stack.grade_id,
                 _formation_grade_name(stack.grade_id),
                 stack.materials,
+                stack.treasure_id,
+                stack.modifiers,
                 1,
             )
             payload = dict(value)
@@ -399,6 +438,7 @@ class FormationService:
         formation = self._resolve_formation(formation_id)
         grade = self._asset.grade(_text(value.get("品级"), "待战阵法.品级"))
         materials = _stored_materials(value.get("投入"), grade.grade_id)
+        treasure_id, modifiers = _stored_treasure_effect(value)
         return FormationPrepared(
             normalized,
             _text(value.get("阵藏条目"), "待战阵法.阵藏条目"),
@@ -407,6 +447,8 @@ class FormationService:
             grade.grade_id,
             _formation_grade_name(grade.grade_id),
             materials,
+            treasure_id,
+            modifiers,
             snapshot.version,
         )
 
@@ -422,6 +464,7 @@ class FormationService:
             prepared.formation_id,
             prepared.grade_name,
             {key: int(value) for key, value in prepared.materials},
+            modifiers=dict(prepared.modifiers),
             position=position,
         )
         return FormationActivationPlan(
@@ -442,6 +485,7 @@ class FormationService:
         grade: str,
         materials: Mapping[str, int | float] | None = None,
         *,
+        modifiers: Mapping[str, str] | None = None,
         position: int = 0,
     ) -> FormationBattleProfile:
         """把稳定阵法引用解析成战斗核心可执行的不可变快照。"""
@@ -451,6 +495,10 @@ class FormationService:
         grade_name = _grade_name(grade)
         raw = self._raw_formations[formation.formation_id]
         grade_raw = self._grade_raw(raw, grade_name)
+        effect_values = {str(key): str(value) for key, value in (modifiers or {}).items()}
+        unknown_effects = set(effect_values) - {"总势倍率", "材料", "材料倍率"}
+        if unknown_effects:
+            raise FormationError(f"阵法灵宝效果包含未知字段：{sorted(unknown_effects)}")
         if grade_name == "圣":
             minimum = {
                 str(key): float(value)
@@ -460,6 +508,11 @@ class FormationService:
             unknown = set(actual) - set(_CATEGORIES)
             if unknown or any(actual.get(key, 0) < minimum[key] for key in _CATEGORIES):
                 raise FormationError("圣品阵法材料投入不完整或低于最低消耗")
+            if "材料" in effect_values:
+                material = effect_values["材料"]
+                if material not in _CATEGORIES or "材料倍率" not in effect_values:
+                    raise FormationError("阵法材料灵宝效果不完整")
+                actual[material] *= float(effect_values["材料倍率"])
             growth = _mapping(self._rules.get("圣品增长"), "阵法规则.圣品增长")
             weights = {
                 str(key): float(value)
@@ -496,6 +549,26 @@ class FormationService:
             impact = _number(eye.get("冲击"), "阵法.冲击")
             nodes = _positive_int(nodes_raw.get("数量"), "阵法.节点数量")
             transmission = _number(nodes_raw.get("传导"), "阵法.传导")
+            if "材料" in effect_values:
+                material = effect_values["材料"]
+                multiplier = float(effect_values.get("材料倍率", "0"))
+                if material == "灵矿":
+                    capacity *= multiplier
+                elif material == "兽宝":
+                    impact *= multiplier
+                elif material == "灵植":
+                    nodes = max(1, math.ceil(nodes * multiplier))
+                    transmission *= multiplier
+                else:
+                    raise FormationError("阵法材料灵宝效果引用未知材料")
+        if "总势倍率" in effect_values:
+            multiplier = float(effect_values["总势倍率"])
+            if multiplier <= 0:
+                raise FormationError("阵法总势倍率必须为正数")
+            capacity *= multiplier
+            impact *= multiplier
+            nodes = max(1, math.ceil(nodes * multiplier))
+            transmission *= multiplier
         stages = tuple(
             FormationStageProfile(
                 _number(value.get("环境阶段阈值倍率"), "阵法.环境阶段阈值倍率"),
@@ -733,9 +806,18 @@ class FormationService:
             reserve_key = _payload_text(payload.get("阵藏条目"), "炼阵事务.阵藏条目")
             before = _payload_nonnegative_int(payload.get("阵藏原数量"), "炼阵事务.阵藏原数量")
             after = _payload_positive_int(payload.get("阵藏现数量"), "炼阵事务.阵藏现数量")
+            activation = _payload_activation(payload.get("先天灵宝"))
+            modifiers = {
+                str(key): _payload_text(value, f"炼阵事务.灵宝效果.{key}")
+                for key, value in _mapping(
+                    payload.get("灵宝效果"), "炼阵事务.灵宝效果"
+                ).items()
+            }
         except (KeyError, TypeError, ValueError) as exc:
             raise FormationConflictError("已提交炼阵事务无法还原") from exc
-        profile = self.battle_profile(formation.formation_id, grade_name, actual)
+        profile = self.battle_profile(
+            formation.formation_id, grade_name, actual, modifiers=modifiers
+        )
         grade = self._asset.grade(_GRADE_IDS[grade_name])
         preview = FormationPreview(
             user_id,
@@ -753,7 +835,7 @@ class FormationService:
             profile.transmission,
             True,
         )
-        return FormationResult(preview, reserve_key, before, after, True)
+        return FormationResult(preview, reserve_key, before, after, True, activation)
 
     def _prepared_from_payload(
         self, user_id: str, payload: Mapping[str, object]
@@ -761,6 +843,7 @@ class FormationService:
         formation_id = _payload_text(payload.get("阵法编号"), "布阵事务.阵法编号")
         formation = self._resolve_formation(formation_id)
         grade = self._asset.grade(_payload_text(payload.get("品级"), "布阵事务.品级"))
+        treasure_id, modifiers = _stored_treasure_effect(payload)
         return FormationPrepared(
             user_id,
             _payload_text(payload.get("阵藏条目"), "布阵事务.阵藏条目"),
@@ -769,6 +852,8 @@ class FormationService:
             grade.grade_id,
             _formation_grade_name(grade.grade_id),
             _stored_materials(payload.get("投入"), grade.grade_id),
+            treasure_id,
+            modifiers,
             1,
         )
 
@@ -791,6 +876,51 @@ def _material_payload(value: FormationMaterial) -> dict[str, object]:
         "品级": value.grade_id,
         "数量": value.quantity,
     }
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    raw = _mapping(value, "炼阵事务.先天灵宝")
+    return InnateTreasureActivation(
+        _payload_text(raw.get("编号"), "炼阵事务.先天灵宝.编号"),
+        _payload_text(raw.get("名称"), "炼阵事务.先天灵宝.名称"),
+        _payload_text(raw.get("权柄"), "炼阵事务.先天灵宝.权柄"),
+        _payload_text(raw.get("结果"), "炼阵事务.先天灵宝.结果"),
+    )
+
+
+def _stored_treasure_effect(
+    value: Mapping[str, object],
+) -> tuple[str, tuple[tuple[str, str], ...]]:
+    treasure_id = str(value.get("灵宝编号") or "").strip()
+    modifiers = tuple(
+        sorted(
+            (
+                _payload_text(key, "阵法灵宝效果.字段"),
+                _payload_text(raw, f"阵法灵宝效果.{key}"),
+            )
+            for key, raw in _mapping(
+                value.get("灵宝效果"), "阵法灵宝效果"
+            ).items()
+        )
+    )
+    if bool(treasure_id) != bool(modifiers):
+        raise FormationError("阵法灵宝编号和效果不完整")
+    return treasure_id, modifiers
 
 
 def _payload_materials(

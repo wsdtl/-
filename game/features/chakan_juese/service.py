@@ -7,6 +7,8 @@ from game.core.character import (
     CharacterService,
     CharacterStateError,
 )
+from game.core.injury import PLAYER_KEY, InjuryService
+from game.core.innate_treasure import InnateTreasureService
 from game.core.location import LocationMissingError, LocationService
 from game.core.player_state import PlayerStateService
 from game.core.world import LocationQuery, WorldService
@@ -27,11 +29,15 @@ class CharacterOverviewFeature:
         player_state: PlayerStateService,
         world: WorldService,
         location: LocationService,
+        injury: InjuryService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._character = character
         self._player_state = player_state
         self._world = world
         self._location = location
+        self._injury = injury
+        self._innate_treasure = innate_treasure
         self._initialized = False
 
     def initialize(self) -> None:
@@ -45,6 +51,10 @@ class CharacterOverviewFeature:
             raise RuntimeError("世界地点微服务必须先于查看角色玩法启动")
         if not self._location.status().initialized:
             raise RuntimeError("玩家位置微服务必须先于查看角色玩法启动")
+        if not self._injury.status().initialized:
+            raise RuntimeError("长期伤势核心必须先于查看角色玩法启动")
+        if not self._innate_treasure.status().initialized:
+            raise RuntimeError("先天灵宝核心必须先于查看角色玩法启动")
         self._initialized = True
 
     async def inspect(self, user_id: str) -> CharacterOverviewResult:
@@ -70,6 +80,7 @@ class CharacterOverviewFeature:
             )
             for category, _ in character.cultivation_slots
         }
+        injuries = self._injury.summary(await self._injury.state(user_id, PLAYER_KEY))
         return CharacterOverviewResult(
             character=character,
             xy=player_location.xy,
@@ -84,6 +95,10 @@ class CharacterOverviewFeature:
                 (category, equipped_counts[category], total)
                 for category, total in character.cultivation_slots
             ),
+            injuries=tuple(
+                (str(value["名称"]), int(value["层数"])) for value in injuries.entries
+            ),
+            innate_treasure=await self._innate_treasure.active(user_id),
         )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.core.character import CharacterProfile
+from game.core.innate_treasure import InnateTreasure
 
 
 class CharacterOverviewError(RuntimeError):
@@ -25,6 +26,8 @@ class CharacterOverviewResult:
     altitude: int
     states: tuple[tuple[str, str], ...]
     cultivation_usage: tuple[tuple[str, int, int], ...]
+    injuries: tuple[tuple[str, int], ...]
+    innate_treasure: InnateTreasure | None
 
 
 __all__ = [

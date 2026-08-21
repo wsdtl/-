@@ -12,6 +12,7 @@ from game.core.location import LocationService
 from game.core.world import LocationQuery, WorldService
 from game.features.lianqi import ForgingFeature
 from message import RenderedMessage, render_local_message
+from tests.support import innate_treasure_service
 
 forging_reply = import_module("game.cmd.专属.炼器.reply")
 
@@ -32,7 +33,7 @@ def _feature(tmp_path: Path):
     location.initialize()
     asset = AssetService(data, database)
     asset.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
     feature = ForgingFeature(data, forging)
     feature.initialize()

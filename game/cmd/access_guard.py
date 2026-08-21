@@ -26,10 +26,28 @@ async def game_access_guard(context: CommandGuardContext) -> CommandGuardDecisio
         reason = "游戏命令缺少状态守卫规则"
         return CommandGuardDecision.block(_blocked_message(reason), reason=reason)
     user_id = context.message_context.user_id
+    services = current_game_services()
     try:
-        result = await current_game_services().core.player_state.authorize(
-            user_id, rule_name
-        )
+        snapshot = await services.core.player_state.current(user_id)
+        hosting_metadata = context.command_metadata.get("hosting")
+        if (
+            snapshot is not None
+            and snapshot.states["控制"].name == "托管中"
+            and isinstance(hosting_metadata, dict)
+        ):
+            allowed = await services.core.hosting.authorize_execution(
+                user_id=user_id,
+                request_id=context.message_context.request_id,
+                activity=str(hosting_metadata.get("activity") or ""),
+                phase=str(hosting_metadata.get("phase") or ""),
+            )
+            if context.adapter != "local" or not allowed:
+                reason = "当前活动由托管计划统一控制，可查看托管状态或取消托管"
+                return CommandGuardDecision.block(
+                    _blocked_message(reason), reason=reason
+                )
+            return CommandGuardDecision.allow()
+        result = await services.core.player_state.authorize(user_id, rule_name)
     except Exception:  # noqa: BLE001 - guard failures must fail closed
         reason = "状态检查失败，请稍后重试"
         return CommandGuardDecision.block(_blocked_message(reason), reason=reason)

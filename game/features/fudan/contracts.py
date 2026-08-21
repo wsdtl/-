@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from game.core.innate_treasure import InnateTreasureActivation
+
 
 class MedicineFeatureError(ValueError):
     """丹药、目标或当前状态不允许完成请求。"""
@@ -44,6 +46,7 @@ class MedicineUseResult:
     after: float
     recovered: float
     replayed: bool
+    treasure_activation: InnateTreasureActivation | None = None
 
 
 @dataclass(frozen=True)

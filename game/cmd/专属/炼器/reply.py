@@ -113,7 +113,7 @@ def completed(
 ):
     preview_value = value.preview
     artisan = preview_value.artisan
-    return (
+    builder = (
         M.document()
         .header(text(copy, "完成", "标题", 地点=preview_value.location_name))
         .section(artisan.title, icon="weapon")
@@ -122,9 +122,13 @@ def completed(
         .section(text(copy, "完成", "所得"), icon="item")
         .field(preview_value.law.name, f"器藏数量 {value.quantity_after}")
         .line(text(copy, "完成", "话语"))
-        .actions(message_actions(actions))
-        .build()
     )
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.actions(message_actions(actions)).build()
 
 
 def error(copy: ForgingCopy, message: str):

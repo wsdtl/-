@@ -14,6 +14,10 @@ from game.core.database import (
     StateConflictError,
     TransactionCommand,
 )
+from game.core.innate_treasure import (
+    InnateTreasureActivation,
+    InnateTreasureService,
+)
 from game.core.medicine import MedicineError, MedicineService, PreparedBattleMedicine
 from game.core.player_state import PlayerStateService
 
@@ -39,6 +43,7 @@ class MedicineFeature:
         asset: AssetService,
         player_state: PlayerStateService,
         database: DatabaseService,
+        innate_treasure: InnateTreasureService,
     ) -> None:
         self._data = data
         self._medicine = medicine
@@ -47,6 +52,7 @@ class MedicineFeature:
         self._asset = asset
         self._player_state = player_state
         self._database = database
+        self._innate_treasure = innate_treasure
         self._copy: Mapping[str, object] | None = None
 
     def initialize(self) -> None:
@@ -59,6 +65,7 @@ class MedicineFeature:
             (self._asset.status().initialized, "资产核心"),
             (self._player_state.status().initialized, "人物状态核心"),
             (self._database.status().initialized, "数据库核心"),
+            (self._innate_treasure.status().initialized, "先天灵宝核心"),
         ):
             if not ready:
                 raise RuntimeError(f"{label}必须先于服丹玩法启动")
@@ -104,12 +111,28 @@ class MedicineFeature:
                 definition = self._medicine.recovery(
                     medicine_id, stack.grade.grade_id
                 )
+                activation: InnateTreasureActivation | None = None
+                recovery_percent = definition.recovery_percent
                 if target == "人物":
+                    treasure_effect = await self._innate_treasure.effect(
+                        user_id, "恢复丹生效"
+                    )
+                    if treasure_effect is not None:
+                        treasure, effect_value = treasure_effect
+                        if effect_value.ability == "提高恢复量":
+                            ratio = float(effect_value.values["比例"])
+                            recovery_percent *= 1 + ratio
+                            activation = InnateTreasureActivation(
+                                treasure.treasure_id,
+                                treasure.name,
+                                treasure.authority,
+                                f"恢复量提高{ratio:.0%}",
+                            )
                     profile = await self._character.profile(user_id)
                     plan = await self._character.plan_recovery(
                         user_id,
                         resource=definition.resource,
-                        recovery_percent=definition.recovery_percent,
+                        recovery_percent=recovery_percent,
                     )
                     operations = inventory.operations + (plan.operation,)
                     target_name = profile.name
@@ -128,6 +151,7 @@ class MedicineFeature:
                 resource = plan.resource
                 before, after, recovered = plan.before, plan.after, plan.recovered
             elif self._medicine.is_battle(medicine_id):
+                activation = None
                 definition = self._medicine.battle(medicine_id, stack.grade.grade_id)
                 prepared = PreparedBattleMedicine(
                     definition.medicine_id, definition.grade_id
@@ -166,6 +190,7 @@ class MedicineFeature:
                 "变化前": before,
                 "变化后": after,
                 "实际恢复": recovered,
+                "先天灵宝": _activation_payload(activation),
             }
             receipt = await self._database.commit(
                 TransactionCommand(
@@ -301,6 +326,33 @@ def _use_result(value: Mapping[str, object], *, replayed: bool) -> MedicineUseRe
         _number(value.get("变化后"), "服丹事务.变化后"),
         _number(value.get("实际恢复"), "服丹事务.实际恢复"),
         replayed,
+        _payload_activation(value.get("先天灵宝")),
+    )
+
+
+def _activation_payload(
+    activation: InnateTreasureActivation | None,
+) -> dict[str, str] | None:
+    if activation is None:
+        return None
+    return {
+        "编号": activation.treasure_id,
+        "名称": activation.name,
+        "权柄": activation.authority,
+        "结果": activation.summary,
+    }
+
+
+def _payload_activation(value: object) -> InnateTreasureActivation | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise MedicineFeatureError("服丹事务.先天灵宝必须是对象")
+    return InnateTreasureActivation(
+        _text(value.get("编号"), "服丹事务.先天灵宝.编号"),
+        _text(value.get("名称"), "服丹事务.先天灵宝.名称"),
+        _text(value.get("权柄"), "服丹事务.先天灵宝.权柄"),
+        _text(value.get("结果"), "服丹事务.先天灵宝.结果"),
     )
 
 

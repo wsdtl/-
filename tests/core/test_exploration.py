@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from game.core.action_group import ActionGroupService
+from game.core.activity import ActivityLifecycleService
 from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.combat import CombatService
@@ -23,6 +24,7 @@ from game.core.exploration import (
 from game.core.forging import ForgingService
 from game.core.formation import FormationService
 from game.core.growth import GrowthService
+from game.core.injury import InjuryService
 from game.core.item_catalog import ItemCatalogService
 from game.core.location import LocationService
 from game.core.medicine import MedicineService, PreparedBattleMedicine
@@ -36,6 +38,7 @@ from game.features.chuangjian_renwu import (
     CreateCharacterRequest,
 )
 from game.features.tanxian import ExplorationFeature
+from tests.support import innate_treasure_service
 
 
 def _run(awaitable):
@@ -54,6 +57,8 @@ def _services(tmp_path: Path):
     world.initialize()
     database = DatabaseService(tmp_path / "game.db")
     database.initialize()
+    activity = ActivityLifecycleService()
+    activity.initialize()
     player_state = PlayerStateService(data, database)
     player_state.initialize()
     team = TeamService(data, database, player_state)
@@ -68,9 +73,11 @@ def _services(tmp_path: Path):
     asset.initialize()
     medicine = MedicineService(data, asset)
     medicine.initialize()
-    forging = ForgingService(data, database, asset, world, location)
+    injury = InjuryService(data, database)
+    injury.initialize()
+    forging = ForgingService(data, database, asset, world, location, innate_treasure_service(data, database))
     forging.initialize()
-    formation = FormationService(data, database, asset, world, location)
+    formation = FormationService(data, database, asset, world, location, innate_treasure_service(data, database))
     formation.initialize()
     combat = CombatService(data, formation)
     combat.initialize()
@@ -96,7 +103,10 @@ def _services(tmp_path: Path):
         enemy,
         formation,
         combat,
+        activity,
+        innate_treasure_service(data, database),
         medicine,
+        injury,
     )
     exploration.initialize()
     exploration_feature = ExplorationFeature(
@@ -135,9 +145,7 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
         medicine,
     ) = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
-    reserve = _run(
-        asset.plan_formation_reserve_acquisition("qq-1", "530001", "01")
-    )
+    reserve = _run(asset.plan_formation_reserve_acquisition("qq-1", "530001", "01"))
     _run(
         database.commit(
             TransactionCommand(
@@ -217,6 +225,50 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     assert database.status().transaction_count == 5
 
 
+def test_exploration_lifecycle_survives_service_restart(tmp_path: Path) -> None:
+    services = _services(tmp_path)
+    database, _, _, _, create, _, exploration, *_ = services
+    _run(create.create(CreateCharacterRequest("qq-restart", "create", "重山", "男")))
+    started_at = datetime(2026, 8, 21, 10, 0, tzinfo=timezone.utc)
+    started = _run(
+        exploration.start(
+            ExplorationStartCommand(
+                "qq-restart",
+                "exploration-restart",
+                ("qq-restart",),
+                seed=23,
+                started_at=started_at,
+            )
+        )
+    )
+    database.close()
+
+    restored = _services(tmp_path)
+    restored_database, _, _, _, _, _, restored_exploration, *_ = restored
+    try:
+        lifecycle = _run(
+            restored_exploration.lifecycle(
+                "qq-restart", now=started.ends_at - timedelta(seconds=1)
+            )
+        )
+        assert lifecycle.activity_id == started.session_id
+        assert lifecycle.phase == "running"
+        assert lifecycle.remaining_seconds == 1
+        assert lifecycle.can_settle is False
+
+        ready = _run(restored_exploration.lifecycle("qq-restart", now=started.ends_at))
+        assert ready.phase == "ready"
+        assert ready.can_settle is True
+        settled = _run(
+            restored_exploration.settle(
+                "qq-restart", "settle-after-restart", now=started.ends_at
+            )
+        )
+        assert settled.session_id == started.session_id
+    finally:
+        restored_database.close()
+
+
 def test_indivisible_loot_is_floored_per_surviving_user() -> None:
     from game.core.enemy import EnemyDrop, EnemyReward
     from game.core.exploration.service import _allocate_rewards
@@ -235,15 +287,11 @@ def test_indivisible_loot_is_floored_per_surviving_user() -> None:
 def test_exploration_consumes_prepared_battle_medicine_only_after_creation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    database, _, character, _, create, _, exploration, _, _, _, _ = _services(
-        tmp_path
-    )
+    database, _, character, _, create, _, exploration, _, _, _, _ = _services(tmp_path)
     _run(create.create(CreateCharacterRequest("qq-1", "create-1", "林远", "男")))
     prepared = PreparedBattleMedicine("120001", "01")
     plan = _run(
-        character.plan_battle_medicine(
-            "qq-1", medicine=prepared, require_empty=True
-        )
+        character.plan_battle_medicine("qq-1", medicine=prepared, require_empty=True)
     )
     _run(
         database.commit(

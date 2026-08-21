@@ -9,6 +9,7 @@ from launch import C, OnEvent, config, logger
 
 from .config import game_config
 from .core.action_group import ActionGroupService
+from .core.activity import ActivityLifecycleService
 from .core.alchemy import AlchemyService
 from .core.asset import AssetService
 from .core.character import CharacterService
@@ -24,6 +25,8 @@ from .core.formation import FormationService
 from .core.gathering import GatheringService
 from .core.growth import GrowthService
 from .core.hosting import HostingService
+from .core.injury import InjuryService
+from .core.innate_treasure import InnateTreasureService
 from .core.item_catalog import ItemCatalogService
 from .core.location import LocationService
 from .core.medicine import MedicineService
@@ -64,6 +67,7 @@ from .features.tanxian import ExplorationFeature
 from .features.tongquetai import TongquetaiFeature
 from .features.tuoguan import HostingFeature
 from .features.weizhi import PositionFeature
+from .features.xiantian_lingbao import InnateTreasureFeature
 from .features.xinglu import TravelFeature
 from .features.yixing import YixingFeature
 from .features.zongmen import SectFeature
@@ -104,7 +108,10 @@ class CoreServices:
     sect_production: SectProductionService
     sect_progress: SectProgressService
     action_group: ActionGroupService
+    activity: ActivityLifecycleService
     hosting: HostingService
+    injury: InjuryService
+    innate_treasure: InnateTreasureService
     character: CharacterService
     asset: AssetService
     medicine: MedicineService
@@ -155,6 +162,7 @@ class FeatureServices:
     zongmen_shengchan: SectProductionFeature
     zongmen_zhan: SectWarFeature
     tuoguan: HostingFeature
+    xiantian_lingbao: InnateTreasureFeature
 
 
 @dataclass(frozen=True)
@@ -228,6 +236,18 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("transactions", database_status.transaction_count),
         )
     )
+    innate_treasure = InnateTreasureService(data, database)
+    innate_treasure_status = innate_treasure.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("先天灵宝核心微服务已启动"),
+            C.kv("treasures", innate_treasure_status.treasure_count),
+            C.kv("slots", innate_treasure_status.slot_count),
+        )
+    )
+    activity = ActivityLifecycleService()
+    activity.initialize()
+    logger.opt(colors=True).success(C.ok("异步玩法生命周期核心已启动"))
     player_state = PlayerStateService(data, database)
     player_state_status = player_state.initialize()
     logger.opt(colors=True).success(
@@ -266,7 +286,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("page_limit", asset_status.page_limit),
         )
     )
-    forging = ForgingService(data, database, asset, world, location)
+    forging = ForgingService(
+        data, database, asset, world, location, innate_treasure
+    )
     forging_status = forging.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -316,7 +338,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("medicine", transfer_status.medicine_id),
         )
     )
-    alchemy = AlchemyService(data, database, asset, world, location)
+    alchemy = AlchemyService(
+        data, database, asset, world, location, innate_treasure
+    )
     alchemy_status = alchemy.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -326,7 +350,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("alchemists", alchemy_status.alchemist_count),
         )
     )
-    formation = FormationService(data, database, asset, world, location)
+    formation = FormationService(
+        data, database, asset, world, location, innate_treasure
+    )
     formation_status = formation.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -375,6 +401,15 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("initial_items", character_service_status.initial_item_count),
         )
     )
+    injury = InjuryService(data, database)
+    injury_status = injury.initialize()
+    logger.opt(colors=True).success(
+        C.join(
+            C.ok("长期伤势核心微服务已启动"),
+            C.kv("external", injury_status.external_count),
+            C.kv("self_generated", injury_status.self_generated_count),
+        )
+    )
     sect_progress = SectProgressService(data, sect, character)
     sect_progress_status = sect_progress.initialize()
     logger.opt(colors=True).success(
@@ -383,7 +418,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("maximum_level", sect_progress_status.maximum_level),
         )
     )
-    sect_assets = SectAssetService(data, database, sect, asset, character)
+    sect_assets = SectAssetService(
+        data, database, sect, asset, character, innate_treasure
+    )
     sect_assets_status = sect_assets.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -458,7 +495,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         enemy,
         formation,
         combat,
+        activity,
+        innate_treasure,
         medicine,
+        injury,
     )
     exploration_status = exploration.initialize()
     logger.opt(colors=True).success(
@@ -481,6 +521,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         player_state,
         medicine,
         combat,
+        activity,
+        injury,
     )
     sect_war_status = sect_war.initialize()
     logger.opt(colors=True).success(
@@ -496,6 +538,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         player_state,
         pool,
+        activity,
+        injury,
+        innate_treasure,
     )
     retreat_status = retreat.initialize()
     logger.opt(colors=True).success(
@@ -515,6 +560,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         player_state,
         pool,
+        innate_treasure,
         sect,
         sect_progress,
     )
@@ -548,7 +594,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         sect_production=sect_production,
         sect_progress=sect_progress,
         action_group=action_group,
+        activity=activity,
         hosting=hosting,
+        injury=injury,
+        innate_treasure=innate_treasure,
         character=character,
         asset=asset,
         medicine=medicine,
@@ -569,7 +618,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     )
     chakan_wupin = ItemInspectionFeature(item_catalog)
     chakan_wupin.initialize()
-    chakan_juese = CharacterOverviewFeature(character, player_state, world, location)
+    chakan_juese = CharacterOverviewFeature(
+        character, player_state, world, location, injury, innate_treasure
+    )
     chakan_juese.initialize()
     ditu = WorldMapFeature(world)
     map_overview = ditu.initialize()
@@ -593,6 +644,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset,
         player_state,
         database,
+        innate_treasure,
     )
     fudan.initialize()
     tongquetai = TongquetaiFeature(
@@ -605,6 +657,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         location,
         world,
         database,
+        innate_treasure,
     )
     tongquetai.initialize()
     guiyuan = GuiyuanFeature(
@@ -627,7 +680,9 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         data, medicine, character, asset, player_state, location, world, database
     )
     yixing.initialize()
-    zongmen = SectFeature(data, sect, character, location, world, player_state, sect_progress)
+    zongmen = SectFeature(
+        data, sect, character, location, world, player_state, sect_progress
+    )
     zongmen.initialize()
     zongmen_tongxing = SectFollowFeature(
         data, sect, character, location, player_state, team
@@ -681,6 +736,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         location,
         world,
         database,
+        innate_treasure,
     )
     daolv_jiejiao.initialize()
     renwu_peiyang = CharacterCultivationFeature(
@@ -691,8 +747,11 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         growth,
         forging,
         database,
+        innate_treasure,
     )
     renwu_peiyang.initialize()
+    xiantian_lingbao = InnateTreasureFeature(data, innate_treasure, database)
+    xiantian_lingbao.initialize()
     daolv_peiyang = CompanionCultivationFeature(
         data,
         companion,
@@ -757,6 +816,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         zongmen_shengchan=zongmen_shengchan,
         zongmen_zhan=zongmen_zhan,
         tuoguan=tuoguan,
+        xiantian_lingbao=xiantian_lingbao,
     )
     return GameServices(core=core, features=features)
 

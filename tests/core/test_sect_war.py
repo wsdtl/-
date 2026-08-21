@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import game.app as game_app
+import game.core.sect_war.service as sect_war_service
 from game.config import GameConfig, GameDatabaseConfig
 from game.core.database import SharedEntityMutation, TransactionCommand
 from game.core.location import LocationMoveCommand
@@ -161,3 +162,34 @@ def test_full_sect_war_uses_combat_and_settles_once(services) -> None:
     assert replayed.status == "已结算"
     with pytest.raises(SectWarError, match="no_active"):
         _run(war.current("qq-1"))
+
+
+def test_sect_war_lifecycle_and_settlement_survive_service_restart(
+    services, monkeypatch
+) -> None:
+    _prepare_two_sects(services)
+    war = services.core.sect_war
+    created = _run(war.challenge("qq-1", "赤霄宗", 100, "challenge-restart"))
+    _run(war.accept("qq-2", "accept-restart"))
+    _run(war.lock("qq-1", "lock-left-restart"))
+    _run(war.lock("qq-2", "lock-right-restart"))
+    started = _run(war.start("qq-1", "start-restart"))
+    services.core.database.close()
+
+    restored = game_app.build_game_services()
+    try:
+        current = started.ends_at + timedelta(seconds=1)
+        monkeypatch.setattr(sect_war_service, "_now", lambda: current)
+        lifecycle = _run(restored.core.sect_war.lifecycle("qq-1"))
+        assert lifecycle.activity_id == created.war_id
+        assert lifecycle.phase == "ready"
+        assert lifecycle.can_settle is True
+        settled = _run(
+            restored.core.sect_war.current("qq-1", "settle-after-restart")
+        )
+        assert settled.status == "已结算"
+        assert _run(restored.core.player_state.current("qq-1")).states[
+            "行为"
+        ].state_id == "520001"
+    finally:
+        restored.core.database.close()

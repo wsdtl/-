@@ -30,7 +30,7 @@ def donated_material(copy: LingcangCopy, result):
     entry = result.entry
     if entry is None:
         return error(copy, "灵藏捐献结果缺少材料条目")
-    return (
+    builder = (
         M.document()
         .header(_text(copy, "标题"))
         .section("捐入灵藏", icon="success")
@@ -43,18 +43,32 @@ def donated_material(copy: LingcangCopy, result):
                 数量=entry.quantity,
             )
         )
-        .build()
     )
+    if result.contribution:
+        builder.field("宗门贡献", f"+{result.contribution}")
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.build()
 
 
 def donated_stones(copy: LingcangCopy, quantity: int, result):
-    return (
+    builder = (
         M.document()
         .header(_text(copy, "标题"))
         .section("捐入灵藏", icon="success")
         .line(_text(copy, "捐入灵石", 数量=quantity, 余额=result.spirit_stones))
-        .build()
     )
+    if result.contribution:
+        builder.field("宗门贡献", f"+{result.contribution}")
+    if result.treasure_activation is not None:
+        activation = result.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.build()
 
 
 def error(copy: LingcangCopy, message: str):

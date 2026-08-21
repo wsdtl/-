@@ -65,7 +65,7 @@ def preview(copy, value, actions: tuple[FormationAction, ...]):
 def completed(copy, value, actions: tuple[FormationAction, ...]):
     preview_value = value.preview
     master = preview_value.master
-    return (
+    builder = (
         M.document()
         .header(text(copy, "完成", "标题", 地点=preview_value.location_name))
         .section(master.title, icon="combat")
@@ -77,9 +77,13 @@ def completed(copy, value, actions: tuple[FormationAction, ...]):
             f"阵藏条目 {value.reserve_key} · 数量 {value.quantity_after}",
         )
         .line(text(copy, "完成", "话语"))
-        .actions(message_actions(actions))
-        .build()
     )
+    if value.treasure_activation is not None:
+        activation = value.treasure_activation
+        builder.section("先天灵宝", icon="item").field(
+            activation.name, activation.summary
+        )
+    return builder.actions(message_actions(actions)).build()
 
 
 def error(copy, message: str):
