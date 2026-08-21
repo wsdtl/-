@@ -26,6 +26,7 @@ class _CoreServices(Protocol):
     team: _StateOwner
     sect: _StateOwner
     formation: _StateOwner
+    sect_war: _StateOwner
 
 
 class StartupContractError(ValueError):
@@ -38,20 +39,22 @@ def validate_startup_contracts(core: _CoreServices) -> None:
     from game.cmd.command import registered_commands, registered_guard_rules
 
     validate_command_uniqueness(registered_commands())
-    validate_state_type_ownership(
-        {
-            "player_state": core.player_state.state_types,
-            "companion": core.companion.state_types,
-            "character": core.character.state_types,
-            "asset": core.asset.state_types,
-            "exploration": core.exploration.state_types,
-            "retreat": core.retreat.state_types,
-            "gathering": core.gathering.state_types,
-            "team": core.team.state_types,
-            "sect": core.sect.state_types,
-            "formation": core.formation.state_types,
-        }
-    )
+    owners = {
+        "player_state": core.player_state.state_types,
+        "companion": core.companion.state_types,
+        "character": core.character.state_types,
+        "asset": core.asset.state_types,
+        "exploration": core.exploration.state_types,
+        "retreat": core.retreat.state_types,
+        "gathering": core.gathering.state_types,
+        "team": core.team.state_types,
+        "sect": core.sect.state_types,
+        "formation": core.formation.state_types,
+    }
+    sect_war = getattr(core, "sect_war", None)
+    if sect_war is not None:
+        owners["sect_war"] = sect_war.state_types
+    validate_state_type_ownership(owners)
     for rule_name in registered_guard_rules():
         core.player_state.validate_guard_rule(rule_name)
 

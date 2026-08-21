@@ -216,6 +216,33 @@ class SQLiteStateStore:
             str(row[3]),
         )
 
+    def list_shared_entities(
+        self, entity_type: str
+    ) -> tuple[SharedEntityRecord, ...]:
+        self._require_initialized()
+        _validate_text(entity_type, "entity_type")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT entity_id, value_json, version, updated_at
+                FROM shared_entity
+                WHERE entity_type = ?
+                ORDER BY entity_id
+                """,
+                (entity_type,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            value = json.loads(str(row[1]))
+            if not isinstance(value, dict):
+                raise DatabaseError("共享实体 JSON 根值必须是对象")
+            result.append(
+                SharedEntityRecord(
+                    entity_type, str(row[0]), _freeze_json(value), int(row[2]), str(row[3])
+                )
+            )
+        return tuple(result)
+
     def get_shared_member(
         self, entity_type: str, user_id: str
     ) -> SharedMemberRecord | None:

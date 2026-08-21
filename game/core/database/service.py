@@ -99,6 +99,12 @@ class DatabaseService:
             self._store.get_shared_entity_by_name, entity_type, entity_name
         )
 
+    async def list_shared_entities(
+        self, entity_type: str
+    ) -> tuple[SharedEntityRecord, ...]:
+        self._require_initialized()
+        return await asyncio.to_thread(self._store.list_shared_entities, entity_type)
+
     async def get_shared_member(
         self, entity_type: str, user_id: str
     ) -> SharedMemberRecord | None:

@@ -36,6 +36,7 @@ from .core.sect_facilities import SectFacilityService
 from .core.sect_library import SectLibraryService
 from .core.sect_production import SectProductionService
 from .core.sect_progress import SectProgressService
+from .core.sect_war import SectWarService
 from .core.team import TeamService
 from .core.trade import TradeService
 from .core.world import WorldService
@@ -73,6 +74,7 @@ from .features.zongmen_shengchan import SectProductionFeature
 from .features.zongmen_sheshi import SectFacilityFeature
 from .features.zongmen_tongxing import SectFollowFeature
 from .features.zongmen_wanzhen import WanzhenFeature
+from .features.zongmen_zhan import SectWarFeature
 from .startup import validate_startup_contracts
 
 
@@ -108,6 +110,7 @@ class CoreServices:
     medicine: MedicineService
     enemy: EnemyService
     exploration: ExplorationService
+    sect_war: SectWarService
     retreat: RetreatService
     gathering: GatheringService
     trade: TradeService
@@ -150,6 +153,7 @@ class FeatureServices:
     zongmen_shanmen: GateFeature
     zongmen_sheshi: SectFacilityFeature
     zongmen_shengchan: SectProductionFeature
+    zongmen_zhan: SectWarFeature
     tuoguan: HostingFeature
 
 
@@ -464,6 +468,14 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("maximum_battles", exploration_status.maximum_battles),
         )
     )
+    sect_war = SectWarService(
+        data, database, sect, sect_assets, location, character, companion,
+        player_state, combat
+    )
+    sect_war_status = sect_war.initialize()
+    logger.opt(colors=True).success(
+        C.join(C.ok("宗门战核心微服务已启动"), C.kv("seconds", sect_war_status.seconds))
+    )
     retreat = RetreatService(
         data,
         database,
@@ -532,6 +544,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         medicine=medicine,
         enemy=enemy,
         exploration=exploration,
+        sect_war=sect_war,
         retreat=retreat,
         gathering=gathering,
         trade=trade,
@@ -632,6 +645,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     zongmen_sheshi.initialize()
     zongmen_shengchan = SectProductionFeature(data, sect_production)
     zongmen_shengchan.initialize()
+    zongmen_zhan = SectWarFeature(data, sect_war)
+    zongmen_zhan.initialize()
     tuoguan = HostingFeature(data, hosting)
     tuoguan.initialize()
     weizhi = PositionFeature(
@@ -730,6 +745,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         zongmen_shanmen=zongmen_shanmen,
         zongmen_sheshi=zongmen_sheshi,
         zongmen_shengchan=zongmen_shengchan,
+        zongmen_zhan=zongmen_zhan,
         tuoguan=tuoguan,
     )
     return GameServices(core=core, features=features)

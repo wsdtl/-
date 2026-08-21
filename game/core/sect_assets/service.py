@@ -482,6 +482,34 @@ class SectAssetService:
             tuple(generated_entries),
         )
 
+    async def plan_spirit_stone_change(
+        self, sect_id: str, delta: int
+    ) -> SharedEntityMutation:
+        """规划宗门灵石变化，供需要原子并入宗门资产的玩法使用。"""
+        self._require_initialized()
+        normalized = str(sect_id or "").strip()
+        if not normalized:
+            raise SectAssetError("宗门编号不能为空")
+        if isinstance(delta, bool) or not isinstance(delta, int) or delta == 0:
+            raise SectAssetError("灵石变化必须是非零整数")
+        record = await self._database.get_shared_entity(LINGCANG_TYPE, normalized)
+        value = (
+            dict(record.value)
+            if record is not None
+            else {"名称": f"灵藏-{normalized}", "宗门编号": normalized, "灵石": 0, "条目": {}}
+        )
+        before = int(value.get("灵石") or 0)
+        after = before + delta
+        if after < 0:
+            raise SectAssetError(f"宗门灵石不足：现有{before}，需要{-delta}")
+        value["灵石"] = after
+        return SharedEntityMutation(
+            LINGCANG_TYPE,
+            normalized,
+            value,
+            record.version if record is not None else 0,
+        )
+
     async def has_assets(self, sect_id: str) -> bool:
         for entity_type in (LINGCANG_TYPE, WANZHEN_TYPE):
             record = await self._database.get_shared_entity(entity_type, sect_id)
