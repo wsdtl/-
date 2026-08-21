@@ -30,6 +30,7 @@ from .contracts import (
     SectAssetStatus,
     SectAssetTransfer,
     SectAssetVault,
+    SectFormationConsumptionPlan,
     SectMaterialCost,
     SectProductGain,
     SectProductionAssetPlan,
@@ -508,6 +509,46 @@ class SectAssetService:
             normalized,
             value,
             record.version if record is not None else 0,
+        )
+
+    async def plan_formation_consumption(
+        self, sect_id: str, entry_key: str
+    ) -> SectFormationConsumptionPlan:
+        """规划消耗万珍殿中的一座阵法，供正式宗门玩法并入自身事务。"""
+
+        self._require_initialized()
+        normalized_sect_id = _rule_text(sect_id, "宗门编号")
+        normalized_key = _rule_text(entry_key, "万珍殿阵法条目")
+        record = await self._database.get_shared_entity(
+            WANZHEN_TYPE, normalized_sect_id
+        )
+        if record is None:
+            raise SectAssetError("万珍殿中没有可用阵法")
+        value = dict(_mapping(record.value, "万珍殿"))
+        entries = dict(_mapping(value.get("条目", {}), "万珍殿.条目"))
+        raw = entries.get(normalized_key)
+        if raw is None:
+            raise SectAssetError("万珍殿中没有这座阵法")
+        entry = self._entry(normalized_key, raw)
+        if entry.category != "阵法":
+            raise SectAssetError("指定的万珍殿条目不是阵法")
+        if entry.quantity < 1:
+            raise SectAssetError("万珍殿中的阵法数量不足")
+        if entry.quantity == 1:
+            entries.pop(normalized_key)
+        else:
+            updated = dict(_mapping(raw, "万珍殿.阵法条目"))
+            updated["数量"] = entry.quantity - 1
+            entries[normalized_key] = updated
+        value["条目"] = entries
+        return SectFormationConsumptionPlan(
+            entry,
+            SharedEntityMutation(
+                WANZHEN_TYPE,
+                normalized_sect_id,
+                value,
+                record.version,
+            ),
         )
 
     async def has_assets(self, sect_id: str) -> bool:

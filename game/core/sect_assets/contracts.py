@@ -85,6 +85,12 @@ class SectResourceGainPlan:
     entries: tuple[SectAssetEntry, ...]
 
 
+@dataclass(frozen=True)
+class SectFormationConsumptionPlan:
+    entry: SectAssetEntry
+    operation: SharedEntityMutation
+
+
 __all__ = [
     "SectAssetConflictError",
     "SectAssetEntry",
@@ -92,6 +98,7 @@ __all__ = [
     "SectAssetStatus",
     "SectAssetTransfer",
     "SectAssetVault",
+    "SectFormationConsumptionPlan",
     "SectMaterialCost",
     "SectProductGain",
     "SectProductionAssetPlan",

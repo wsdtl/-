@@ -6,7 +6,9 @@ from datetime import datetime
 
 
 class SectWarError(RuntimeError):
-    pass
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 @dataclass(frozen=True)
 class SectWarStatus:
@@ -27,5 +29,23 @@ class SectWarView:
     defender_count: int = 0
     ends_at: datetime | None = None
     winner: str = ""
+    attacker_locked: bool = False
+    defender_locked: bool = False
+    attacker_formation: str = ""
+    defender_formation: str = ""
+    report_id: str = ""
 
-__all__ = ["SectWarError", "SectWarStatus", "SectWarView"]
+
+@dataclass(frozen=True)
+class SectWarHistoryPage:
+    page: int
+    page_count: int
+    total: int
+    entries: tuple[SectWarView, ...]
+
+__all__ = [
+    "SectWarError",
+    "SectWarHistoryPage",
+    "SectWarStatus",
+    "SectWarView",
+]

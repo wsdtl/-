@@ -469,8 +469,18 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         )
     )
     sect_war = SectWarService(
-        data, database, sect, sect_assets, location, character, companion,
-        player_state, combat
+        data,
+        database,
+        sect,
+        sect_assets,
+        asset,
+        world,
+        location,
+        character,
+        companion,
+        player_state,
+        medicine,
+        combat,
     )
     sect_war_status = sect_war.initialize()
     logger.opt(colors=True).success(

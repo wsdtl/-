@@ -1,46 +1,86 @@
-"""宗门战核心：战书、阵容锁定、多人战斗和灵石结算。"""
+"""宗门战核心：管理战书生命周期并调用统一多人战斗核心。"""
+
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+import math
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from uuid import uuid4
 
+from game.core.asset import AssetService, InventoryAdjustment
 from game.core.character import CharacterService
-from game.core.combat import CombatRequest, CombatService
+from game.core.combat import (
+    CombatantSpec,
+    CombatFieldSpec,
+    CombatFormationSpec,
+    CombatMedicineSpec,
+    CombatReportSpec,
+    CombatRequest,
+    CombatService,
+)
 from game.core.companion import CompanionService
-from game.core.data import JsonDataError, JsonDataService
+from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
     SharedEntityMutation,
+    StateConflictError,
+    StateMutation,
     TransactionCommand,
 )
 from game.core.location import LocationService
+from game.core.medicine import MedicineService, RecoveryMedicineStack
 from game.core.player_state import PlayerStateService, StateTransitionCommand
 from game.core.sect import SectService
-from game.core.sect_assets import SectAssetService
+from game.core.sect_assets import SectAssetEntry, SectAssetService
+from game.core.world import LocationQuery, WorldService
 
-from .contracts import SectWarError, SectWarStatus, SectWarView
+from .contracts import SectWarError, SectWarHistoryPage, SectWarStatus, SectWarView
 
 ENTITY_TYPE = "宗门战"
 STATE_TYPE = "sect_war"
-MAIN_KEY = "main"
+_TERMINAL = frozenset({"已结算", "已拒绝", "已撤回", "已过期", "已取消"})
+
 
 class SectWarService:
     state_types = frozenset({STATE_TYPE})
 
-    def __init__(self, data: JsonDataService, database: DatabaseService,
-                 sect: SectService, sect_assets: SectAssetService,
-                 location: LocationService, character: CharacterService,
-                 companion: CompanionService, player_state: PlayerStateService,
-                 combat: CombatService) -> None:
-        self._data, self._db, self._sect, self._assets = data, database, sect, sect_assets
-        self._location, self._character, self._companion = location, character, companion
-        self._state, self._combat = player_state, combat
+    def __init__(
+        self,
+        data: JsonDataService,
+        database: DatabaseService,
+        sect: SectService,
+        sect_assets: SectAssetService,
+        asset: AssetService,
+        world: WorldService,
+        location: LocationService,
+        character: CharacterService,
+        companion: CompanionService,
+        player_state: PlayerStateService,
+        medicine: MedicineService,
+        combat: CombatService,
+    ) -> None:
+        self._data = data
+        self._db = database
+        self._sect = sect
+        self._assets = sect_assets
+        self._asset = asset
+        self._world = world
+        self._location = location
+        self._character = character
+        self._companion = companion
+        self._state = player_state
+        self._medicine = medicine
+        self._combat = combat
         self._initialized = False
-        self._seconds = self._maximum = self._actions = 0
+        self._seconds = 0
+        self._maximum = 0
+        self._actions = 0
         self._challenge_seconds = 0
+        self._history_page_size = 0
         self._behavior = ""
         self._win_ratio = Decimal(0)
         self._draw_ratio = Decimal(0)
@@ -53,15 +93,37 @@ class SectWarService:
         participants = _mapping(rule.get("参战"), "宗门战.参战")
         wager = _mapping(rule.get("押注"), "宗门战.押注")
         challenge = _mapping(rule.get("约战"), "宗门战.约战")
+        history = _mapping(rule.get("记录"), "宗门战.记录")
         self._challenge_seconds = _positive(
             challenge.get("有效秒数"), "宗门战.约战.有效秒数"
         )
         self._seconds = _positive(battle.get("结算秒数"), "宗门战.战斗.结算秒数")
-        self._actions = _positive(battle.get("战斗行动上限"), "宗门战.战斗.战斗行动上限")
-        self._maximum = _positive(participants.get("玩家上限"), "宗门战.参战.玩家上限")
+        self._actions = _positive(
+            battle.get("战斗行动上限"), "宗门战.战斗.战斗行动上限"
+        )
+        if (
+            _nonnegative(battle.get("每宗阵法上限"), "宗门战.战斗.每宗阵法上限")
+            != 1
+            or battle.get("阵法来源") != "宗门万珍殿"
+        ):
+            raise JsonDataError("宗门战必须允许每宗从万珍殿使用至多一座阵法")
+        self._maximum = _positive(
+            participants.get("玩家上限"), "宗门战.参战.玩家上限"
+        )
+        self._history_page_size = _positive(
+            history.get("每页数量"), "宗门战.记录.每页数量"
+        )
         self._win_ratio = _ratio(wager.get("胜方比例"), "宗门战.押注.胜方比例")
-        self._draw_ratio = _ratio(wager.get("平局返还比例"), "宗门战.押注.平局返还比例")
-        self._behavior = _text(_mapping(rule.get("状态"), "宗门战.状态").get("行为"), "宗门战.状态.行为")
+        self._draw_ratio = _ratio(
+            wager.get("平局返还比例"), "宗门战.押注.平局返还比例"
+        )
+        loss_ratio = _ratio(wager.get("损耗比例"), "宗门战.押注.损耗比例")
+        if self._win_ratio + loss_ratio != 1 or self._draw_ratio + loss_ratio != 1:
+            raise JsonDataError("宗门战押注返还比例与损耗比例必须相加为1")
+        self._behavior = _text(
+            _mapping(rule.get("状态"), "宗门战.状态").get("行为"),
+            "宗门战.状态.行为",
+        )
         if self._state.state_type(self._behavior) != "行为":
             raise JsonDataError("宗门战状态必须引用行为状态")
         self._initialized = True
@@ -70,199 +132,741 @@ class SectWarService:
     def status(self) -> SectWarStatus:
         return SectWarStatus(self._initialized, self._seconds, self._maximum)
 
-    async def challenge(self, user_id: str, target_name: str, wager: int, request_id: str) -> SectWarView:
+    async def challenge(
+        self, user_id: str, target_name: str, wager: int, request_id: str
+    ) -> SectWarView:
         member = await self._member_officer(user_id)
-        if wager < 1: raise SectWarError("押注必须为正整数")
+        normalized_wager = _request_positive(wager, "押注")
         target = await self._db.get_shared_entity_by_name("宗门", target_name.strip())
-        if target is None or target.entity_id == member.sect_id: raise SectWarError("目标宗门不存在")
+        if target is None or target.entity_id == member.sect_id:
+            raise SectWarError("target_invalid")
+        await self._expire_for_sects((member.sect_id, target.entity_id), user_id)
+        if await self._active(member.sect_id) or await self._active(target.entity_id):
+            raise SectWarError("active_exists")
         location = await self._location.current(user_id)
-        if location.space_type != "地表": raise SectWarError("宗门战必须在地表发起")
-        if await self._active(member.sect_id) or await self._active(target.entity_id): raise SectWarError("已有未结束的宗门战")
+        if location.space_type != "地表":
+            raise SectWarError("surface_required")
         war_id = uuid4().hex[:20]
-        value = {"宗门战编号": war_id, "状态": "待应战", "甲方": member.sect_id, "乙方": target.entity_id,
-                 "坐标": list(location.xy), "押注": wager, "甲方锁定": False, "乙方锁定": False,
-                 "创建时间": _now().isoformat(), "结束时间": "", "胜方": ""}
-        stone_operation = await self._assets.plan_spirit_stone_change(
-            member.sect_id, -wager
-        )
+        now = _now()
+        value = {
+            "名称": f"宗门战-{war_id}",
+            "宗门战编号": war_id,
+            "状态": "待应战",
+            "甲方": member.sect_id,
+            "乙方": target.entity_id,
+            "坐标": list(location.xy),
+            "押注": normalized_wager,
+            "甲方押注": normalized_wager,
+            "乙方押注": 0,
+            "甲方锁定": False,
+            "乙方锁定": False,
+            "创建时间": now.isoformat(),
+            "过期时间": (now + timedelta(seconds=self._challenge_seconds)).isoformat(),
+            "开始时间": "",
+            "结束时间": "",
+            "完成时间": "",
+            "胜方": "",
+            "战报编号": "",
+        }
         await self._commit(
             user_id,
             request_id,
             "发起宗门战",
-            (stone_operation, SharedEntityMutation(ENTITY_TYPE, war_id, value, 0)),
-            value,
+            (
+                await self._assets.plan_spirit_stone_change(
+                    member.sect_id, -normalized_wager
+                ),
+                SharedEntityMutation(ENTITY_TYPE, war_id, value, 0),
+            ),
+            {"宗门战编号": war_id, "甲方": member.sect_id, "乙方": target.entity_id},
         )
         return await self._view(value)
 
-    async def accept(self, user_id: str, war_id: str, request_id: str) -> SectWarView:
+    async def accept(self, user_id: str, request_id: str) -> SectWarView:
         member = await self._member_officer(user_id)
-        record = await self._record(war_id)
+        record = await self._current_record(member.sect_id, user_id)
         value = dict(record.value)
         if value.get("状态") != "待应战" or value.get("乙方") != member.sect_id:
-            raise SectWarError("战书无效")
-        if _now() >= _time(value.get("创建时间")) + timedelta(seconds=self._challenge_seconds):
-            raise SectWarError("战书已经过期")
+            raise SectWarError("cannot_accept")
+        wager = _stored_nonnegative(value.get("押注"), "宗门战.押注")
         value["状态"] = "备战"
-        wager = int(value.get("押注") or 0)
         value["乙方押注"] = wager
-        stone_operation = await self._assets.plan_spirit_stone_change(
-            member.sect_id, -wager
-        )
         await self._commit(
             user_id,
             request_id,
             "接受宗门战",
-            (stone_operation, SharedEntityMutation(ENTITY_TYPE, war_id, value, record.version)),
-            value,
+            (
+                await self._assets.plan_spirit_stone_change(member.sect_id, -wager),
+                SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version),
+            ),
+            {"宗门战编号": record.entity_id, "宗门编号": member.sect_id},
         )
         return await self._view(value)
 
-    async def lock(self, user_id: str, war_id: str, request_id: str) -> SectWarView:
-        member = await self._member_officer(user_id); record = await self._record(war_id); value = dict(record.value)
-        side = "甲方" if value.get("甲方") == member.sect_id else "乙方" if value.get("乙方") == member.sect_id else ""
-        if not side or value.get("状态") != "备战": raise SectWarError("当前不能锁定宗门战")
+    async def reject(self, user_id: str, request_id: str) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        value = record.value
+        if value.get("状态") != "待应战" or value.get("乙方") != member.sect_id:
+            raise SectWarError("cannot_reject")
+        return await self._terminate(user_id, request_id, record, "已拒绝", "拒绝宗门战")
+
+    async def withdraw(self, user_id: str, request_id: str) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        value = record.value
+        if value.get("状态") != "待应战" or value.get("甲方") != member.sect_id:
+            raise SectWarError("cannot_withdraw")
+        return await self._terminate(user_id, request_id, record, "已撤回", "撤回宗门战")
+
+    async def cancel(self, user_id: str, request_id: str) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        if record.value.get("状态") not in {"备战", "已锁定"}:
+            raise SectWarError("cannot_cancel")
+        return await self._terminate(user_id, request_id, record, "已取消", "取消宗门战")
+
+    async def lock(
+        self, user_id: str, request_id: str, formation_entry: str = ""
+    ) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        value = dict(record.value)
+        side = _side(value, member.sect_id)
+        if not side or value.get("状态") not in {"备战", "已锁定"}:
+            raise SectWarError("cannot_lock")
         if value.get(f"{side}锁定"):
-            raise SectWarError("本方已经锁定宗门战")
+            raise SectWarError("already_locked")
         follow = await self._sect.follow(member.sect_id)
-        if follow is None or follow.leader_user_id != (await self._sect.sect(member.sect_id)).leader_user_id: raise SectWarError("请先召集宗门同行")
-        if len(follow.member_user_ids) > self._maximum: raise SectWarError("参战人数超过上限")
+        sect = await self._sect.sect(member.sect_id)
+        if follow is None or sect is None or follow.leader_user_id != sect.leader_user_id:
+            raise SectWarError("follow_required")
+        if len(follow.member_user_ids) > self._maximum:
+            raise SectWarError("participant_limit")
         locations = [await self._location.current(uid) for uid in follow.member_user_ids]
-        xy = tuple(value.get("坐标", ()))
-        if any(loc.space_type != "地表" or loc.xy != xy for loc in locations): raise SectWarError("双方必须在约定的地表坐标")
-        value[f"{side}锁定"] = True; value[f"{side}成员"] = list(follow.member_user_ids)
+        xy = _stored_xy(value.get("坐标"))
+        if any(location.space_type != "地表" or location.xy != xy for location in locations):
+            raise SectWarError("location_mismatch")
+        formation_key = str(formation_entry or "").strip()
+        formation = (
+            await self._formation_entry(member.sect_id, formation_key)
+            if formation_key
+            else None
+        )
+        value[f"{side}锁定"] = True
+        value[f"{side}成员"] = list(follow.member_user_ids)
+        value[f"{side}阵法条目"] = formation.entry_key if formation else ""
+        value[f"{side}阵法名称"] = formation.name if formation else ""
         if value.get("甲方锁定") and value.get("乙方锁定"):
             value["状态"] = "已锁定"
-        state_plans = tuple(
-            await self._state.plan_transition(
+        state_plans = []
+        for participant in follow.member_user_ids:
+            state_plans.append(
+                await self._state.plan_transition(
                 StateTransitionCommand(
                     participant,
                     request_id,
                     "行为",
                     self._behavior,
-                    {"宗门战编号": war_id, "宗门编号": member.sect_id},
+                    {"宗门战编号": record.entity_id, "宗门编号": member.sect_id},
                 )
             )
-            for participant in follow.member_user_ids
-        )
+            )
         await self._commit(
             user_id,
             request_id,
-            "锁定宗门战",
-            (SharedEntityMutation(ENTITY_TYPE, war_id, value, record.version),)
+            "锁定宗门战阵容",
+            (SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version),)
             + tuple(plan.mutation for plan in state_plans),
-            value,
+            {"宗门战编号": record.entity_id, "宗门编号": member.sect_id},
         )
         return await self._view(value)
 
-    async def start(self, user_id: str, war_id: str, request_id: str) -> SectWarView:
-        member = await self._member_officer(user_id); record = await self._record(war_id); value = dict(record.value)
-        if value.get("状态") != "已锁定": raise SectWarError("双方尚未锁定阵容")
-        if member.sect_id not in (value.get("甲方"), value.get("乙方")): raise SectWarError("无权限")
-        left = await self._combatants(tuple(value["甲方成员"])); right = await self._combatants(tuple(value["乙方成员"]))
-        result = await self._combat.execute(CombatRequest(tuple(left), tuple(right), _seed(war_id), self._actions))
-        now = _now(); value.update({"状态": "战斗中", "开始时间": now.isoformat(), "结束时间": (now + timedelta(seconds=self._seconds)).isoformat(),
-                                    "胜方": result.winner_side or "平局", "甲方存活": sum(x.alive for x in result.left_results), "乙方存活": sum(x.alive for x in result.right_results)})
-        value["战果"] = {
-            item.id: {"用户编号": item.owner_id, "道侣": item.id.startswith("companion:"),
-                      "血气": item.health, "精神": item.spirit}
-            for item in (*result.left_results, *result.right_results)
-        }
-        await self._commit(user_id, request_id, "开始宗门战", (SharedEntityMutation(ENTITY_TYPE, war_id, value, record.version),), value)
+    async def unlock(self, user_id: str, request_id: str) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        value = dict(record.value)
+        side = _side(value, member.sect_id)
+        if not side or value.get("状态") not in {"备战", "已锁定"}:
+            raise SectWarError("cannot_unlock")
+        if not value.get(f"{side}锁定"):
+            raise SectWarError("not_locked")
+        participants = _stored_texts(value.get(f"{side}成员", ()), f"{side}成员")
+        value["状态"] = "备战"
+        value[f"{side}锁定"] = False
+        value.pop(f"{side}成员", None)
+        value.pop(f"{side}阵法条目", None)
+        value.pop(f"{side}阵法名称", None)
+        operations: list[object] = [
+            SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version)
+        ]
+        operations.extend(await self._release_operations(participants))
+        await self._commit(
+            user_id,
+            request_id,
+            "解除宗门战阵容",
+            tuple(operations),
+            {"宗门战编号": record.entity_id, "宗门编号": member.sect_id},
+        )
         return await self._view(value)
 
-    async def view(self, war_id: str) -> SectWarView: return await self._view((await self._record(war_id)).value)
+    async def start(self, user_id: str, request_id: str) -> SectWarView:
+        member = await self._member_officer(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        value = dict(record.value)
+        if value.get("状态") != "已锁定":
+            raise SectWarError("both_not_locked")
+        left_ids = _stored_texts(value.get("甲方成员"), "甲方成员")
+        right_ids = _stored_texts(value.get("乙方成员"), "乙方成员")
+        location = self._world.locate(LocationQuery(xy=_stored_xy(value.get("坐标"))))
+        left, left_medicines, left_battle_medicine = await self._combatants(left_ids)
+        right, right_medicines, right_battle_medicine = await self._combatants(right_ids)
+        medicine_stacks = {**left_medicines, **right_medicines}
+        inventory = {
+            owner: {stack.stack_key: stack.quantity for stack in stacks}
+            for owner, stacks in medicine_stacks.items()
+        }
+        left = _attach_inventory(left, inventory, self._medicine.auto_medicine_threshold)
+        right = _attach_inventory(right, inventory, self._medicine.auto_medicine_threshold)
+        left_formation, left_formation_operation = await self._formation_spec(
+            str(value.get("甲方")), str(value.get("甲方阵法条目") or ""), 0
+        )
+        right_formation, right_formation_operation = await self._formation_spec(
+            str(value.get("乙方")), str(value.get("乙方阵法条目") or ""), 0
+        )
+        result = await self._combat.execute(
+            CombatRequest(
+                left_team=left,
+                right_team=right,
+                seed=_seed(record.entity_id),
+                action_limit=self._actions,
+                medicine_definitions=_medicine_definitions(medicine_stacks),
+                medicine_selection_strategy=self._medicine.selection_strategy,
+                report=CombatReportSpec(
+                    scene=location.location_name or location.terrain,
+                    include_presentation=True,
+                ),
+                field=CombatFieldSpec(
+                    environment_id=location.environment_id,
+                    scene=location.location_name or location.terrain,
+                    origin="地表",
+                    xy=location.xy,
+                    altitude=location.altitude,
+                    terrain=location.terrain,
+                ),
+                left_formation=left_formation,
+                right_formation=right_formation,
+            )
+        )
+        consumptions = _consumptions(result.left_results + result.right_results)
+        definitions = {
+            stack.stack_key: stack
+            for stacks in medicine_stacks.values()
+            for stack in stacks
+        }
+        inventory_operations: list[StateMutation] = []
+        for owner, used in consumptions.items():
+            plan = await self._asset.plan_inventory_changes(
+                owner,
+                tuple(
+                    InventoryAdjustment(
+                        definitions[stack_key].medicine_id,
+                        definitions[stack_key].grade_id,
+                        -quantity,
+                    )
+                    for stack_key, quantity in sorted(used.items())
+                ),
+            )
+            inventory_operations.extend(plan.operations)
+        now = _now()
+        value.update(
+            {
+                "状态": "战斗中",
+                "开始时间": now.isoformat(),
+                "结束时间": (now + timedelta(seconds=self._seconds)).isoformat(),
+                "胜方": result.winner_side or "平局",
+                "甲方存活": sum(item.alive for item in result.left_results),
+                "乙方存活": sum(item.alive for item in result.right_results),
+                "战报编号": record.entity_id,
+                "战报": materialize(result.report or {}),
+                "战报展示": materialize(result.presentation or ()),
+            }
+        )
+        value["战果"] = {
+            item.id: {
+                "用户编号": item.owner_id,
+                "道侣": item.id.startswith("companion:"),
+                "血气": item.health,
+                "精神": item.spirit,
+            }
+            for item in (*result.left_results, *result.right_results)
+        }
+        operations: list[object] = [
+            SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version)
+        ]
+        operations.extend(left_battle_medicine)
+        operations.extend(right_battle_medicine)
+        operations.extend(inventory_operations)
+        if left_formation_operation is not None:
+            operations.append(left_formation_operation)
+        if right_formation_operation is not None:
+            operations.append(right_formation_operation)
+        await self._commit(
+            user_id,
+            request_id,
+            "开始宗门战",
+            tuple(operations),
+            {"宗门战编号": record.entity_id, "战报编号": record.entity_id},
+        )
+        return await self._view(value)
 
-    async def settle(self, user_id: str, war_id: str, request_id: str) -> SectWarView:
-        await self._member_officer(user_id); record = await self._record(war_id); value = dict(record.value)
-        if value.get("状态") != "战斗中": return await self._view(value)
-        if _now() < _time(value.get("结束时间")): raise SectWarError("宗门战尚未结束")
+    async def current(self, user_id: str, request_id: str = "") -> SectWarView:
+        member = await self._member(user_id)
+        record = await self._current_record(member.sect_id, user_id)
+        if (
+            record.value.get("状态") == "战斗中"
+            and _now() >= _time(record.value.get("结束时间"))
+        ):
+            return await self._settle(
+                user_id,
+                request_id or f"sect-war-settle:{record.entity_id}",
+                record,
+            )
+        return await self._view(record.value)
+
+    async def history(self, user_id: str, page: int = 1) -> SectWarHistoryPage:
+        member = await self._member(user_id)
+        normalized_page = _request_positive(page, "页码")
+        records = [
+            record
+            for record in await self._db.list_shared_entities(ENTITY_TYPE)
+            if member.sect_id in (record.value.get("甲方"), record.value.get("乙方"))
+            and record.value.get("状态") in _TERMINAL
+        ]
+        records.sort(key=lambda item: item.updated_at, reverse=True)
+        page_count = max(1, math.ceil(len(records) / self._history_page_size))
+        current_page = min(normalized_page, page_count)
+        start = (current_page - 1) * self._history_page_size
+        entries = tuple(
+            [
+                await self._view(record.value)
+                for record in records[start : start + self._history_page_size]
+            ]
+        )
+        return SectWarHistoryPage(current_page, page_count, len(records), entries)
+
+    async def view(self, user_id: str, war_id: str) -> SectWarView:
+        member = await self._member(user_id)
+        record = await self._record(war_id)
+        if member.sect_id not in (record.value.get("甲方"), record.value.get("乙方")):
+            raise SectWarError("not_participant")
+        return await self._view(record.value)
+
+    async def _settle(self, user_id: str, request_id: str, record) -> SectWarView:
+        value = dict(record.value)
+        if value.get("状态") != "战斗中":
+            return await self._view(value)
+        if _now() < _time(value.get("结束时间")):
+            raise SectWarError("not_ended")
         result_rows = _mapping(value.get("战果"), "宗门战.战果")
-        operations = []
+        operations: list[object] = []
         for raw in result_rows.values():
             item = _mapping(raw, "宗门战.战果[]")
             owner = _text(item.get("用户编号"), "战果.用户编号")
             if bool(item.get("道侣")):
-                plan = await self._companion.plan_battle_settlement(
-                    owner,
-                    health=float(item.get("血气") or 0),
-                    spirit=float(item.get("精神") or 0),
+                operations.append(
+                    (
+                        await self._companion.plan_battle_settlement(
+                            owner,
+                            health=float(item.get("血气") or 0),
+                            spirit=float(item.get("精神") or 0),
+                        )
+                    ).operation
                 )
-                operations.append(plan.operation)
             else:
-                plan = await self._character.plan_battle_settlement(
-                    owner,
-                    health=float(item.get("血气") or 0),
-                    spirit=float(item.get("精神") or 0),
+                operations.extend(
+                    (
+                        await self._character.plan_battle_settlement(
+                            owner,
+                            health=float(item.get("血气") or 0),
+                            spirit=float(item.get("精神") or 0),
+                        )
+                    ).operations
                 )
-                operations.extend(plan.operations)
         winner = str(value.get("胜方") or "平局")
-        total = int(value.get("押注") or 0) * 2
+        wager = _stored_nonnegative(value.get("押注"), "宗门战.押注")
         if winner == "left":
-            operations.append(await self._assets.plan_spirit_stone_change(value["甲方"], _payout(total, self._win_ratio)))
+            operations.append(
+                await self._assets.plan_spirit_stone_change(
+                    str(value["甲方"]), _payout(wager * 2, self._win_ratio)
+                )
+            )
         elif winner == "right":
-            operations.append(await self._assets.plan_spirit_stone_change(value["乙方"], _payout(total, self._win_ratio)))
+            operations.append(
+                await self._assets.plan_spirit_stone_change(
+                    str(value["乙方"]), _payout(wager * 2, self._win_ratio)
+                )
+            )
         else:
-            refund = _payout(int(value.get("押注") or 0), self._draw_ratio)
-            operations.extend((await self._assets.plan_spirit_stone_change(value["甲方"], refund), await self._assets.plan_spirit_stone_change(value["乙方"], refund)))
+            refund = _payout(wager, self._draw_ratio)
+            operations.extend(
+                (
+                    await self._assets.plan_spirit_stone_change(
+                        str(value["甲方"]), refund
+                    ),
+                    await self._assets.plan_spirit_stone_change(
+                        str(value["乙方"]), refund
+                    ),
+                )
+            )
         value["状态"] = "已结算"
-        operations.insert(0, SharedEntityMutation(ENTITY_TYPE, war_id, value, record.version))
-        for participant in tuple(value.get("甲方成员", ())) + tuple(value.get("乙方成员", ())):
-            snapshot = await self._state.current(participant)
-            if snapshot is not None and snapshot.states["行为"].state_id == self._behavior:
-                plan = await self._state.plan_finish_behavior(participant, expected_version=snapshot.version)
-                operations.append(plan.mutation)
-        await self._commit(user_id, request_id, "结算宗门战", tuple(operations), value)
+        value["完成时间"] = _now().isoformat()
+        operations.insert(
+            0,
+            SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version),
+        )
+        operations.extend(await self._release_operations(_all_participants(value)))
+        await self._commit(
+            user_id,
+            request_id,
+            "结算宗门战",
+            tuple(operations),
+            {"宗门战编号": record.entity_id, "胜方": winner},
+        )
         return await self._view(value)
 
-    async def _combatants(self, ids: tuple[str, ...]):
-        result = []
-        for uid in ids:
-            result.append(await self._character.combatant(uid))
-            companion = await self._companion.combatant(uid)
-            if companion is not None: result.append(companion)
-        return result
+    async def _terminate(
+        self, user_id, request_id, record, status, business
+    ) -> SectWarView:
+        value = dict(record.value)
+        operations: list[object] = []
+        attacker_wager = _stored_nonnegative(value.get("甲方押注", 0), "甲方押注")
+        defender_wager = _stored_nonnegative(value.get("乙方押注", 0), "乙方押注")
+        if attacker_wager:
+            operations.append(
+                await self._assets.plan_spirit_stone_change(
+                    str(value["甲方"]), attacker_wager
+                )
+            )
+        if defender_wager:
+            operations.append(
+                await self._assets.plan_spirit_stone_change(
+                    str(value["乙方"]), defender_wager
+                )
+            )
+        value["状态"] = status
+        value["完成时间"] = _now().isoformat()
+        operations.insert(
+            0,
+            SharedEntityMutation(ENTITY_TYPE, record.entity_id, value, record.version),
+        )
+        operations.extend(await self._release_operations(_all_participants(value)))
+        await self._commit(
+            user_id,
+            request_id,
+            business,
+            tuple(operations),
+            {"宗门战编号": record.entity_id, "状态": status},
+        )
+        return await self._view(value)
+
+    async def _expire_for_sects(self, sect_ids: tuple[str, ...], user_id: str) -> None:
+        for record in await self._db.list_shared_entities(ENTITY_TYPE):
+            if not set(sect_ids).intersection(
+                (record.value.get("甲方"), record.value.get("乙方"))
+            ) or not _expired(record.value):
+                continue
+            try:
+                await self._terminate(
+                    user_id,
+                    f"sect-war-expire:{record.entity_id}",
+                    record,
+                    "已过期",
+                    "宗门战过期退款",
+                )
+            except StateConflictError:
+                continue
+
+    async def _current_record(self, sect_id: str, user_id: str):
+        await self._expire_for_sects((sect_id,), user_id)
+        active = [
+            record
+            for record in await self._db.list_shared_entities(ENTITY_TYPE)
+            if sect_id in (record.value.get("甲方"), record.value.get("乙方"))
+            and record.value.get("状态") not in _TERMINAL
+        ]
+        if not active:
+            raise SectWarError("no_active")
+        active.sort(key=lambda item: item.updated_at, reverse=True)
+        return active[0]
+
+    async def _active(self, sect_id: str) -> bool:
+        return any(
+            sect_id in (record.value.get("甲方"), record.value.get("乙方"))
+            and record.value.get("状态") not in _TERMINAL
+            for record in await self._db.list_shared_entities(ENTITY_TYPE)
+        )
+
+    async def _formation_entry(self, sect_id: str, entry_key: str) -> SectAssetEntry:
+        sect = await self._sect.sect(sect_id)
+        if sect is None:
+            raise SectWarError("sect_changed")
+        vault = await self._assets.wanzhen(sect.leader_user_id)
+        entry = next((item for item in vault.entries if item.entry_key == entry_key), None)
+        if entry is None or entry.category != "阵法":
+            raise SectWarError("formation_missing")
+        return entry
+
+    async def _formation_spec(self, sect_id: str, entry_key: str, position: int):
+        if not entry_key:
+            return None, None
+        plan = await self._assets.plan_formation_consumption(sect_id, entry_key)
+        entry = plan.entry
+        return (
+            CombatFormationSpec(
+                entry.content_id,
+                entry.grade_name,
+                position,
+                {key: float(value) for key, value in entry.materials},
+            ),
+            plan.operation,
+        )
+
+    async def _combatants(self, user_ids: tuple[str, ...]):
+        combatants: list[CombatantSpec] = []
+        medicines: dict[str, tuple[RecoveryMedicineStack, ...]] = {}
+        battle_operations: list[StateMutation] = []
+        for user_id in user_ids:
+            profile = await self._character.profile(user_id)
+            character = await self._character.combatant(user_id)
+            if profile.prepared_battle_medicine is not None:
+                definition = self._medicine.battle(
+                    profile.prepared_battle_medicine.medicine_id,
+                    profile.prepared_battle_medicine.grade_id,
+                )
+                character = replace(
+                    character,
+                    prepared_statuses=(self._medicine.prepared_status(definition),),
+                )
+                battle_operations.append(
+                    (
+                        await self._character.plan_battle_medicine(
+                            user_id, medicine=None
+                        )
+                    ).operation
+                )
+            combatants.append(character)
+            companion = await self._companion.combatant(user_id)
+            if companion is not None:
+                instance = await self._companion.active_instance(user_id)
+                prepared = instance.instance.prepared_battle_medicine
+                if prepared is not None:
+                    definition = self._medicine.battle(
+                        prepared.medicine_id, prepared.grade_id
+                    )
+                    companion = replace(
+                        companion,
+                        prepared_statuses=(self._medicine.prepared_status(definition),),
+                    )
+                    battle_operations.extend(
+                        (
+                            await self._companion.plan_battle_medicine(
+                                user_id, medicine=None
+                            )
+                        ).operations
+                    )
+                combatants.append(companion)
+            medicines[user_id] = await self._medicine.recovery_stacks(user_id)
+        return tuple(combatants), medicines, tuple(battle_operations)
+
+    async def _release_operations(
+        self, participants: Sequence[str]
+    ) -> list[StateMutation]:
+        operations = []
+        for participant in dict.fromkeys(participants):
+            snapshot = await self._state.current(participant)
+            if snapshot is None or snapshot.states["行为"].state_id != self._behavior:
+                continue
+            plan = await self._state.plan_finish_behavior(
+                participant, expected_version=snapshot.version
+            )
+            operations.append(plan.mutation)
+        return operations
+
+    async def _member(self, user_id: str):
+        member = await self._sect.membership(user_id)
+        if member is None:
+            raise SectWarError("not_member")
+        return member
 
     async def _member_officer(self, user_id: str):
-        member = await self._sect.membership(user_id)
-        if member is None or not self._sect.is_officer(member.role): raise SectWarError("只有宗主或长老可以操作")
+        member = await self._member(user_id)
+        if not self._sect.is_officer(member.role):
+            raise SectWarError("officer_required")
         return member
+
     async def _record(self, war_id: str):
-        record = await self._db.get_shared_entity(ENTITY_TYPE, war_id)
-        if record is None: raise SectWarError("没有找到这份战书")
+        record = await self._db.get_shared_entity(
+            ENTITY_TYPE, str(war_id or "").strip()
+        )
+        if record is None:
+            raise SectWarError("not_found")
         return record
-    async def _active(self, sect_id: str) -> bool:
-        now = _now()
-        for record in await self._db.list_shared_entities(ENTITY_TYPE):
-            value = record.value
-            if sect_id not in (value.get("甲方"), value.get("乙方")):
-                continue
-            status = value.get("状态")
-            if status in {"已结算", "已拒绝", "已过期"}:
-                continue
-            if (
-                status == "待应战"
-                and value.get("创建时间")
-                and now >= _time(value["创建时间"])
-                + timedelta(seconds=self._challenge_seconds)
-            ):
-                continue
-            return True
-        return False
+
     async def _view(self, raw: Mapping[str, object]) -> SectWarView:
-        a = await self._sect.sect(str(raw.get("甲方"))); b = await self._sect.sect(str(raw.get("乙方")))
-        return SectWarView(str(raw.get("宗门战编号")), str(raw.get("甲方")), str(raw.get("乙方")), a.name if a else "", b.name if b else "", str(raw.get("状态")), int(raw.get("押注") or 0), len(raw.get("甲方成员", [])), len(raw.get("乙方成员", [])), _time(raw.get("结束时间")) if raw.get("结束时间") else None, str(raw.get("胜方") or ""))
+        attacker = await self._sect.sect(str(raw.get("甲方")))
+        defender = await self._sect.sect(str(raw.get("乙方")))
+        return SectWarView(
+            str(raw.get("宗门战编号")),
+            str(raw.get("甲方")),
+            str(raw.get("乙方")),
+            attacker.name if attacker else "",
+            defender.name if defender else "",
+            str(raw.get("状态")),
+            int(raw.get("押注") or 0),
+            len(raw.get("甲方成员", [])),
+            len(raw.get("乙方成员", [])),
+            _time(raw.get("结束时间")) if raw.get("结束时间") else None,
+            str(raw.get("胜方") or ""),
+            bool(raw.get("甲方锁定")),
+            bool(raw.get("乙方锁定")),
+            str(raw.get("甲方阵法名称") or ""),
+            str(raw.get("乙方阵法名称") or ""),
+            str(raw.get("战报编号") or ""),
+        )
+
     async def _commit(self, user_id, request_id, business, operations, payload):
-        await self._db.commit(TransactionCommand(user_id, request_id, business, tuple(operations), payload))
+        await self._db.commit(
+            TransactionCommand(user_id, request_id, business, tuple(operations), payload)
+        )
+
+
+def _attach_inventory(combatants, inventory, threshold):
+    seen: set[str] = set()
+    result = []
+    for combatant in combatants:
+        owner = combatant.inventory_owner_id
+        current = inventory.get(owner, {}) if owner not in seen else {}
+        seen.add(owner)
+        result.append(
+            replace(
+                combatant,
+                inventory=current,
+                medicine_threshold=threshold,
+                statuses=(),
+                cooldowns={},
+                shield=0,
+                skill_cursor=0,
+            )
+        )
+    return tuple(result)
+
+
+def _medicine_definitions(values):
+    definitions = {}
+    for stacks in values.values():
+        for stack in stacks:
+            definitions[stack.stack_key] = CombatMedicineSpec(
+                stack.stack_key,
+                stack.medicine_id,
+                stack.grade_id,
+                stack.resource,
+                stack.recovery_percent,
+                stack.grade_order,
+            )
+    return tuple(definitions.values())
+
+
+def _consumptions(results):
+    values: dict[str, Counter[str]] = {}
+    for result in results:
+        if result.inventory_owner_id:
+            values.setdefault(result.inventory_owner_id, Counter()).update(
+                result.consumed_items
+            )
+    return values
+
+
+def _all_participants(value):
+    return _stored_texts(value.get("甲方成员", ()), "甲方成员") + _stored_texts(
+        value.get("乙方成员", ()), "乙方成员"
+    )
+
+
+def _side(value, sect_id):
+    if value.get("甲方") == sect_id:
+        return "甲方"
+    if value.get("乙方") == sect_id:
+        return "乙方"
+    return ""
+
+
+def _expired(value):
+    return (
+        value.get("状态") == "待应战"
+        and bool(value.get("过期时间"))
+        and _now() >= _time(value.get("过期时间"))
+    )
+
 
 def _mapping(value, label):
-    if not isinstance(value, Mapping): raise JsonDataError(f"{label}必须是对象")
+    if not isinstance(value, Mapping):
+        raise JsonDataError(f"{label}必须是对象")
     return value
+
+
 def _text(value, label):
-    if not isinstance(value, str) or not value.strip(): raise JsonDataError(f"{label}必须是非空字符串")
+    if not isinstance(value, str) or not value.strip():
+        raise JsonDataError(f"{label}必须是非空字符串")
     return value.strip()
+
+
 def _positive(value, label):
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1: raise JsonDataError(f"{label}必须是正整数")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise JsonDataError(f"{label}必须是正整数")
     return value
+
+
+def _nonnegative(value, label):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise JsonDataError(f"{label}必须是非负整数")
+    return value
+
+
+def _request_positive(value, label):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SectWarError(f"{label}必须是正整数")
+    return value
+
+
+def _stored_nonnegative(value, label):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise JsonDataError(f"{label}必须是非负整数")
+    return value
+
+
+def _stored_texts(value, label):
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise JsonDataError(f"{label}必须是数组")
+    return tuple(_text(item, f"{label}[]") for item in value)
+
+
+def _stored_xy(value):
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes))
+        or len(value) != 2
+    ):
+        raise JsonDataError("宗门战坐标必须是xy")
+    x, y = value
+    if (
+        isinstance(x, bool)
+        or isinstance(y, bool)
+        or not isinstance(x, int)
+        or not isinstance(y, int)
+    ):
+        raise JsonDataError("宗门战坐标必须是整数xy")
+    return x, y
 
 
 def _ratio(value, label):
@@ -279,8 +883,22 @@ def _payout(amount: int, ratio: Decimal) -> int:
     return int((Decimal(amount) * ratio).to_integral_value(rounding=ROUND_FLOOR))
 
 
-def _now(): return datetime.now(timezone.utc)
-def _time(value): return datetime.fromisoformat(str(value)).astimezone(timezone.utc)
-def _seed(value): return int.from_bytes(hashlib.sha256(value.encode()).digest()[:8], "big")
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _time(value):
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError as exc:
+        raise JsonDataError("宗门战时间不是合法ISO时间") from exc
+    if parsed.tzinfo is None:
+        raise JsonDataError("宗门战时间必须包含时区")
+    return parsed.astimezone(timezone.utc)
+
+
+def _seed(value):
+    return int.from_bytes(hashlib.sha256(value.encode()).digest()[:8], "big")
+
 
 __all__ = ["ENTITY_TYPE", "STATE_TYPE", "SectWarService"]
