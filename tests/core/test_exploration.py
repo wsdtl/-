@@ -186,8 +186,12 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     assert all(not battle.value["阵法"] for battle in battles[1:])
     assert _run(formation.prepared("qq-1")) is None
     for battle in battles:
-        assert battle.value["敌人数"] == (
-            started.formal_unit_count * battle.value["敌人倍率"]
+        groups = battle.value["敌方编组"]
+        assert len(groups) == 1
+        low, high = battle.value["敌方编组人数范围"]
+        assert all(low <= len(group["成员"]) <= high for group in groups)
+        assert battle.value["敌人数"] == sum(
+            len(group["成员"]) for group in groups
         )
         assert battle.value["我方存活"] <= started.formal_unit_count
     medicines_after = _run(medicine.recovery_stacks("qq-1"))

@@ -22,6 +22,7 @@ from game.core.combat import (
     CombatantSpec,
     CombatFieldSpec,
     CombatFormationSpec,
+    CombatGroupSpec,
     CombatMedicineSpec,
     CombatReportSpec,
     CombatRequest,
@@ -400,6 +401,8 @@ class SectWarService:
                 ),
                 left_formation=left_formation,
                 right_formation=right_formation,
+                left_groups=_combat_groups(left_ids, left),
+                right_groups=_combat_groups(right_ids, right),
             )
         )
         injury_results = {}
@@ -800,6 +803,8 @@ class SectWarService:
                 )
             character = replace(
                 character,
+                group_id=f"玩家编组:{user_id}",
+                group_role="主战者",
                 prepared_statuses=(
                     *character.prepared_statuses,
                     *self._injury.prepared_statuses(character_injuries),
@@ -831,6 +836,8 @@ class SectWarService:
                     )
                 companion = replace(
                     companion,
+                    group_id=f"玩家编组:{user_id}",
+                    group_role="主战者",
                     prepared_statuses=(
                         *companion.prepared_statuses,
                         *self._injury.prepared_statuses(companion_injuries),
@@ -957,6 +964,22 @@ def _consumptions(results):
 def _all_participants(value):
     return _stored_texts(value.get("甲方成员", ()), "甲方成员") + _stored_texts(
         value.get("乙方成员", ()), "乙方成员"
+    )
+
+
+def _combat_groups(user_ids, combatants):
+    by_owner: dict[str, list[str]] = {str(user_id): [] for user_id in user_ids}
+    for value in combatants:
+        if value.owner_id in by_owner:
+            by_owner[value.owner_id].append(value.id)
+    return tuple(
+        CombatGroupSpec(
+            group_id=f"玩家编组:{user_id}",
+            member_ids=tuple(member_ids),
+            primary_ids=tuple(member_ids),
+        )
+        for user_id, member_ids in by_owner.items()
+        if member_ids
     )
 
 

@@ -30,6 +30,9 @@ class _CoreServices(Protocol):
     hosting: _StateOwner
     injury: _StateOwner
     innate_treasure: _StateOwner
+    raid: _StateOwner
+    duel: _StateOwner
+    gift: _StateOwner
 
 
 class StartupContractError(ValueError):
@@ -56,6 +59,9 @@ def validate_startup_contracts(core: _CoreServices) -> None:
         "hosting": core.hosting.state_types,
         "injury": core.injury.state_types,
         "innate_treasure": core.innate_treasure.state_types,
+        "raid": core.raid.state_types,
+        "duel": core.duel.state_types,
+        "gift": core.gift.state_types,
     }
     sect_war = getattr(core, "sect_war", None)
     if sect_war is not None:

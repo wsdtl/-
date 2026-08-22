@@ -231,6 +231,8 @@ class Fighter:
     side: int = 0
     owner_id: str = ""
     controller_id: str = ""
+    group_id: str = ""
+    group_role: str = "主战者"
     form: str = "本相"
     forms: dict[str, Mapping[str, Any]] = dataclass_field(default_factory=dict)
     form_modifiers: dict[str, float] = dataclass_field(default_factory=dict)
@@ -345,6 +347,8 @@ class RuntimeCombatantSnapshot:
     skill_cursor: int = 0
     owner_id: str = ""
     controller_id: str = ""
+    group_id: str = ""
+    group_role: str = "主战者"
     form: str = "本相"
     forms: Mapping[str, Mapping[str, Any]] = dataclass_field(default_factory=dict)
     tags: tuple[str, ...] = ()

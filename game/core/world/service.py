@@ -151,7 +151,10 @@ class WorldService:
                 for section in sections:
                     if section == "商店":
                         self._require_location_shop(location_name)
-                    elif section in {"炼器工匠", "炼丹师", "阵师"}:
+                    elif section in {
+                        "炼器工匠", "炼丹师", "阵师", "讨伐", "讨伐首领",
+                        "讨伐辅助", "讨伐属从",
+                    }:
                         self._require_location_entity(location_name, section)
                     else:
                         self._require_location_pool(location_name, section)
@@ -910,7 +913,10 @@ def _feature_definitions(
             allow_empty=True,
         )
         if any(
-            section not in {"道侣", "敌人", "商店", "炼器工匠", "炼丹师", "阵师"}
+            section not in {
+                "道侣", "敌人", "商店", "炼器工匠", "炼丹师", "阵师",
+                "讨伐", "讨伐首领", "讨伐辅助", "讨伐属从",
+            }
             for section in sections
         ):
             raise JsonDataError(f"地点功能使用未知同目录内容：{name} -> {sections}")

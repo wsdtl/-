@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from types import MappingProxyType
 
 from game.core.asset import AssetService
@@ -13,7 +14,7 @@ from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.pool import EXPAND_DEDUPLICATED, PoolRequest, PoolService
 
-from .contracts import EnemyDrop, EnemyInstance, EnemyReward, EnemyStatus
+from .contracts import EnemyDrop, EnemyGroup, EnemyInstance, EnemyReward, EnemyStatus
 
 
 class EnemyService:
@@ -34,6 +35,7 @@ class EnemyService:
         self._forging = forging
         self._initialized = False
         self._definitions: Mapping[str, Mapping[str, object]] = MappingProxyType({})
+        self._definitions_by_section: dict[str, Mapping[str, Mapping[str, object]]] = {}
         self._role_rules: Mapping[str, Mapping[str, object]] = MappingProxyType({})
         self._attribute_definitions: Mapping[str, Mapping[str, object]] = (
             MappingProxyType({})
@@ -66,13 +68,19 @@ class EnemyService:
             raise RuntimeError("炼器核心必须先于敌人核心启动")
         gender = _mapping(self._data.dataset("角色定义").get("性别"), "性别")
         self._genders = _texts(gender.get("取值"), "性别.取值")
-        definitions = {
-            name: _mapping(raw, f"敌人.{name}")
-            for name, raw in self._data.entities("敌人").items()
-        }
-        for name, raw in definitions.items():
-            self._validate_definition(name, raw)
-        self._definitions = MappingProxyType(definitions)
+        for section in ("敌人", "讨伐首领", "讨伐辅助", "讨伐属从"):
+            try:
+                entities = self._data.entities(section)
+            except JsonDataError:
+                entities = {}
+            definitions = {
+                name: _mapping(raw, f"{section}.{name}")
+                for name, raw in entities.items()
+            }
+            for name, raw in definitions.items():
+                self._validate_definition(name, raw)
+            self._definitions_by_section[section] = MappingProxyType(definitions)
+        self._definitions = self._definitions_by_section["敌人"]
         self._initialized = True
         return self.status()
 
@@ -87,11 +95,43 @@ class EnemyService:
         seed: int,
         instance_prefix: str,
     ) -> tuple[EnemyInstance, ...]:
+        return self.generate_category(
+            section="敌人",
+            pool_names=pool_names,
+            count=count,
+            seed=seed,
+            instance_prefix=instance_prefix,
+        )
+
+    def generate_category(
+        self,
+        *,
+        section: str,
+        pool_names: tuple[str, ...],
+        count: int,
+        seed: int,
+        instance_prefix: str,
+        required_tier: str | None = None,
+    ) -> tuple[EnemyInstance, ...]:
         self._require_initialized()
+        definitions = self._definitions_by_section.get(str(section))
+        if definitions is None:
+            raise JsonDataError(f"未登记敌方内容类别：{section}")
         if isinstance(count, bool) or not isinstance(count, int) or count < 1:
             raise ValueError("敌人数量必须是正整数")
         source = random.Random(seed)
-        candidates = list(self._data.pool_members(pool_names, "敌人"))
+        candidates = list(self._data.pool_members(pool_names, section))
+        if required_tier is not None:
+            required_tier = _text(required_tier, "敌方阶梯")
+            candidates = [
+                item
+                for item in candidates
+                if str(definitions[item].get("阶梯") or "").strip() == required_tier
+            ]
+            if not candidates:
+                raise JsonDataError(
+                    f"{section}池没有符合阶梯的实体：{required_tier}"
+                )
         if not candidates:
             raise JsonDataError("地点敌人池不能为空")
         selected: list[str] = []
@@ -100,7 +140,7 @@ class EnemyService:
             name = source.choices(
                 remaining,
                 weights=[
-                    _positive_int(self._definitions[item].get("权重"), f"{item}.权重")
+                    _positive_int(definitions[item].get("权重"), f"{item}.权重")
                     for item in remaining
                 ],
                 k=1,
@@ -112,9 +152,7 @@ class EnemyService:
                 source.choices(
                     candidates,
                     weights=[
-                        _positive_int(
-                            self._definitions[item].get("权重"), f"{item}.权重"
-                        )
+                        _positive_int(definitions[item].get("权重"), f"{item}.权重")
                         for item in candidates
                     ],
                     k=1,
@@ -125,18 +163,74 @@ class EnemyService:
                 name,
                 source,
                 instance_id=f"{instance_prefix}:{index}",
+                definitions=definitions,
+                required_tier=required_tier,
             )
             for index, name in enumerate(selected, start=1)
         )
 
+    def generate_groups(
+        self,
+        *,
+        pool_names: tuple[str, ...],
+        group_count: int,
+        unit_count_range: tuple[int, int],
+        seed: int,
+        instance_prefix: str,
+    ) -> tuple[EnemyGroup, ...]:
+        """按组独立抽取；每组独立决定数量、成员、等级和奖励。"""
+
+        if isinstance(group_count, bool) or not isinstance(group_count, int) or group_count < 1:
+            raise ValueError("敌方编组数量必须是正整数")
+        low, high = unit_count_range
+        if low < 1 or high < low:
+            raise ValueError("敌方编组人数范围无效")
+        source = random.Random(seed)
+        groups: list[EnemyGroup] = []
+        for index in range(1, group_count + 1):
+            group_id = f"{instance_prefix}:组{index:02d}"
+            members = self.generate(
+                pool_names=pool_names,
+                count=source.randint(low, high),
+                seed=source.getrandbits(64),
+                instance_prefix=group_id,
+            )
+            grouped = tuple(
+                EnemyInstance(
+                    item.name,
+                    replace(item.combatant, group_id=group_id),
+                    item.reward,
+                )
+                for item in members
+            )
+            groups.append(
+                EnemyGroup(
+                    group_id=group_id,
+                    combatants=grouped,
+                    primary_ids=tuple(item.combatant.id for item in grouped),
+                )
+            )
+        return tuple(groups)
+
     def _instance(
-        self, name: str, source: random.Random, *, instance_id: str
+        self,
+        name: str,
+        source: random.Random,
+        *,
+        instance_id: str,
+        definitions: Mapping[str, Mapping[str, object]] | None = None,
+        required_tier: str | None = None,
     ) -> EnemyInstance:
-        raw = self._definitions[name]
+        raw = (definitions or self._definitions)[name]
         role_name = _text(raw.get("角色规则"), f"{name}.角色规则")
         role = self._role_rules[role_name]
         level = source.randint(*_range(raw.get("等级"), f"{name}.等级"))
         tier = _tier(role, level, role_name)
+        declared_tier = str(raw.get("阶梯") or "").strip()
+        if declared_tier and declared_tier != str(tier.get("阶梯") or "").strip():
+            raise JsonDataError(f"{name}.阶梯与等级范围不一致")
+        if required_tier is not None and str(tier.get("阶梯") or "").strip() != required_tier:
+            raise JsonDataError(f"{name}实际等级未命中要求阶梯：{required_tier}")
         attributes = {
             key: _number(value.get("默认值"), f"属性.{key}.默认值")
             for key, value in self._attribute_definitions.items()

@@ -18,11 +18,13 @@ from .core.companion import CompanionService
 from .core.cultivation_transfer import CultivationTransferService
 from .core.data import JsonDataService
 from .core.database import DatabaseService
+from .core.duel import DuelService
 from .core.enemy import EnemyService
 from .core.exploration import ExplorationService
 from .core.forging import ForgingService
 from .core.formation import FormationService
 from .core.gathering import GatheringService
+from .core.gift import GiftService
 from .core.growth import GrowthService
 from .core.hosting import HostingService
 from .core.injury import InjuryService
@@ -32,6 +34,7 @@ from .core.location import LocationService
 from .core.medicine import MedicineService
 from .core.player_state import PlayerStateService
 from .core.pool import PoolService
+from .core.raid import RaidService
 from .core.retreat import RetreatService
 from .core.sect import SectService
 from .core.sect_assets import SectAssetService
@@ -62,14 +65,17 @@ from .features.liandan import AlchemyFeature
 from .features.lianqi import ForgingFeature
 from .features.lianzhen import FormationCraftFeature
 from .features.najie import NajieFeature
+from .features.qiecuo import DuelFeature
 from .features.renwu_peiyang import CharacterCultivationFeature
 from .features.tanxian import ExplorationFeature
+from .features.taofa import RaidFeature
 from .features.tongquetai import TongquetaiFeature
 from .features.tuoguan import HostingFeature
 from .features.weizhi import PositionFeature
 from .features.xiantian_lingbao import InnateTreasureFeature
 from .features.xinglu import TravelFeature
 from .features.yixing import YixingFeature
+from .features.zengsong import GiftFeature
 from .features.zongmen import SectFeature
 from .features.zongmen_cangjing import CangjingFeature
 from .features.zongmen_lingcang import LingcangFeature
@@ -116,11 +122,14 @@ class CoreServices:
     asset: AssetService
     medicine: MedicineService
     enemy: EnemyService
+    raid: RaidService
     exploration: ExplorationService
     sect_war: SectWarService
     retreat: RetreatService
     gathering: GatheringService
     trade: TradeService
+    duel: DuelService
+    gift: GiftService
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,7 @@ class FeatureServices:
     renwu_peiyang: CharacterCultivationFeature
     daolv_peiyang: CompanionCultivationFeature
     tanxian: ExplorationFeature
+    taofa: RaidFeature
     duiwu: TeamFeature
     biguan: RetreatFeature
     caiyao: HerbGatheringFeature
@@ -163,6 +173,8 @@ class FeatureServices:
     zongmen_zhan: SectWarFeature
     tuoguan: HostingFeature
     xiantian_lingbao: InnateTreasureFeature
+    qiecuo: DuelFeature
+    zengsong: GiftFeature
 
 
 @dataclass(frozen=True)
@@ -482,6 +494,34 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("enemies", enemy_status.enemy_count),
         )
     )
+    duel = DuelService(
+        data,
+        database,
+        location,
+        character,
+        companion,
+        player_state,
+        action_group,
+        combat,
+    )
+    duel.initialize()
+    gift = GiftService(data, database, location, character, asset, item_catalog)
+    gift.initialize()
+    raid = RaidService(
+        data,
+        enemy,
+        database,
+        world,
+        location,
+        character,
+        companion,
+        player_state,
+        combat,
+        activity,
+        asset,
+    )
+    raid.initialize()
+    logger.opt(colors=True).success(C.ok("讨伐编组核心微服务已启动"))
     exploration = ExplorationService(
         data,
         database,
@@ -601,11 +641,14 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         asset=asset,
         medicine=medicine,
         enemy=enemy,
+        raid=raid,
         exploration=exploration,
         sect_war=sect_war,
         retreat=retreat,
         gathering=gathering,
         trade=trade,
+        duel=duel,
+        gift=gift,
     )
     create_character = CreateCharacterFeature(data, world, character)
     birthplace = create_character.initialize()
@@ -751,6 +794,10 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     renwu_peiyang.initialize()
     xiantian_lingbao = InnateTreasureFeature(data, innate_treasure, database)
     xiantian_lingbao.initialize()
+    qiecuo = DuelFeature(data, duel)
+    qiecuo.initialize()
+    zengsong = GiftFeature(data, gift, item_catalog)
+    zengsong.initialize()
     daolv_peiyang = CompanionCultivationFeature(
         data,
         companion,
@@ -765,6 +812,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
     duiwu.initialize()
     tanxian = ExplorationFeature(data, exploration, item_catalog, asset, action_group)
     tanxian.initialize()
+    taofa = RaidFeature(data, raid, action_group)
+    taofa.initialize()
     biguan = RetreatFeature(data, retreat, asset, action_group)
     biguan.initialize()
     caiyao = HerbGatheringFeature(data, gathering, asset, action_group)
@@ -791,6 +840,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         renwu_peiyang=renwu_peiyang,
         daolv_peiyang=daolv_peiyang,
         tanxian=tanxian,
+        taofa=taofa,
         duiwu=duiwu,
         biguan=biguan,
         caiyao=caiyao,
@@ -816,6 +866,8 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         zongmen_zhan=zongmen_zhan,
         tuoguan=tuoguan,
         xiantian_lingbao=xiantian_lingbao,
+        qiecuo=qiecuo,
+        zengsong=zengsong,
     )
     return GameServices(core=core, features=features)
 

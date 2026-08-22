@@ -34,4 +34,13 @@ class EnemyInstance:
     reward: EnemyReward
 
 
-__all__ = ["EnemyDrop", "EnemyInstance", "EnemyReward", "EnemyStatus"]
+@dataclass(frozen=True)
+class EnemyGroup:
+    """一次独立抽取的敌方编组。"""
+
+    group_id: str
+    combatants: tuple[EnemyInstance, ...]
+    primary_ids: tuple[str, ...]
+
+
+__all__ = ["EnemyDrop", "EnemyGroup", "EnemyInstance", "EnemyReward", "EnemyStatus"]

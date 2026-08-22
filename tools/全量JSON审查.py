@@ -1444,6 +1444,11 @@ class Audit:
                         ).directory_owner
                         if owner != name:
                             raise ValueError(f"归属目录为 {owner or '<空>'}")
+                    elif section == "讨伐":
+                        self.data.entity("讨伐", file_id)
+                        owner = self.data.entity_record("讨伐", file_id).directory_owner
+                        if owner != name:
+                            raise ValueError(f"归属目录为 {owner or '<空>'}")
                     elif section in {"炼器工匠", "炼丹师", "阵师"}:
                         records = [
                             entity_id

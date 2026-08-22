@@ -63,6 +63,25 @@ class CombatBuildRef:
 
 
 @dataclass(frozen=True)
+class CombatGroupSpec:
+    """一次战斗中的编组边界；成员身份仍由 CombatantSpec 提供。"""
+
+    group_id: str
+    member_ids: tuple[str, ...]
+    primary_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        members = tuple(str(value).strip() for value in self.member_ids)
+        primaries = tuple(str(value).strip() for value in self.primary_ids)
+        if not str(self.group_id).strip() or not members or any(not value for value in members):
+            raise ValueError("编组必须有非空编号和成员")
+        if len(set(members)) != len(members):
+            raise ValueError("编组成员编号不能重复")
+        if not primaries or any(value not in members for value in primaries):
+            raise ValueError("编组主战者必须属于本编组")
+
+
+@dataclass(frozen=True)
 class CombatStatusSpec:
     """由其他核心服务准备、由战斗核心解析机制的战前状态。"""
 
@@ -103,6 +122,8 @@ class CombatantSpec:
     skill_cursor: int = 0
     owner_id: str = ""
     controller_id: str = ""
+    group_id: str = ""
+    group_role: str = "主战者"
     form: str = "本相"
     forms: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     tags: tuple[str, ...] = ()
@@ -144,6 +165,8 @@ class CombatRequest:
     field: CombatFieldSpec | None = None
     left_formation: CombatFormationSpec | None = None
     right_formation: CombatFormationSpec | None = None
+    left_groups: tuple[CombatGroupSpec, ...] = ()
+    right_groups: tuple[CombatGroupSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -271,6 +294,8 @@ class CombatantResult:
     form: str = "本相"
     owner_id: str = ""
     controller_id: str = ""
+    group_id: str = ""
+    group_role: str = "主战者"
     counts_for_victory: bool = True
     five_elements: Mapping[str, float] = field(default_factory=dict)
 

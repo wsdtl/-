@@ -1787,6 +1787,24 @@ class MechanismRuntime:
         elif scope == "控制者":
             owner = context.fighter_by_id(source.controller_id)
             candidates = [owner] if owner else []
+        elif scope == "本编组主战者":
+            candidates = [
+                value
+                for value in context.allies_of(source, alive=None)
+                if source.group_id
+                and value.group_id == source.group_id
+                and value.group_role == "主战者"
+            ]
+            candidates.sort(
+                key=lambda value: (
+                    value.alive,
+                    value.value("攻击"),
+                    value.value("血气上限"),
+                    value.value("防御"),
+                    -context.fighter_order.get(value.id, 0),
+                ),
+                reverse=True,
+            )
         else:
             raise ValueError(f"未知目标范围：{scope}")
         candidates = [value for value in candidates if value is not None]

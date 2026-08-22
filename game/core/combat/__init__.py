@@ -19,6 +19,7 @@ from .contracts import CombatFieldResult as CombatFieldResult
 from .contracts import CombatFieldSpec as CombatFieldSpec
 from .contracts import CombatFormationResult as CombatFormationResult
 from .contracts import CombatFormationSpec as CombatFormationSpec
+from .contracts import CombatGroupSpec as CombatGroupSpec
 from .contracts import CombatMedicineSpec as CombatMedicineSpec
 from .contracts import (
     CombatReportSpec as CombatReportSpec,
@@ -48,6 +49,7 @@ __all__ = [
     "CombatFieldSpec",
     "CombatFormationResult",
     "CombatFormationSpec",
+    "CombatGroupSpec",
     "CombatMedicineSpec",
     "CombatReportSpec",
     "CombatRequest",

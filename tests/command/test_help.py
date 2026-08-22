@@ -86,9 +86,12 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "队伍",
         "宗门",
         "宗门同行",
+        "讨伐",
         "采药",
+        "讨伐战况",
         "采药进度",
         "结束采药",
+        "讨伐结算",
         "采矿",
         "采矿进度",
         "结束采矿",
@@ -120,6 +123,9 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "宗门战况",
         "宗门战记录",
         "布阵",
+        "切磋",
+        "接受切磋",
+        "拒绝切磋",
         "炼器",
         "开炉",
         "炼丹",
@@ -136,6 +142,7 @@ def test_loaded_commands_have_one_valid_help_declaration() -> None:
         "查看物品",
         "交易",
         "购买",
+        "赠送",
     ]
     assert help_registry.find("web") is None
     assert help_registry.find("天道后台") is None

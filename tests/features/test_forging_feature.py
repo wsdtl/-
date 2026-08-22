@@ -91,5 +91,5 @@ def test_forging_preview_hides_commit_action_when_materials_are_missing(
 
     assert not value.can_forge
     assert "顾" in rendered.content
-    assert "这些材料还不足以成器" in rendered.content
+    assert "尚缺材料，稳妥起见暂缓" in rendered.content
     assert "开炉" not in tuple(action.label for action in rendered.actions)

@@ -841,6 +841,8 @@ class BattleEngine(MechanismRuntime):
             gender=str(snapshot.gender or ""),
             owner_id=str(snapshot.owner_id),
             controller_id=str(snapshot.controller_id or snapshot.id),
+            group_id=str(snapshot.group_id),
+            group_role=str(snapshot.group_role or "主战者"),
             form=str(snapshot.form or "本相"),
             forms=copy.deepcopy(dict(snapshot.forms)),
             tags=set(snapshot.tags),
@@ -873,6 +875,8 @@ class BattleEngine(MechanismRuntime):
             form=fighter.form,
             owner_id=fighter.owner_id,
             controller_id=fighter.controller_id,
+            group_id=fighter.group_id,
+            group_role=fighter.group_role,
             counts_for_victory=fighter.counts_for_victory,
             five_elements=dict(fighter.five_elements),
         )

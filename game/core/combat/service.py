@@ -78,6 +78,7 @@ class CombatService:
         return await asyncio.to_thread(self._execute_sync, request)
 
     def _execute_sync(self, request: CombatRequest) -> CombatResult:
+        self._validate_groups(request)
         left = tuple(self._runtime_snapshot(value) for value in request.left_team)
         right = tuple(self._runtime_snapshot(value) for value in request.right_team)
         medicine_definitions = self._medicine_definitions(request)
@@ -249,6 +250,8 @@ class CombatService:
             skill_cursor=value.skill_cursor,
             owner_id=value.owner_id,
             controller_id=value.controller_id,
+            group_id=value.group_id,
+            group_role=value.group_role,
             form=value.form,
             forms=copy.deepcopy(dict(value.forms)),
             tags=tuple(value.tags),
@@ -256,6 +259,33 @@ class CombatService:
             battle_profile=copy.deepcopy(dict(value.battle_profile)),
             five_elements=copy.deepcopy(dict(value.five_elements)),
         )
+
+    @staticmethod
+    def _validate_groups(request: CombatRequest) -> None:
+        for side, groups, members in (
+            ("左方", request.left_groups, request.left_team),
+            ("右方", request.right_groups, request.right_team),
+        ):
+            if not groups:
+                continue
+            known = {value.id for value in members}
+            declared: set[str] = set()
+            grouped: set[str] = set()
+            for group in groups:
+                if group.group_id in declared:
+                    raise ValueError(f"{side}编组编号不能重复：{group.group_id}")
+                declared.add(group.group_id)
+                current = set(group.member_ids)
+                if current - known:
+                    raise ValueError(f"{side}编组引用未知参战者")
+                for member in members:
+                    if member.id in current and member.group_id and member.group_id != group.group_id:
+                        raise ValueError(f"{side}参战者的编组归属与编组契约不一致")
+                if current & grouped:
+                    raise ValueError(f"{side}参战者不能同时属于多个编组")
+                grouped.update(current)
+            if grouped != known:
+                raise ValueError(f"{side}编组必须覆盖全部参战者")
 
     def _prepared_status(self, value: CombatStatusSpec) -> dict[str, Any]:
         listeners = []

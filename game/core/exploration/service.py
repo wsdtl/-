@@ -22,6 +22,7 @@ from game.core.combat import (
     CombatantSpec,
     CombatFieldSpec,
     CombatFormationSpec,
+    CombatGroupSpec,
     CombatMedicineSpec,
     CombatRequest,
     CombatResult,
@@ -211,6 +212,7 @@ class ExplorationService:
         battle_medicine_operations: list[StateMutation] = []
         injury_states = {}
         combatant_realms: dict[str, str] = {}
+        player_group_members: dict[str, list[str]] = {}
         treasure_snapshots: dict[str, dict[str, object] | None] = {}
         medicine_ratios: dict[str, float] = {}
         for user_id in participants:
@@ -273,6 +275,8 @@ class ExplorationService:
                 )
             player = replace(
                 player,
+                group_id=f"玩家编组:{user_id}",
+                group_role="主战者",
                 prepared_statuses=(
                     *player.prepared_statuses,
                     *self._injury.prepared_statuses(player_injuries),
@@ -282,6 +286,7 @@ class ExplorationService:
             combatant_realms[player.id] = profile.realm_id
             character_names[user_id] = player.name
             combatants.append(player)
+            player_group_members[user_id] = [player.id]
             companion = await self._companion.combatant(user_id)
             if companion is not None:
                 current_companion = await self._companion.active_instance(user_id)
@@ -307,6 +312,8 @@ class ExplorationService:
                     )
                 companion = replace(
                     companion,
+                    group_id=f"玩家编组:{user_id}",
+                    group_role="主战者",
                     prepared_statuses=(
                         *companion.prepared_statuses,
                         *self._injury.prepared_statuses(companion_injuries),
@@ -315,9 +322,18 @@ class ExplorationService:
                 injury_states[companion.id] = companion_injuries
                 combatant_realms[companion.id] = current_companion.instance.realm_id
                 combatants.append(companion)
+                player_group_members[user_id].append(companion.id)
             medicines[user_id] = await self._medicine.recovery_stacks(user_id)
 
         initial_unit_count = len(combatants)
+        ally_groups = tuple(
+            CombatGroupSpec(
+                group_id=f"玩家编组:{user_id}",
+                member_ids=tuple(player_group_members[user_id]),
+                primary_ids=tuple(player_group_members[user_id]),
+            )
+            for user_id in participants
+        )
         source = random.Random(seed)
         virtual_inventory = {
             user_id: {
@@ -365,12 +381,21 @@ class ExplorationService:
             living = [value for value in current.values() if (value.health or 0) > 0]
             if not living:
                 break
-            multiplier = source.randint(*location.enemy_multiplier)
-            enemies = self._enemy.generate(
+            enemy_groups = self._enemy.generate_groups(
                 pool_names=location.enemy_pool,
-                count=initial_unit_count * multiplier,
+                group_count=len(ally_groups),
+                unit_count_range=location.enemy_multiplier,
                 seed=source.getrandbits(64),
                 instance_prefix=f"{session_id}:{battle_index}",
+            )
+            enemies = tuple(item for group in enemy_groups for item in group.combatants)
+            enemy_group_specs = tuple(
+                CombatGroupSpec(
+                    group_id=group.group_id,
+                    member_ids=tuple(item.combatant.id for item in group.combatants),
+                    primary_ids=group.primary_ids,
+                )
+                for group in enemy_groups
             )
             left = _attach_inventory(
                 living,
@@ -383,7 +408,9 @@ class ExplorationService:
                     right_team=tuple(value.combatant for value in enemies),
                     seed=source.getrandbits(64),
                     action_limit=self.status().action_limit,
-                    medicine_definitions=medicine_definitions,
+                    medicine_definitions=_carried_medicine_definitions(
+                        medicine_definitions, left
+                    ),
                     medicine_selection_strategy=self._medicine.selection_strategy,
                     field=CombatFieldSpec(
                         environment_id=location.environment_id,
@@ -394,6 +421,8 @@ class ExplorationService:
                         terrain=location.terrain,
                     ),
                     left_formation=formation_spec if battle_index == 1 else None,
+                    left_groups=ally_groups,
+                    right_groups=enemy_group_specs,
                 )
             )
             enemy_by_id = {value.combatant.id: value for value in enemies}
@@ -498,12 +527,13 @@ class ExplorationService:
                 _battle_value(
                     session_id,
                     battle_index,
-                    multiplier,
+                    location.enemy_multiplier,
                     result,
                     defeated,
                     allocations,
                     formal_left_results,
                     len(enemies),
+                    enemy_group_specs,
                 )
             )
 
@@ -969,6 +999,19 @@ def _medicine_definitions(
     return tuple(result.values())
 
 
+def _carried_medicine_definitions(
+    definitions: Sequence[CombatMedicineSpec],
+    combatants: Sequence[CombatantSpec],
+) -> tuple[CombatMedicineSpec, ...]:
+    carried = {
+        stack_key
+        for combatant in combatants
+        for stack_key, quantity in combatant.inventory.items()
+        if quantity > 0
+    }
+    return tuple(value for value in definitions if value.stack_key in carried)
+
+
 def _allocate_rewards(
     defeated: Sequence[EnemyInstance], living_users: set[str]
 ) -> dict[str, dict[str, object]]:
@@ -992,18 +1035,27 @@ def _allocate_rewards(
 def _battle_value(
     session_id: str,
     index: int,
-    multiplier: int,
+    unit_count_range: tuple[int, int],
     result: CombatResult,
     defeated: Sequence[EnemyInstance],
     allocations: Mapping[str, Mapping[str, object]],
     formal_left_results: Sequence[CombatantResult],
     formal_enemy_count: int,
+    enemy_groups: Sequence[CombatGroupSpec] = (),
 ) -> dict[str, object]:
     return {
         "探险编号": session_id,
         "场次": index,
-        "敌人倍率": multiplier,
+        "敌方编组人数范围": list(unit_count_range),
         "敌人数": formal_enemy_count,
+        "敌方编组": [
+            {
+                "编号": group.group_id,
+                "成员": list(group.member_ids),
+                "主战者": list(group.primary_ids),
+            }
+            for group in enemy_groups
+        ],
         "行动数": result.actions,
         "结果": result.winner_side or "未分胜负",
         "我方存活": sum(value.alive for value in formal_left_results),
@@ -1054,6 +1106,8 @@ def _combatant_result(value: CombatantResult) -> dict[str, object]:
     return {
         "编号": value.id,
         "名称": value.name,
+        "编组": value.group_id,
+        "编组身份": value.group_role,
         "血气": value.health,
         "精神": value.spirit,
         "存活": value.alive,
