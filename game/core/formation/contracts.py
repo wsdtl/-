@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from game.core.database import StateMutation
@@ -42,6 +43,7 @@ class FormationMaster:
     platform_name: str
     heritage: str
     speech_style: str
+    speech: Mapping[str, str]
     formation_ids: tuple[str, ...]
 
 

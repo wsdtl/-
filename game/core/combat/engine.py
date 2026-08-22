@@ -846,6 +846,7 @@ class BattleEngine(MechanismRuntime):
             tags=set(snapshot.tags),
             tactic=copy.deepcopy(list(snapshot.tactic)),
             battle_profile=self._normalize_battle_profile(snapshot.battle_profile),
+            five_elements=self._normalize_five_elements(snapshot.five_elements),
         )
 
     @staticmethod
@@ -873,7 +874,20 @@ class BattleEngine(MechanismRuntime):
             owner_id=fighter.owner_id,
             controller_id=fighter.controller_id,
             counts_for_victory=fighter.counts_for_victory,
+            five_elements=dict(fighter.five_elements),
         )
+
+    @staticmethod
+    def _normalize_five_elements(value):
+        allowed = {"木", "火", "土", "金", "水"}
+        result = {str(key): float(amount) for key, amount in dict(value or {}).items()}
+        if set(result) != allowed:
+            raise ValueError("参战者五行根性必须完整包含木火土金水")
+        if any(amount < 0 or amount > 100 for amount in result.values()):
+            raise ValueError("参战者五行根性必须在 0 到 100 之间")
+        if abs(sum(result.values()) - 100) > 1e-6:
+            raise ValueError("参战者五行根性总和必须为 100")
+        return result
 
     @staticmethod
     def _status_result(status: StatusState) -> StatusResult:
@@ -1045,6 +1059,9 @@ class BattleEngine(MechanismRuntime):
                 costs=tuple(copy.deepcopy(node.get("额外代价") or ())),
                 use_limit=max(0, int(node.get("使用次数", 0))),
                 cooldown_group=str(node.get("共享冷却") or ""),
+                element_composition=copy.deepcopy(
+                    dict(node.get("属性构成") or instance.get("属性构成") or {"无相": 100})
+                ),
             )
         )
 
@@ -1062,6 +1079,9 @@ class BattleEngine(MechanismRuntime):
                     "装配位序": born_order,
                     "物品编号": source_id,
                     "来源类别": str(instance.get("来源类别") or "功法"),
+                    "属性构成": copy.deepcopy(
+                        dict(node.get("属性构成") or instance.get("属性构成") or {"无相": 100})
+                    ),
                     "能力序号": index,
                     "效果序号": effect_index,
                     "节点": copy.deepcopy(dict(raw)),
@@ -1232,6 +1252,8 @@ class BattleEngine(MechanismRuntime):
                     )
                     return False
         actor.current_skill = skill.key
+        previous_composition = context.current_element_composition
+        context.current_element_composition = dict(skill.element_composition)
         success = True
         try:
             for node in skill.effects:
@@ -1247,6 +1269,7 @@ class BattleEngine(MechanismRuntime):
                 )
         finally:
             actor.current_skill = ""
+            context.current_element_composition = previous_composition
         reduction = self._clamp(self._percent(actor, "冷却缩减"), -5, 0.8)
         raw_cooldown = skill.cooldown_actions * (1 - reduction)
         rounding = self.catalog.action_rules["技能冷却"]["余数处理"]

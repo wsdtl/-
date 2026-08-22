@@ -17,7 +17,6 @@ class TradeConflictError(TradeError):
 class TradeStatus:
     initialized: bool
     shop_count: int
-    source_group_count: int
     maximum_quantity: int
 
 

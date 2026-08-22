@@ -715,7 +715,9 @@ class ForgingService:
     def _load_artisans(self) -> dict[str, ForgingArtisan]:
         result: dict[str, ForgingArtisan] = {}
         for artisan_id, raw in self._data.entities("炼器工匠").items():
-            location = _text(raw.get("地点"), f"炼器工匠 {artisan_id}.地点")
+            location = self._data.entity_record("炼器工匠", artisan_id).directory_owner
+            if not location:
+                raise JsonDataError(f"炼器工匠 {artisan_id} 缺少地点目录归属")
             if location in result:
                 raise JsonDataError(f"同一地点不能有多名执炉工匠：{location}")
             result[location] = ForgingArtisan(
@@ -726,6 +728,7 @@ class ForgingService:
                 _text(raw.get("炉名"), f"炼器工匠 {artisan_id}.炉名"),
                 _text(raw.get("工艺流派"), f"炼器工匠 {artisan_id}.工艺流派"),
                 _text(raw.get("话语风格"), f"炼器工匠 {artisan_id}.话语风格"),
+                _speech(raw.get("话语"), f"炼器工匠 {artisan_id}.话语"),
             )
         return result
 
@@ -1004,6 +1007,15 @@ def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise JsonDataError(f"{label}必须是非空文本")
     return value.strip()
+
+
+def _speech(value: object, label: str) -> Mapping[str, str]:
+    if not isinstance(value, Mapping):
+        raise JsonDataError(f"{label}必须是对象")
+    expected = {"总览", "审材", "齐备", "不足", "完成"}
+    if set(value) != expected:
+        raise JsonDataError(f"{label}必须完整包含：{'、'.join(sorted(expected))}")
+    return MappingProxyType({key: _text(value[key], f"{label}.{key}") for key in expected})
 
 
 def _request_text(value: object, label: str) -> str:

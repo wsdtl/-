@@ -32,7 +32,7 @@ def overview(
         .field(text(copy, "总览", "丹师"), alchemist.name)
         .field(text(copy, "总览", "丹门"), alchemist.heritage)
         .line(text(copy, "总览", "引言", 丹师=alchemist.name))
-        .line(text(copy, "总览", "话语"))
+        .line(alchemist.speech["总览"].format(主持=alchemist.name))
         .section(text(copy, "总览", "分类"), icon="inventory")
     )
     for index, (category, count) in enumerate(value.category_counts, start=1):
@@ -72,7 +72,7 @@ def preview(
         .header(text(copy, "预览", "标题", 地点=value.location_name, 炉名=alchemist.furnace_name))
         .section(alchemist.title, icon="item")
         .field(text(copy, "预览", "丹师"), alchemist.name)
-        .line(text(copy, "预览", "审药", 丹师=alchemist.name))
+        .line(alchemist.speech["审材"].format(主持=alchemist.name))
         .section(value.recipe.medicine_name, icon="inventory")
         .row(
             (text(copy, "预览", "丹方"), value.recipe.recipe_id),
@@ -95,7 +95,7 @@ def preview(
         builder.section(text(copy, "列表", "缺材"), icon="notice")
         for index, missing in enumerate(value.missing_materials, start=1):
             builder.item(index, f"{missing.role} · {missing.trait} × {missing.quantity}")
-    builder.line(text(copy, "预览", "齐备" if value.can_refine else "不足"))
+    builder.line(alchemist.speech["齐备" if value.can_refine else "不足"].format(主持=alchemist.name))
     return builder.actions(message_actions(actions)).build()
 
 
@@ -117,7 +117,7 @@ def completed(
             f"{preview_value.medicine_grade_name}{preview_value.recipe.medicine_name}",
             f"纳戒数量 {value.quantity_after}",
         )
-        .line(text(copy, "完成", "话语"))
+        .line(alchemist.speech["完成"].format(主持=alchemist.name))
     )
     if value.treasure_activation is not None:
         activation = value.treasure_activation

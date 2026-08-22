@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from types import MappingProxyType
 
 from game.core.database import StateMutation
 from game.core.medicine import PreparedBattleMedicine
@@ -159,6 +160,7 @@ class CompanionInstance:
     resources: Mapping[str, int | float]
     automatic_medicine: bool
     prepared_battle_medicine: PreparedBattleMedicine | None
+    five_elements: Mapping[str, float] = MappingProxyType({"木": 20, "火": 20, "土": 20, "金": 20, "水": 20})
 
 
 @dataclass(frozen=True)

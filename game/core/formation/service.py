@@ -737,7 +737,9 @@ class FormationService:
     def _load_masters(self) -> dict[str, FormationMaster]:
         result: dict[str, FormationMaster] = {}
         for master_id, raw in self._data.entities("阵师").items():
-            location = _text(raw.get("地点"), f"阵师 {master_id}.地点")
+            location = self._data.entity_record("阵师", master_id).directory_owner
+            if not location:
+                raise JsonDataError(f"阵师 {master_id} 缺少地点目录归属")
             if location in result:
                 raise JsonDataError(f"同一地点不能有多名主持阵师：{location}")
             formation_ids = _texts(raw.get("开放阵法"), f"阵师 {master_id}.开放阵法")
@@ -754,6 +756,7 @@ class FormationService:
                 _text(raw.get("阵台"), f"阵师 {master_id}.阵台"),
                 _text(raw.get("阵道传承"), f"阵师 {master_id}.阵道传承"),
                 _text(raw.get("话语风格"), f"阵师 {master_id}.话语风格"),
+                _speech(raw.get("话语"), f"阵师 {master_id}.话语"),
                 formation_ids,
             )
         return result
@@ -1008,6 +1011,15 @@ def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise JsonDataError(f"{label}必须是非空文本")
     return value.strip()
+
+
+def _speech(value: object, label: str) -> Mapping[str, str]:
+    if not isinstance(value, Mapping):
+        raise JsonDataError(f"{label}必须是对象")
+    expected = {"总览", "审材", "齐备", "不足", "完成"}
+    if set(value) != expected:
+        raise JsonDataError(f"{label}必须完整包含：{'、'.join(sorted(expected))}")
+    return MappingProxyType({key: _text(value[key], f"{label}.{key}") for key in expected})
 
 
 def _request_text(value: object, label: str) -> str:

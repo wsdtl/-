@@ -21,7 +21,7 @@ def overview(copy, value, actions: tuple[FormationAction, ...]):
         .field(text(copy, "总览", "阵师"), master.name)
         .field(text(copy, "总览", "传承"), master.heritage)
         .line(text(copy, "总览", "引言", 阵师=master.name))
-        .line(text(copy, "总览", "话语"))
+        .line(master.speech["总览"].format(主持=master.name))
         .section(text(copy, "总览", "阵法"), icon="item")
     )
     for index, entry in enumerate(value.entries, start=1):
@@ -39,7 +39,7 @@ def preview(copy, value, actions: tuple[FormationAction, ...]):
         .header(text(copy, "预览", "标题", 地点=value.location_name, 阵台=master.platform_name))
         .section(master.title, icon="combat")
         .field(text(copy, "预览", "阵师"), master.name)
-        .line(text(copy, "预览", "审材", 阵师=master.name))
+        .line(master.speech["审材"].format(主持=master.name))
         .section(value.formation.name, icon="item")
         .row(
             (text(copy, "预览", "阵法"), value.formation.formation_id),
@@ -58,7 +58,7 @@ def preview(copy, value, actions: tuple[FormationAction, ...]):
             f"{requirement.category} · {requirement.selected}/{requirement.required}"
             + (f" · 尚缺{requirement.missing}" if requirement.missing else ""),
         )
-    builder.line(text(copy, "预览", "齐备" if value.can_form else "不足"))
+    builder.line(master.speech["齐备" if value.can_form else "不足"].format(主持=master.name))
     return builder.actions(message_actions(actions)).build()
 
 
@@ -76,7 +76,7 @@ def completed(copy, value, actions: tuple[FormationAction, ...]):
             f"{preview_value.grade_name}{preview_value.formation.name}",
             f"阵藏条目 {value.reserve_key} · 数量 {value.quantity_after}",
         )
-        .line(text(copy, "完成", "话语"))
+        .line(master.speech["完成"].format(主持=master.name))
     )
     if value.treasure_activation is not None:
         activation = value.treasure_activation

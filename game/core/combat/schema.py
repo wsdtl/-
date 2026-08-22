@@ -30,6 +30,7 @@ class RuleSchemaValidator:
             "事件引用",
             "机制引用",
             "属性数值表",
+            "属性构成",
             "任意",
             "任意数组",
         }
@@ -236,6 +237,17 @@ class RuleSchemaValidator:
                 if attribute not in self.attributes:
                     raise RuleSchemaError(f"{path}.{attribute}：未知战斗属性")
                 self._number(amount, f"{path}.{attribute}", {})
+        elif field_type == "属性构成":
+            values = self._object(value, path)
+            allowed = {"木", "火", "土", "金", "水", "无相"}
+            if not values or len(values) > 3 or not set(values) <= allowed:
+                raise RuleSchemaError(f"{path}：属性构成必须包含1至3种正式属性")
+            total = 0.0
+            for attribute, amount in values.items():
+                self._number(amount, f"{path}.{attribute}", {"最小": 0})
+                total += float(amount)
+            if abs(total - 100.0) > 1e-6:
+                raise RuleSchemaError(f"{path}：属性构成总和必须为100")
         elif field_type == "任意":
             return
         elif field_type == "任意数组":

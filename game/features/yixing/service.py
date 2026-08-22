@@ -31,11 +31,9 @@ class YixingFeature:
     def initialize(self) -> None:
         if self._copy is not None:
             raise RuntimeError("易形玩法已经初始化")
-        rule = self._data.dataset("玩法规则").get("易形")
-        if not isinstance(rule, Mapping):
-            raise JsonDataError("玩法规则缺少易形.json")
+        rule = self._world.feature_config("易形")
         self._medicine_id = _text(rule.get("丹药"), "易形.丹药")
-        self._location_function = _text(rule.get("功能"), "易形.功能")
+        self._location_function = "易形"
         self._guard_rule = _text(rule.get("状态守卫"), "易形.状态守卫")
         copy = self._data.dataset("易形展示").get("文本")
         if not isinstance(copy, Mapping):

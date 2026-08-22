@@ -8,7 +8,7 @@ from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from types import MappingProxyType
 
-from game.core.combat import CombatantSpec, CombatBuildRef
+from game.core.combat import CombatantSpec, CombatBuildRef, generate_five_elements
 from game.core.data import JsonDataError, JsonDataService
 from game.core.database import DatabaseService, StateAddress, StateMutation
 from game.core.forging import ForgingService
@@ -81,6 +81,7 @@ class CompanionService:
         )
         self._attribute_definitions: Mapping[str, object] = {}
         self._plant_pool_meridians: Mapping[str, str] = {}
+        self._five_element_rules: Mapping[str, object] = {}
 
     def initialize(self) -> CompanionStatus:
         if self._initialized:
@@ -93,6 +94,9 @@ class CompanionService:
             raise RuntimeError("成长核心必须先于道侣核心启动")
         if not self._forging.status().initialized:
             raise RuntimeError("炼器核心必须先于道侣核心启动")
+        self._five_element_rules = _mapping(
+            self._data.dataset("战斗规则").get("五行"), "规则/战斗/五行.json"
+        )
         self._rules = self._load_rules()
         self._attribute_definitions = _mapping(
             self._data.dataset("战斗定义").get("属性"), "战斗定义.属性"
@@ -281,6 +285,7 @@ class CompanionService:
             "资源",
             "自动用药",
             "待战战丹",
+            "五行根性",
         }
         if set(value) != expected:
             raise CompanionStateError("道侣实例字段不完整")
@@ -298,6 +303,7 @@ class CompanionService:
             str(key): _state_number(raw, f"道侣实例.属性.{key}")
             for key, raw in attributes_value.items()
         }
+        five_elements = _state_five_elements(value.get("五行根性"))
         resources_value = _state_mapping(value.get("资源"), "道侣实例.资源")
         resources = {
             name: _state_number(resources_value.get(name), f"道侣实例.资源.{name}")
@@ -359,6 +365,7 @@ class CompanionService:
             MappingProxyType(resources),
             _state_bool(value.get("自动用药"), "道侣实例.自动用药"),
             _prepared_battle_medicine(value.get("待战战丹"), "道侣实例.待战战丹"),
+            MappingProxyType(five_elements),
         )
 
     async def active_instance(self, user_id: str) -> ActiveCompanionInstance:
@@ -416,6 +423,7 @@ class CompanionService:
             controller_id=user_id,
             inventory_owner_id=user_id,
             gender=definition.gender,
+            five_elements=dict(instance.five_elements),
         )
 
     async def plan_growth(
@@ -470,6 +478,7 @@ class CompanionService:
             before.resources,
             before.automatic_medicine,
             before.prepared_battle_medicine,
+            before.five_elements,
         )
         return CompanionGrowthPlan(
             before.companion_id,
@@ -545,6 +554,7 @@ class CompanionService:
             before.resources,
             before.automatic_medicine,
             before.prepared_battle_medicine,
+            before.five_elements,
         )
         return CompanionBreakthroughPlan(
             before.companion_id,
@@ -597,6 +607,7 @@ class CompanionService:
             before.resources,
             before.automatic_medicine,
             before.prepared_battle_medicine,
+            before.five_elements,
         )
         return CompanionLawPlan(
             before.companion_id,
@@ -1227,6 +1238,7 @@ class CompanionService:
             ),
             self.rules().automatic_medicine_default,
             None,
+            MappingProxyType(generate_five_elements(self._five_element_rules, source)),
         )
 
     def _initial_attributes(
@@ -1486,6 +1498,7 @@ def _instance_value(
         "等级": instance.level,
         "经验": instance.experience,
         "属性": dict(instance.attributes),
+        "五行根性": dict(instance.five_elements),
         "修行槽": {
             category: list(content_ids)
             for category, content_ids in instance.cultivation.items()
@@ -1652,6 +1665,18 @@ def _state_mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise CompanionStateError(f"{label}必须是对象")
     return value
+
+
+def _state_five_elements(value: object) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        raise CompanionStateError("道侣实例.五行根性必须是对象")
+    expected = {"木", "火", "土", "金", "水"}
+    if set(value) != expected:
+        raise CompanionStateError("道侣实例.五行根性必须完整包含木火土金水")
+    result = {str(key): float(raw) for key, raw in value.items()}
+    if any(raw < 0 or raw > 100 for raw in result.values()) or abs(sum(result.values()) - 100) > 1e-6:
+        raise CompanionStateError("道侣实例.五行根性每项须在0到100且总和为100")
+    return result
 
 
 def _sequence(

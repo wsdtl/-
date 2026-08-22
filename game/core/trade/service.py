@@ -63,7 +63,6 @@ class TradeService:
         self._base_prices: dict[str, int] = {}
         self._maximum_quantity = 0
         self._page_size = 0
-        self._source_group_count = 0
 
     def initialize(self) -> TradeStatus:
         if self._initialized:
@@ -98,19 +97,13 @@ class TradeService:
         self._page_size = _positive_int(rules.get("每页上限"), "交易.每页上限")
         if self._page_size > 50:
             raise JsonDataError("交易每页上限不能超过50")
-        groups = _mapping(rules.get("货源组"), "交易.货源组")
-        resolved_groups = {
-            name: _catalogs(value, self._data, f"货源组.{name}")
-            for name, value in groups.items()
-        }
-        self._source_group_count = len(resolved_groups)
         shops = self._data.entities("地点商店")
         for file_id, value in shops.items():
             if not file_id.endswith("商店"):
                 raise JsonDataError(f"地点商店文件名必须以商店结尾：{file_id}")
             location_name = file_id.removesuffix("商店")
             row = _mapping(value, f"地点商店.{file_id}")
-            unknown = set(row) - {"品级", "货源组", "真意目录", "气机目录"}
+            unknown = set(row) - {"品级", "真意目录", "气机目录"}
             if unknown:
                 raise JsonDataError(
                     f"地点商店 {location_name} 存在未知字段：{'、'.join(sorted(unknown))}"
@@ -118,17 +111,7 @@ class TradeService:
             grade_ids = _strings(row.get("品级"), f"{location_name}.品级")
             for grade_id in grade_ids:
                 self._asset.grade(grade_id)
-            group_name = str(row.get("货源组") or "").strip()
-            if group_name:
-                if "真意目录" in row or "气机目录" in row:
-                    raise JsonDataError(f"地点商店 {location_name} 不能混用货源组和目录")
-                catalogs = resolved_groups.get(group_name)
-                if catalogs is None:
-                    raise JsonDataError(
-                        f"地点商店 {location_name} 使用未知货源组：{group_name}"
-                    )
-            else:
-                catalogs = _catalogs(row, self._data, f"地点商店.{location_name}")
+            catalogs = _catalogs(row, self._data, f"地点商店.{location_name}")
             self._stores[location_name] = _Store(location_name, grade_ids, catalogs)
         trading_locations = {
             value.name
@@ -148,7 +131,6 @@ class TradeService:
         return TradeStatus(
             self._initialized,
             len(self._stores),
-            self._source_group_count,
             self._maximum_quantity,
         )
 

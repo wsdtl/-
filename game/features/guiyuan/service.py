@@ -33,11 +33,9 @@ class GuiyuanFeature:
             raise RuntimeError("归元玩法已经初始化")
         if not self._medicine.status().initialized or not self._companion.status().initialized:
             raise RuntimeError("丹药核心和道侣核心必须先于归元玩法启动")
-        rule = self._data.dataset("玩法规则").get("归元观")
-        if not isinstance(rule, Mapping):
-            raise JsonDataError("玩法规则缺少归元观.json")
+        rule = self._world.feature_config("归元")
         self._medicine_id = _text(rule.get("丹药"), "归元观.丹药")
-        self._location_function = _text(rule.get("功能"), "归元观.功能")
+        self._location_function = "归元"
         self._guard_rule = _text(rule.get("状态守卫"), "归元观.状态守卫")
         copy = self._data.dataset("归元展示").get("文本")
         if not isinstance(copy, Mapping):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from game.core.innate_treasure import InnateTreasureActivation
@@ -69,6 +70,7 @@ class ForgingArtisan:
     furnace_name: str
     school: str
     speech_style: str
+    speech: Mapping[str, str]
 
 
 @dataclass(frozen=True)

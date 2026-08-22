@@ -34,6 +34,7 @@ class CombatCatalog:
     status_reactions: tuple[Mapping[str, Any], ...]
     environments: Mapping[str, Mapping[str, Any]]
     environment_rules: Mapping[str, Any]
+    five_elements: Mapping[str, Any]
     formation_rules: FormationNodeRules
 
     @classmethod
@@ -59,6 +60,7 @@ class CombatCatalog:
             status_reactions=tuple(copy.deepcopy(source.get("状态反应") or ())),
             environments=dict(source.get("战场环境") or {}),
             environment_rules=dict(source.get("环境规则") or {}),
+            five_elements=dict(source.get("五行") or {}),
             formation_rules=source["阵法规则"],
         )
 
@@ -192,6 +194,9 @@ class Skill:
     cooldown_group: str = ""
     source_skill: str = ""
     temporary_changes: dict[str, Any] = dataclass_field(default_factory=dict)
+    element_composition: Mapping[str, float] = dataclass_field(
+        default_factory=lambda: {"无相": 100}
+    )
 
     def clone(self, *, key: str, name: str | None = None) -> Skill:
         value = copy.deepcopy(self)
@@ -239,6 +244,8 @@ class Fighter:
     summon_template: str = ""
     can_act: bool = True
     counts_for_victory: bool = True
+    five_elements: dict[str, float] = dataclass_field(default_factory=dict)
+    team_synergy: dict[str, int] = dataclass_field(default_factory=dict)
 
     def value(self, key: str, default: float = 0.0) -> float:
         result = float(self.attributes.get(key, default))
@@ -269,6 +276,7 @@ ListenerEntry = tuple[
     str,
     str,
     Mapping[str, Any],
+    Mapping[str, float],
 ]
 
 
@@ -343,6 +351,9 @@ class RuntimeCombatantSnapshot:
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = dataclass_field(default_factory=dict)
     gender: str = ""
+    five_elements: Mapping[str, float] = dataclass_field(
+        default_factory=lambda: {"木": 20, "火": 20, "土": 20, "金": 20, "水": 20}
+    )
 
 
 @dataclass(frozen=True)
@@ -444,6 +455,9 @@ class BattleContext:
     action_progress: dict[str, float] = dataclass_field(default_factory=dict)
     mechanism_counters: dict[tuple[str, str], float] = dataclass_field(default_factory=dict)
     current_mechanism: str = ""
+    current_element_composition: dict[str, float] = dataclass_field(
+        default_factory=lambda: {"无相": 100}
+    )
     trigger_stack: set[tuple[str, str]] = dataclass_field(default_factory=set)
     event_stack: list[EventFrame] = dataclass_field(default_factory=list)
     records: dict[tuple[str, str], list[Any]] = dataclass_field(default_factory=dict)

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 
 from game.core.data import JsonDataError, JsonDataService
 from game.core.growth import GrowthService
+from game.core.world import WorldService
 
 from .contracts import (
     CultivationTransferError,
@@ -20,9 +21,12 @@ class CultivationTransferService:
 
     state_types = frozenset()
 
-    def __init__(self, data: JsonDataService, growth: GrowthService) -> None:
+    def __init__(
+        self, data: JsonDataService, growth: GrowthService, world: WorldService
+    ) -> None:
         self._data = data
         self._growth = growth
+        self._world = world
         self._initialized = False
         self._function = ""
         self._medicine_id = ""
@@ -38,10 +42,10 @@ class CultivationTransferService:
             raise RuntimeError("JSON 数据微服务必须先于修为转移核心启动")
         if not self._growth.status().initialized:
             raise RuntimeError("成长核心必须先于修为转移核心启动")
-        rules = self._data.dataset("玩法规则").get("铜雀台")
-        if not isinstance(rules, Mapping):
-            raise JsonDataError("规则/玩法/铜雀台.json 必须是对象")
-        self._function = _text(rules.get("功能"), "铜雀台.功能")
+        if not self._world.status().initialized:
+            raise RuntimeError("世界核心必须先于修为转移核心启动")
+        rules = self._world.feature_config("夺元")
+        self._function = "夺元"
         self._guard_rule = _text(rules.get("状态守卫"), "铜雀台.状态守卫")
         target = _mapping(rules.get("目标"), "铜雀台.目标")
         if target.get("角色类型") != "道侣" or target.get("必须同行") is not True:

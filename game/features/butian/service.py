@@ -32,11 +32,9 @@ class ButianFeature:
     def initialize(self) -> None:
         if self._copy is not None:
             raise RuntimeError("补天玩法已经初始化")
-        rule = self._data.dataset("玩法规则").get("补天")
-        if not isinstance(rule, Mapping):
-            raise JsonDataError("玩法规则缺少补天.json")
+        rule = self._world.feature_config("补天")
         self._medicine_id = _text(rule.get("丹药"), "补天.丹药")
-        self._location_function = _text(rule.get("功能"), "补天.功能")
+        self._location_function = "补天"
         self._guard_rule = _text(rule.get("状态守卫"), "补天.状态守卫")
         copy = self._data.dataset("补天展示").get("文本")
         if not isinstance(copy, Mapping):

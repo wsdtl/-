@@ -52,6 +52,13 @@ class MechanismRuntime:
         if context.mechanism_depth >= depth_limit:
             raise RuntimeError("战斗能力链超过安全深度")
         node = self.catalog.parse_node(effect)
+        effective = dict(effect)
+        if (
+            node.executor in {"造成伤害", "恢复资源"}
+            and "属性构成" not in effective
+            and context.current_element_composition
+        ):
+            effective["属性构成"] = dict(context.current_element_composition)
         handler = self._mechanism_handlers.get(node.executor)
         if handler is None:
             raise ValueError(f"战斗核心未实现执行器：{node.executor or '<空>'}")
@@ -63,7 +70,7 @@ class MechanismRuntime:
                 context,
                 source,
                 target,
-                dict(effect),
+                effective,
                 multiplier,
                 event_amount=event_amount,
                 event_values=dict(event_values or {}),
@@ -85,7 +92,7 @@ class MechanismRuntime:
                 {
                     "来源": source.id,
                     "目标": target.id,
-                    "节点": copy.deepcopy(dict(effect)),
+                    "节点": copy.deepcopy(effective),
                     "倍率": multiplier,
                     "成功": success,
                 }
@@ -290,6 +297,7 @@ class MechanismRuntime:
             ability_order: int = 0,
             effect_order: int = 0,
             source_category: str = "功法",
+            element_composition: Mapping[str, float] | None = None,
         ) -> None:
             event_name = str(node.get("事件") or "")
             if not event_name:
@@ -310,7 +318,14 @@ class MechanismRuntime:
             )
             key = tuple(values[field] for field in listener_order) + (activation_id,)
             grouped.setdefault(event_name, []).append(
-                (key, owner, activation_id, str(listener_id), node)
+                (
+                    key,
+                    owner,
+                    activation_id,
+                    str(listener_id),
+                    node,
+                    dict(element_composition or {"无相": 100}),
+                )
             )
 
         for owner in context.fighters:
@@ -327,6 +342,7 @@ class MechanismRuntime:
                         ability_order=int(passive.get("能力序号", 0)),
                         effect_order=int(passive.get("效果序号", 0)),
                         source_category=str(passive.get("来源类别") or "功法"),
+                        element_composition=passive.get("属性构成"),
                     )
             for status in owner.statuses:
                 mechanism_ids = tuple(
@@ -413,7 +429,7 @@ class MechanismRuntime:
         context.event_depth += 1
         try:
             listeners = self._compiled_listeners(context).get(kind, ())
-            for _, owner, activation_id, mechanism_id, node in listeners:
+            for _, owner, activation_id, mechanism_id, node, composition in listeners:
                 if not self._listener_relation_matches(context, owner, frame, node):
                     continue
                 if not self._conditions_allow(
@@ -433,7 +449,9 @@ class MechanismRuntime:
                 context.battle_trigger_counts[activation] = context.battle_trigger_counts.get(activation, 0) + 1
                 context.trigger_stack.add(activation)
                 previous = context.current_mechanism
+                previous_composition = context.current_element_composition
                 context.current_mechanism = mechanism_id
+                context.current_element_composition = dict(composition)
                 try:
                     self._run_effects(
                         context,
@@ -447,6 +465,7 @@ class MechanismRuntime:
                     )
                 finally:
                     context.current_mechanism = previous
+                    context.current_element_composition = previous_composition
                     context.trigger_stack.discard(activation)
             if frame.transformed_kind:
                 frame.facts["原事件"] = frame.kind
@@ -617,6 +636,7 @@ class MechanismRuntime:
         success = False
         for destination in destinations:
             amount = self._resolve_value(context, effect.get("数值"), source, destination, kwargs.get("event_amount", 0), kwargs.get("event_values") or {}) * multiplier
+            amount *= self._element_multiplier(context, source, destination, effect)
             if source.current_skill and str(effect.get("伤害形式") or "直接") == "直接":
                 amount *= max(0.0, 1.0 + self._percent(source, "技能威力"))
             resolution = self._apply_damage(
@@ -633,6 +653,8 @@ class MechanismRuntime:
                 tags=tuple(str(value) for value in effect.get("标签") or ()),
             )
             success = resolution.actual_damage > 0 or success
+            if resolution.actual_damage > 0:
+                self._mark_team_synergy(context, source, effect)
             context.last_result = {**context.last_result, **resolution.values()}
         return success
 
@@ -641,6 +663,7 @@ class MechanismRuntime:
         changed = False
         for destination in self._select_targets(context, source, target, effect.get("目标")):
             amount = max(0.0, self._resolve_value(context, effect.get("数值"), source, destination, kwargs.get("event_amount", 0), kwargs.get("event_values") or {}) * multiplier)
+            amount *= self._element_multiplier(context, source, destination, effect)
             if requested_resource == "血气":
                 amount *= max(0.0, 1.0 + self._percent(source, "治疗加成"))
             elif requested_resource == "护盾":
@@ -672,7 +695,77 @@ class MechanismRuntime:
             self._dispatch_event(context, kind=after_event, source=source, target=destination, amount=applied, values=values, tags=event_tags)
             self._dispatch_event(context, kind="资源变化后", source=source, target=destination, amount=applied, values=values, tags=(*frame.tags, "增加", resource))
             changed = changed or applied > 0
+            if applied > 0:
+                self._mark_team_synergy(context, source, effect)
         return changed
+
+    def _element_multiplier(self, context, source, target, effect):
+        composition = effect.get("属性构成")
+        if not composition:
+            return 1.0
+        values = {str(key): float(value) for key, value in dict(composition).items()}
+        if not values or "无相" in values and len(values) == 1:
+            return 1.0
+        source_root = source.five_elements
+        target_root = target.five_elements
+        rules = self.catalog.five_elements
+        generating = {str(item["来源"]): str(item["目标"]) for item in rules.get("相生", ())}
+        overcoming = {str(item["来源"]): str(item["目标"]) for item in rules.get("相克", ())}
+        root_rules = rules.get("根性倍率", {})
+        root_score = sum(
+            source_root[element] * weight
+            for element, weight in values.items()
+            if element in source_root
+        ) / 100.0
+        root_multiplier = max(
+            float(root_rules.get("最低", 0.9)),
+            min(
+                float(root_rules.get("最高", 1.4)),
+                1.0
+                + (root_score - float(root_rules.get("基准", 20)))
+                * float(root_rules.get("每点修正", 0.005)),
+            ),
+        )
+        multipliers = rules.get("倍率", {})
+        relation = 0.0
+        total = 0.0
+        for element, weight in values.items():
+            if element == "无相":
+                continue
+            for target_element, target_weight in target_root.items():
+                if element == target_element:
+                    factor = 1.0
+                elif generating.get(element) == target_element:
+                    factor = float(multipliers.get("相生", 1.03))
+                elif overcoming.get(element) == target_element:
+                    factor = float(multipliers.get("相克", 1.15))
+                elif overcoming.get(target_element) == element:
+                    factor = float(multipliers.get("被克", 0.85))
+                else:
+                    factor = 1.0
+                relation += weight * target_weight * factor
+                total += weight * target_weight
+        result = root_multiplier * (relation / total if total else 1.0)
+        for element in values:
+            if source.team_synergy.pop(element, 0):
+                result *= float(multipliers.get("团队相生", 1.08))
+                break
+        return result
+
+    def _mark_team_synergy(self, context, source, effect):
+        composition = effect.get("属性构成") or {}
+        generating = {
+            str(item["来源"]): str(item["目标"])
+            for item in self.catalog.five_elements.get("相生", ())
+        }
+        elements = [generating[element] for element in composition if element in generating]
+        if not elements:
+            return
+        element = elements[0]
+        for ally in context.allies_of(source, alive=None):
+            if ally is source or ally.team_synergy:
+                continue
+            ally.team_synergy[element] = 1
 
     def _mechanism_consume_resource(self, context, source, target, effect, multiplier, **kwargs):
         resource = str(effect.get("资源") or "精神")

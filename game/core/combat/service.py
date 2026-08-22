@@ -215,6 +215,9 @@ class CombatService:
             if section not in BUILD_SECTIONS:
                 raise ValueError(f"战斗构筑不支持实体类别：{section or '<空>'}")
             definition = materialize(self._data.entity(section, content_id))
+            definition["属性构成"] = dict(
+                definition.get("属性构成") or {"无相": 100}
+            )
             definition["来源类别"] = section
             definition["实例"] = (
                 reference.instance_id or f"{value.id}:{section}:{index}"
@@ -251,6 +254,7 @@ class CombatService:
             tags=tuple(value.tags),
             tactic=tuple(copy.deepcopy(value.tactic)),
             battle_profile=copy.deepcopy(dict(value.battle_profile)),
+            five_elements=copy.deepcopy(dict(value.five_elements)),
         )
 
     def _prepared_status(self, value: CombatStatusSpec) -> dict[str, Any]:

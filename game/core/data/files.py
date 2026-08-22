@@ -256,6 +256,7 @@ def _parse_read_rules(value: Any, path: str) -> DataReadRules:
         "编号定义",
         "文件名唯一",
         "资源池字段",
+        "归属规则",
         "读取规则",
     }
     if unknown:
@@ -280,6 +281,7 @@ def _parse_read_rules(value: Any, path: str) -> DataReadRules:
         if not field.endswith("池") or not target:
             raise JsonDataError("资源池字段必须使用以“池”结尾的字段名和非空实体类别")
         reference_sections[field] = target
+    _validate_ownership_rules(value.get("归属规则"))
     rows = value.get("读取规则")
     if not _is_array(rows) or not rows:
         raise JsonDataError("读取规则.读取规则必须是非空字典数组")
@@ -378,6 +380,22 @@ def _parse_read_rule(
         filename_matches_parent=filename_matches_parent,
         directory_owner_depth=directory_owner_depth,
     )
+
+
+def _validate_ownership_rules(value: Any) -> None:
+    if not isinstance(value, Mapping):
+        raise JsonDataError("读取规则.归属规则必须是对象")
+    required = {"地点主体", "地点专属配置", "地点专属内容", "禁止规则"}
+    if set(value) != required:
+        raise JsonDataError("读取规则.归属规则字段必须完整且不可扩展")
+    for key in ("地点主体", "地点专属配置", "地点专属内容"):
+        if not isinstance(value.get(key), str) or not value[key].strip():
+            raise JsonDataError(f"读取规则.归属规则.{key}必须是非空字符串")
+    forbidden = value.get("禁止规则")
+    if not _is_array(forbidden) or not forbidden or any(
+        not isinstance(item, str) or not item.strip() for item in forbidden
+    ):
+        raise JsonDataError("读取规则.归属规则.禁止规则必须是非空字符串数组")
 
 
 def _nonempty_unique_strings(value: Any, path: str) -> tuple[str, ...]:

@@ -347,6 +347,37 @@ class Audit:
             for key in ("功法池", "真意池", "气机池"):
                 if not isinstance(row.get(key), str) or not row[key].strip():
                     self.add("道侣", path, f"{row.get('名称', identity)} 缺少个人{key}")
+            identity_value = row.get("身份")
+            if not isinstance(identity_value, dict):
+                self.add("道侣文本", path, f"{row.get('名称', identity)} 缺少身份文本对象")
+            else:
+                personality = identity_value.get("性格方向")
+                if not isinstance(personality, str) or not personality.strip():
+                    self.add(
+                        "道侣文本",
+                        path,
+                        f"{row.get('名称', identity)} 缺少性格方向（仅作文本创作参考）",
+                    )
+                daily = identity_value.get("话语")
+                if not isinstance(daily, list) or not daily or any(
+                    not isinstance(value, str) or not value.strip() for value in daily
+                ):
+                    self.add("道侣文本", path, f"{row.get('名称', identity)} 日常话语必须为非空文本列表")
+            joining = row.get("结交")
+            if not isinstance(joining, dict):
+                self.add("道侣文本", path, f"{row.get('名称', identity)} 缺少结交文本对象")
+            else:
+                for field in ("喜好话语", "收礼话语", "婉拒话语", "圆满话语", "邀约话语", "暂别话语"):
+                    value = joining.get(field)
+                    valid = (
+                        isinstance(value, str) and bool(value.strip())
+                    ) or (
+                        isinstance(value, list)
+                        and bool(value)
+                        and all(isinstance(item, str) and item.strip() for item in value)
+                    )
+                    if not valid:
+                        self.add("道侣文本", path, f"{row.get('名称', identity)} 缺少{field}")
             weapon = row.get("本命武器")
             if not isinstance(weapon, dict) or set(weapon) != WEAPON_KEYS:
                 self.add(
@@ -1307,10 +1338,47 @@ class Audit:
                 self.add("世界", path, f"区域 {name} 坐标带非法或为空")
             elif not _connected_points(points):
                 self.add("世界", path, f"区域 {name} 坐标域不连通")
+        self._audit_host_speech()
         self._audit_world_partition(region_domains)
         self._audit_world_definitions(terrains)
         self._audit_world_role_distribution(locations, terrain_by_point)
         self._audit_roads(locations)
+
+    def _audit_host_speech(self) -> None:
+        assert self.data is not None
+        expected = {"总览", "审材", "齐备", "不足", "完成"}
+        allowed = {
+            "炼器工匠": {"编号", "名称", "称号", "炉名", "工艺流派", "话语风格", "话语"},
+            "炼丹师": {"编号", "名称", "称号", "炉名", "丹道传承", "话语风格", "话语"},
+            "阵师": {"编号", "名称", "称号", "阵台", "阵道传承", "话语风格", "话语", "开放阵法"},
+        }
+        for section in ("炼器工匠", "炼丹师", "阵师"):
+            for identity, raw in self.data.entities(section).items():
+                path = self.data.entity_record(section, identity).source_file
+                row = materialize(raw)
+                extra = set(row) - allowed[section]
+                if extra:
+                    self.add(
+                        "主持文本",
+                        path,
+                        f"{section} {identity} 含未声明字段：{'、'.join(sorted(extra))}",
+                    )
+                style = row.get("话语风格")
+                if not isinstance(style, str) or not style.strip():
+                    self.add("主持文本", path, f"{section} {identity} 缺少话语风格参考")
+                speech = row.get("话语")
+                if not isinstance(speech, dict) or set(speech) != expected:
+                    self.add(
+                        "主持文本",
+                        path,
+                        f"{section} {identity} 必须完整包含总览、审材、齐备、不足、完成五段话语",
+                    )
+                    continue
+                for key, value in speech.items():
+                    if not isinstance(value, str) or not value.strip():
+                        self.add("主持文本", path, f"{section} {identity}.{key} 话语不能为空")
+                    elif "{主持}" not in value and key in {"审材", "总览"}:
+                        self.add("主持文本", path, f"{section} {identity}.{key} 必须称呼主持人")
 
     def _audit_height_table(self, value: Any) -> None:
         path = "内容/世界/地势.json"
@@ -1376,6 +1444,19 @@ class Audit:
                         ).directory_owner
                         if owner != name:
                             raise ValueError(f"归属目录为 {owner or '<空>'}")
+                    elif section in {"炼器工匠", "炼丹师", "阵师"}:
+                        records = [
+                            entity_id
+                            for entity_id in self.data.entities(section)
+                            if self.data.entity_record(section, entity_id).source_file
+                            == file_id
+                        ]
+                        if not records:
+                            raise ValueError("同目录实体文件不存在")
+                        for entity_id in records:
+                            owner = self.data.entity_record(section, entity_id).directory_owner
+                            if owner != name:
+                                raise ValueError(f"归属目录为 {owner or '<空>'}")
                     else:
                         self.data.pool_members((file_id,), section)
                 except Exception as exc:  # noqa: BLE001
@@ -1685,6 +1766,7 @@ class Audit:
             )
 
     def _audit_presentations(self) -> None:
+        assert self.data is not None
         for name, relative_path in (
             ("战报", "展示/战斗/战报.json"),
             ("行程", "展示/行路/行程.json"),
@@ -1692,6 +1774,28 @@ class Audit:
             value = self._json(relative_path)
             if not isinstance(value, dict) or not value:
                 self.add("展示", relative_path, f"{name}展示定义必须是非空对象")
+        loaders = (
+            ("炼器", "展示/炼器/文本.json"),
+            ("炼丹", "展示/炼丹/文本.json"),
+            ("阵法", "展示/阵法/文本.json"),
+        )
+        for name, relative_path in loaders:
+            try:
+                if name == "炼器":
+                    from game.features.lianqi.presentation import load_presentation
+                elif name == "炼丹":
+                    from game.features.liandan.presentation import load_presentation
+                else:
+                    from game.features.lianzhen.presentation import load_presentation
+                load_presentation(self.data)
+            except Exception as exc:  # noqa: BLE001 - 汇总所有展示契约问题
+                self.add("展示", relative_path, f"{name}展示加载失败：{exc}")
+        try:
+            from game.features.buzhen.service import FormationArmFeature
+
+            FormationArmFeature(self.data, None).initialize()
+        except Exception as exc:  # noqa: BLE001 - 汇总所有展示契约问题
+            self.add("展示", "展示/阵法/文本.json", f"布阵展示加载失败：{exc}")
 
     def _json(self, relative: str) -> Any:
         path = (DATA / relative).resolve()

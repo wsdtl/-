@@ -109,6 +109,9 @@ class CombatantSpec:
     tactic: tuple[Mapping[str, Any], ...] = ()
     battle_profile: Mapping[str, Any] = field(default_factory=dict)
     gender: str = ""
+    five_elements: Mapping[str, float] = field(
+        default_factory=lambda: {"木": 20, "火": 20, "土": 20, "金": 20, "水": 20}
+    )
 
 
 @dataclass(frozen=True)
@@ -269,6 +272,7 @@ class CombatantResult:
     owner_id: str = ""
     controller_id: str = ""
     counts_for_victory: bool = True
+    five_elements: Mapping[str, float] = field(default_factory=dict)
 
     @property
     def alive(self) -> bool:

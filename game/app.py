@@ -329,7 +329,7 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
             C.kv("special", medicine_status.special_count),
         )
     )
-    cultivation_transfer = CultivationTransferService(data, growth)
+    cultivation_transfer = CultivationTransferService(data, growth, world)
     transfer_status = cultivation_transfer.initialize()
     logger.opt(colors=True).success(
         C.join(
@@ -472,7 +472,6 @@ def build_game_services(*, data_dir: str | Path | None = None) -> GameServices:
         C.join(
             C.ok("地点交易核心微服务已启动"),
             C.kv("shops", trade_status.shop_count),
-            C.kv("source_groups", trade_status.source_group_count),
         )
     )
     enemy = EnemyService(data, pool, growth, asset, forging)

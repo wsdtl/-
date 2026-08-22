@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import math
 import re
+import random
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from game.core.asset import AssetService, AssetStateError
-from game.core.combat import CombatantSpec, CombatBuildRef
+from game.core.combat import CombatantSpec, CombatBuildRef, generate_five_elements
 from game.core.data import JsonDataError, JsonDataService, materialize
 from game.core.database import (
     DatabaseService,
@@ -88,6 +89,7 @@ class CharacterService:
         self._grade_values: frozenset[str] = frozenset()
         self._attributes: Mapping[str, object] = {}
         self._medicine_default = True
+        self._five_element_rules: Mapping[str, object] = {}
 
     def initialize(self) -> CharacterStatus:
         if self._initialized:
@@ -123,6 +125,9 @@ class CharacterService:
         creation = _mapping(role_rule.get("创建"), "人物.json.创建")
         _mapping(creation.get("初始本命武器"), "人物.json.创建.初始本命武器")
         attributes = self._data.dataset("战斗定义").get("属性")
+        self._five_element_rules = _mapping(
+            self._data.dataset("战斗规则").get("五行"), "规则/战斗/五行.json"
+        )
         medicine_rules = _mapping(
             self._data.dataset("服丹规则").get("服丹"), "规则/服丹/服丹.json"
         )
@@ -211,6 +216,7 @@ class CharacterService:
             equipped_content=equipped_content,
             weapon=weapon_profile,
             inventory=inventory,
+            five_elements=_state_five_elements(character.get("五行根性")),
         )
 
     async def public_profiles(
@@ -304,6 +310,7 @@ class CharacterService:
             controller_id=profile.user_id,
             inventory_owner_id=profile.user_id,
             gender=profile.gender,
+            five_elements=dict(profile.five_elements),
         )
 
     async def create(self, command: CharacterCreateCommand) -> CharacterCreationResult:
@@ -1331,6 +1338,8 @@ class CharacterService:
         attributes.update(materialize(overrides))
         blood = _number(attributes.get("血气上限"), "血气上限")
         spirit = _number(attributes.get("精神上限"), "精神上限")
+        source = random.Random(f"人物五行:{command.user_id}")
+        five_elements = generate_five_elements(self._five_element_rules, source)
         return {
             "姓名": command.name,
             "性别": command.gender,
@@ -1342,6 +1351,7 @@ class CharacterService:
             "宗门贡献": 0,
             "属性": attributes,
             "属性加成": {},
+            "五行根性": five_elements,
             "资源": {"血气": blood, "精神": spirit, "护盾": 0},
             "自动用药": self._medicine_default,
             "待战战丹": self._role_rule.get("待战战丹"),
@@ -1536,6 +1546,18 @@ def _state_numbers(value: object, label: str) -> tuple[tuple[str, int | float], 
             raise CharacterStateError(f"{label}.{name}必须是数值")
         result.append((str(name), raw))
     return tuple(result)
+
+
+def _state_five_elements(value: object) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        raise CharacterStateError("人物.五行根性必须是对象")
+    expected = {"木", "火", "土", "金", "水"}
+    if set(value) != expected:
+        raise CharacterStateError("人物.五行根性必须完整包含木火土金水")
+    result = {str(key): float(raw) for key, raw in value.items()}
+    if any(raw < 0 or raw > 100 for raw in result.values()) or abs(sum(result.values()) - 100) > 1e-6:
+        raise CharacterStateError("人物.五行根性每项须在0到100且总和为100")
+    return result
 
 
 def _inventory_summary(

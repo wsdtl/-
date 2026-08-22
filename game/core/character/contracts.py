@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from game.core.database import StateMutation
@@ -117,6 +118,7 @@ class CharacterProfile:
     equipped_content: tuple[EquippedContent, ...]
     weapon: WeaponProfile
     inventory: InventorySummary
+    five_elements: Mapping[str, float]
 
 
 @dataclass(frozen=True)

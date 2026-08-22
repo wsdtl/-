@@ -40,7 +40,7 @@ def overview(
         .field(text(copy, "总览", "工匠"), artisan.name)
         .field(text(copy, "总览", "流派"), artisan.school)
         .line(text(copy, "总览", "引言", 工匠=artisan.name))
-        .line(text(copy, "总览", "话语"))
+        .line(value.artisan.speech["总览"].format(主持=value.artisan.name))
         .section(text(copy, "总览", "器阶"), icon="item")
     )
     for index, (stage, count) in enumerate(value.stage_counts, start=1):
@@ -84,7 +84,7 @@ def preview(
         )
         .section(artisan.title, icon="weapon")
         .field(text(copy, "预览", "工匠"), artisan.name)
-        .line(text(copy, "预览", "审材", 工匠=artisan.name))
+        .line(artisan.speech["审材"].format(主持=artisan.name))
         .section(value.law.name, icon="item")
         .row(
             (text(copy, "预览", "器律"), value.law.law_id),
@@ -102,7 +102,7 @@ def preview(
             builder.item(
                 index, f"{missing.category} · {missing.trait} × {missing.quantity}"
             )
-    builder.line(text(copy, "预览", "齐备" if value.can_forge else "不足"))
+    builder.line(artisan.speech["齐备" if value.can_forge else "不足"].format(主持=artisan.name))
     return builder.actions(message_actions(actions)).build()
 
 
@@ -121,7 +121,7 @@ def completed(
         .line(text(copy, "完成", "过程", 工匠=artisan.name))
         .section(text(copy, "完成", "所得"), icon="item")
         .field(preview_value.law.name, f"器藏数量 {value.quantity_after}")
-        .line(text(copy, "完成", "话语"))
+        .line(artisan.speech["完成"].format(主持=artisan.name))
     )
     if value.treasure_activation is not None:
         activation = value.treasure_activation

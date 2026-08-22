@@ -69,6 +69,8 @@ def overview(result: CharacterOverviewResult):
         .row(("境界", character.realm_name), ("等级", character.level))
         .row(("经验", character.experience), ("灵石", character.spirit_stones))
         .field("宗门贡献", character.sect_contribution)
+        .section("五行根性", icon="status")
+        .row(*((element, _display_number(value)) for element, value in character.five_elements.items()))
         .section("当前状态", icon="status")
         .row(*result.states)
         .section("所在之地", icon="map")

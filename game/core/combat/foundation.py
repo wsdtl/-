@@ -29,6 +29,7 @@ def load_battle_foundation(
             "时序": rules["时序"],
             "状态反应": rules["状态反应"],
             "环境规则": rules["环境"],
+            "五行": rules["五行"],
             "战场环境": {
                 environment_id: materialize(value)
                 for environment_id, value in data.entities("战场环境").items()
@@ -127,6 +128,8 @@ def validate_battle_foundation(value: Mapping[str, Any]) -> None:
     environments = _mapping(value.get("战场环境") or {}, "战场环境")
     formation_rules = value.get("阵法规则")
     environment_rules = _mapping(value.get("环境规则"), "环境规则")
+    five_elements = _mapping(value.get("五行"), "五行")
+    _validate_five_elements(five_elements)
     _validate_action_rules(action_rules, attributes, resources)
     _validate_timing(timing)
     _validate_damage_rules(damage_rules)
@@ -204,6 +207,7 @@ def _validate_battle_environments(
                 raise ValueError(
                     f"{stage_path}存在未知字段：{'、'.join(sorted(unknown))}"
                 )
+
             stage_name = str(stage.get("名称") or "").strip()
             if not stage_name or stage_name in stage_names:
                 raise ValueError(f"{stage_path}.名称为空或重复")
@@ -241,6 +245,51 @@ def _validate_battle_environments(
                 _validate_neutral_environment_node(
                     node, f"{stage_path}.常驻能力[{ability_index}]"
                 )
+
+
+def _validate_five_elements(value: Mapping[str, Any]) -> None:
+    expected = {
+        "属性集合", "根性字段", "效果字段", "根性来源", "无相规则",
+        "相生", "相克", "倍率", "根性倍率", "团队协同", "根性生成", "实体属性",
+    }
+    if set(value) != expected:
+        raise ValueError("五行规则字段必须完整且不能包含额外字段")
+    if value["属性集合"] != ["木", "火", "土", "金", "水", "无相"]:
+        raise ValueError("五行属性集合必须固定为木火土金水无相")
+    if value["根性字段"] != "五行根性" or value["效果字段"] != "属性构成":
+        raise ValueError("五行字段名称不符合统一契约")
+    if value["根性来源"] != ["人物", "道侣实例", "灵兽", "敌方修士"]:
+        raise ValueError("五行根性来源必须覆盖人物、道侣实例、灵兽和敌方修士")
+    if value["无相规则"] != "固定中性":
+        raise ValueError("无相规则不符合统一契约")
+    _validate_relation_pairs(value["相生"], "相生")
+    _validate_relation_pairs(value["相克"], "相克")
+    multipliers = _mapping(value["倍率"], "五行.倍率")
+    for name in ("相生", "相克", "被克", "同属性", "无关", "无相", "团队相生"):
+        if not isinstance(multipliers.get(name), (int, float)):
+            raise ValueError(f"五行.倍率.{name}必须是数字")
+    root = _mapping(value["根性倍率"], "五行.根性倍率")
+    if any(not isinstance(root.get(name), (int, float)) for name in ("基准", "每点修正", "最低", "最高")):
+        raise ValueError("五行.根性倍率字段不完整")
+    generation = _mapping(value["根性生成"], "五行.根性生成")
+    if generation.get("算法") != "主次定值" or generation.get("总和") != 100:
+        raise ValueError("五行根性生成规则不符合统一契约")
+    entity = _mapping(value["实体属性"], "五行.实体属性")
+    if entity.get("字段") != "属性构成" or entity.get("来源类别") != ["功法", "真意", "气机", "器律"]:
+        raise ValueError("五行实体属性规则不符合统一契约")
+
+
+def _validate_relation_pairs(value: Any, label: str) -> None:
+    if not isinstance(value, list) or len(value) != 5:
+        raise ValueError(f"五行.{label}必须有五条关系")
+    pairs = set()
+    for index, raw in enumerate(value):
+        item = _mapping(raw, f"五行.{label}[{index}]")
+        if set(item) != {"来源", "目标"}:
+            raise ValueError(f"五行.{label}[{index}]字段不完整")
+        pairs.add((str(item["来源"]), str(item["目标"])))
+    if len(pairs) != 5:
+        raise ValueError(f"五行.{label}不能重复")
 
 
 def _validate_formation_node_rules(value: FormationNodeRules) -> None:

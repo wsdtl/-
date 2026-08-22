@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 from game.core.asset import AssetService
-from game.core.combat import CombatantSpec, CombatBuildRef
+from game.core.combat import CombatantSpec, CombatBuildRef, generate_five_elements
 from game.core.data import JsonDataError, JsonDataService
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
@@ -39,11 +39,15 @@ class EnemyService:
             MappingProxyType({})
         )
         self._genders: tuple[str, ...] = ()
+        self._five_element_rules: Mapping[str, object] = {}
 
     def initialize(self) -> EnemyStatus:
         if self._initialized:
             raise RuntimeError("敌人核心已经初始化")
         role_rules = self._data.dataset("角色规则")
+        self._five_element_rules = _mapping(
+            self._data.dataset("战斗规则").get("五行"), "规则/战斗/五行.json"
+        )
         self._role_rules = MappingProxyType(
             {
                 name: _mapping(role_rules.get(name), f"角色规则.{name}")
@@ -246,6 +250,7 @@ class EnemyService:
             health=float(attributes["血气上限"]),
             spirit=float(attributes["精神上限"]),
             gender=gender,
+            five_elements=generate_five_elements(self._five_element_rules, source),
         )
         return EnemyInstance(
             name, combatant, self._reward(name, raw, role_name, source)

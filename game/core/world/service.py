@@ -23,7 +23,7 @@ from .contracts import (
 )
 from .journey import JourneyPlanner
 
-_LOCATION_FIELDS = frozenset({"坐标", "说明", "可用功能", "单次遭遇敌人倍率"})
+_LOCATION_FIELDS = frozenset({"坐标", "说明", "可用功能", "功能配置", "单次遭遇敌人倍率"})
 _REGION_FIELDS = frozenset({"类别", "坐标带", "说明"})
 _TERRAIN_ZONE_FIELDS = frozenset({"名称", "地形", "坐标带"})
 
@@ -46,6 +46,7 @@ class WorldService:
             tuple[int, int], tuple[str, Mapping[str, object]]
         ] = {}
         self._feature_contents: dict[str, tuple[str, ...]] = {}
+        self._feature_config_functions: frozenset[str] = frozenset()
         self._feature_requirements: dict[
             str, tuple[tuple[str, ...], tuple[str, ...]]
         ] = {}
@@ -105,7 +106,11 @@ class WorldService:
                 "地形缺少同名战场环境：" + "、".join(sorted(missing_environments))
             )
         definitions = self._data.dataset("世界定义").get("地点功能")
-        self._feature_contents, self._feature_requirements = _feature_definitions(
+        (
+            self._feature_contents,
+            self._feature_requirements,
+            self._feature_config_functions,
+        ) = _feature_definitions(
             definitions
         )
         for location_key, raw in self._locations.items():
@@ -113,6 +118,7 @@ class WorldService:
                 raw,
                 location_key,
                 self._feature_requirements,
+                self._feature_config_functions,
             )
         self._location_regions = {}
         self._locations_by_xy = {}
@@ -145,6 +151,8 @@ class WorldService:
                 for section in sections:
                     if section == "商店":
                         self._require_location_shop(location_name)
+                    elif section in {"炼器工匠", "炼丹师", "阵师"}:
+                        self._require_location_entity(location_name, section)
                     else:
                         self._require_location_pool(location_name, section)
         birthplace = str(world.get("出生地") or "").strip()
@@ -199,6 +207,31 @@ class WorldService:
         if self._map_view is None:
             raise RuntimeError("世界地图快照尚未构建")
         return self._map_view
+
+    def feature_config(self, function: str) -> Mapping[str, object]:
+        """返回唯一地点专属功能的配置；功能归属由地点目录决定。"""
+
+        self._require_initialized()
+        name = str(function or "").strip()
+        if not name:
+            raise ValueError("地点功能不能为空")
+        owners = [
+            location_name
+            for location_name, raw in self._locations.items()
+            if name in _strings(raw.get("可用功能"))
+        ]
+        if len(owners) != 1:
+            raise JsonDataError(
+                f"地点专属功能 {name} 必须且只能有一个地点：{tuple(owners)}"
+            )
+        raw = self._locations[owners[0]]
+        configs = raw.get("功能配置")
+        if not isinstance(configs, Mapping):
+            raise JsonDataError(f"地点 {owners[0]} 缺少功能配置：{name}")
+        config = configs.get(name)
+        if not isinstance(config, Mapping):
+            raise JsonDataError(f"地点 {owners[0]}.功能配置.{name} 必须是对象")
+        return config
 
     def locate(self, query: LocationQuery) -> LocationView:
         self._require_initialized()
@@ -425,6 +458,27 @@ class WorldService:
         owner = self._data.entity_record("地点商店", file_id).directory_owner
         if owner != location_name:
             raise JsonDataError(f"地点商店不在对应目录：{file_id} -> {owner}")
+
+    def _require_location_entity(self, location_name: str, section: str) -> None:
+        file_id = f"{location_name}{section}"
+        values = self._data.entities(section)
+        matches = [
+            entity_id
+            for entity_id in values
+            if self._data.entity_record(section, entity_id).source_file == file_id
+        ]
+        if not matches:
+            raise JsonDataError(f"地点缺少同目录内容：{file_id}.json")
+        for entity_id in matches:
+            owner = self._data.entity_record(section, entity_id).directory_owner
+            if owner != location_name:
+                raise JsonDataError(
+                    f"地点内容不在对应目录：{file_id} -> {owner or '<空>'}"
+                )
+            if "地点" in values[entity_id]:
+                raise JsonDataError(
+                    f"地点内容重复保存地点字段：{file_id} -> {entity_id}"
+                )
 
     def _region_at(self, xy: tuple[int, int]) -> str:
         try:
@@ -742,6 +796,7 @@ def _validate_location_data(
     raw: Mapping[str, object],
     location_name: str,
     feature_requirements: Mapping[str, tuple[tuple[str, ...], tuple[str, ...]]],
+    feature_config_functions: Sequence[str] = (),
 ) -> None:
     """地点身份和层级来自路径；主体 JSON 只保存地点业务数据。"""
 
@@ -770,7 +825,26 @@ def _validate_location_data(
         required_fields.update(nonempty)
         required_fields.update(positive_range)
         positive_range_fields.update(positive_range)
-    declared_optional = set(raw) - {"坐标", "说明", "可用功能"}
+    configs = raw.get("功能配置", {})
+    if not isinstance(configs, Mapping):
+        raise JsonDataError(f"地点 {location_name}.功能配置必须是对象")
+    unknown_configs = set(configs) - set(functions)
+    if unknown_configs:
+        raise JsonDataError(
+            f"地点 {location_name}.功能配置包含未声明功能："
+            f"{'、'.join(sorted(unknown_configs))}"
+        )
+    for function, config in configs.items():
+        if not isinstance(config, Mapping):
+            raise JsonDataError(
+                f"地点 {location_name}.功能配置.{function} 必须是对象"
+            )
+    missing_configs = (set(functions) & set(feature_config_functions)) - set(configs)
+    if missing_configs:
+        raise JsonDataError(
+            f"地点 {location_name} 缺少专属功能配置：{'、'.join(sorted(missing_configs))}"
+        )
+    declared_optional = set(raw) - {"坐标", "说明", "可用功能", "功能配置"}
     undeclared_optional = declared_optional - required_fields
     if undeclared_optional:
         raise JsonDataError(
@@ -806,15 +880,17 @@ def _feature_definitions(
 ) -> tuple[
     dict[str, tuple[str, ...]],
     dict[str, tuple[tuple[str, ...], tuple[str, ...]]],
+    frozenset[str],
 ]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise JsonDataError("地点功能定义必须是字典列表")
     contents: dict[str, tuple[str, ...]] = {}
     requirements: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
+    config_functions: set[str] = set()
     for raw in value:
         if not isinstance(raw, Mapping):
             raise JsonDataError("地点功能定义只能包含对象")
-        unknown = set(raw) - {"名称", "同目录内容", "要求"}
+        unknown = set(raw) - {"名称", "同目录内容", "要求", "地点配置"}
         if unknown:
             raise JsonDataError(
                 f"地点功能定义存在未知字段：{'、'.join(sorted(unknown))}"
@@ -823,12 +899,20 @@ def _feature_definitions(
         name = name_value.strip() if isinstance(name_value, str) else ""
         if not name or name in contents:
             raise JsonDataError("地点功能名称不能为空或重复")
+        location_config = raw.get("地点配置", False)
+        if not isinstance(location_config, bool):
+            raise JsonDataError(f"地点功能 {name}.地点配置必须是布尔值")
+        if location_config:
+            config_functions.add(name)
         sections = _required_strings(
             raw.get("同目录内容"),
             f"地点功能 {name}.同目录内容",
             allow_empty=True,
         )
-        if any(section not in {"道侣", "敌人", "商店"} for section in sections):
+        if any(
+            section not in {"道侣", "敌人", "商店", "炼器工匠", "炼丹师", "阵师"}
+            for section in sections
+        ):
             raise JsonDataError(f"地点功能使用未知同目录内容：{name} -> {sections}")
         requirement = raw.get("要求")
         if not isinstance(requirement, Mapping):
@@ -861,7 +945,7 @@ def _feature_definitions(
             )
         contents[name] = sections
         requirements[name] = (nonempty, positive_range)
-    return contents, requirements
+    return contents, requirements, frozenset(config_functions)
 
 
 def _required_strings(
