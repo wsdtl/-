@@ -39,7 +39,7 @@ def started(
     return (
         M.document()
         .header(text(copy, "开始", "标题"))
-        .section(value.location_name, icon="cultivator")
+        .section(value.location_name, icon="player")
         .field(text(copy, "开始", "地点"), value.location_name)
         .row(
             (text(copy, "开始", "同行用户"), value.participant_count),
@@ -142,7 +142,7 @@ def _user_page(
         )
     for character in value.characters:
         title = text(copy, "用户", "道侣" if character.companion else "人物")
-        builder.section(f"{title} · {character.name}", icon="cultivator").row(
+        builder.section(f"{title} · {character.name}", icon="player").row(
             (text(copy, "用户", "经验"), f"+{character.experience_gained}"),
             (
                 text(copy, "用户", "等级"),

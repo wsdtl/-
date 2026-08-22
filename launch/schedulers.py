@@ -4,6 +4,7 @@
 id，以便重复创建应用或热重载时去重。
 """
 
+import asyncio
 from collections.abc import Callable
 from typing import ClassVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -33,6 +34,17 @@ class Scheduler:
     sync_list: ClassVar[list[dict]] = []
     asyncinstance = AsyncIOScheduler(timezone=SCHEDULER_TIMEZONE)
     async_list: ClassVar[list[dict]] = []
+
+    @classmethod
+    def bind_async_to_current_loop(cls) -> None:
+        """热重启时让异步调度器重新绑定当前事件循环。"""
+
+        if cls.asyncinstance.running:
+            return
+        loop = asyncio.get_running_loop()
+        bound_loop = getattr(cls.asyncinstance, "_eventloop", None)
+        if bound_loop is not None and bound_loop is not loop:
+            cls.asyncinstance = AsyncIOScheduler(timezone=SCHEDULER_TIMEZONE)
 
     @staticmethod
     def _sync(*args, **kwargs) -> Callable:

@@ -273,7 +273,10 @@ class MedicineFeature:
     ):
         stacks = await self._asset.inventory_stacks(user_id, medicine_id)
         if grade:
-            grade_id = self._asset.grade(grade).grade_id
+            try:
+                grade_id = self._asset.grade(grade).grade_id
+            except AssetStateError as exc:
+                raise MedicineFeatureError(str(exc)) from exc
             stacks = tuple(stack for stack in stacks if stack.grade.grade_id == grade_id)
         if not stacks:
             suffix = f" {grade}" if grade else ""

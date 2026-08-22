@@ -148,7 +148,7 @@ def _user_page(
         )
     for character in value.characters:
         title = text(copy, "用户", "道侣" if character.companion else "人物")
-        builder.section(f"{title} · {character.name}", icon="cultivator").row(
+        builder.section(f"{title} · {character.name}", icon="player").row(
             (text(copy, "用户", "最终血气"), _resource(character.health)),
             (text(copy, "用户", "最终精神"), _resource(character.spirit)),
         ).field(

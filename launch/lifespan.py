@@ -103,6 +103,7 @@ async def _start_schedulers() -> None:
 
     if not Scheduler.syncinstance.running:
         Scheduler.syncinstance.start()
+    Scheduler.bind_async_to_current_loop()
     if not Scheduler.asyncinstance.running:
         Scheduler.asyncinstance.start()
 

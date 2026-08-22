@@ -133,7 +133,7 @@ def _user_page(
         builder.section("先天灵宝", icon="item").field(
             activation.name, activation.summary
         )
-    builder.section(text(copy, "用户", "道侣相助"), icon="cultivator").line(
+    builder.section(text(copy, "用户", "道侣相助"), icon="player").line(
         value.assisting_companion_name or text(copy, "用户", "没有道侣")
     )
     builder.section(text(copy, "用户", "灵矿"), icon="item")
