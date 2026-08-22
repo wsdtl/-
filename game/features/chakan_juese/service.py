@@ -81,6 +81,8 @@ class CharacterOverviewFeature:
             for category, _ in character.cultivation_slots
         }
         injuries = self._injury.summary(await self._injury.state(user_id, PLAYER_KEY))
+        treasure_status = self._innate_treasure.status()
+        active_treasure = await self._innate_treasure.active(user_id)
         return CharacterOverviewResult(
             character=character,
             xy=player_location.xy,
@@ -98,7 +100,11 @@ class CharacterOverviewFeature:
             injuries=tuple(
                 (str(value["名称"]), int(value["层数"])) for value in injuries.entries
             ),
-            innate_treasure=await self._innate_treasure.active(user_id),
+            innate_treasure=active_treasure,
+            innate_treasure_usage=(
+                1 if active_treasure is not None else 0,
+                treasure_status.slot_count,
+            ),
         )
 
 

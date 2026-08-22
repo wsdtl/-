@@ -7,6 +7,7 @@ import pytest
 
 from game.core.database import (
     DatabaseService,
+    IdempotencyConflictError,
     LocationMutation,
     SharedConstraintError,
     SharedEntityMutation,
@@ -125,6 +126,186 @@ def test_shared_entities_members_and_locations_are_atomic_and_unique(tmp_path) -
         )
     assert _run(service.get_shared_entity("宗门", "sect-2")) is None
     assert _run(service.get_shared_member("宗门", "10002")) is None
+
+
+def test_shared_entity_identity_is_stored_once(tmp_path) -> None:
+    path = tmp_path / "game.db"
+    service = DatabaseService(path)
+    service.initialize()
+    _run(
+        service.commit(
+            _command(
+                request_id="identity-once",
+                operations=(
+                    SharedEntityMutation(
+                        "宗门",
+                        "sect-1",
+                        {"编号": "sect-1", "名称": "青云宗", "成员数量": 1},
+                        0,
+                    ),
+                ),
+            )
+        )
+    )
+
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            "SELECT entity_name, value_json FROM shared_entity WHERE entity_id = ?",
+            ("sect-1",),
+        ).fetchone()
+
+    assert row == ("青云宗", '{"成员数量":1}')
+    entity = _run(service.get_shared_entity("宗门", "sect-1"))
+    assert entity is not None
+    assert dict(entity.value) == {"编号": "sect-1", "名称": "青云宗", "成员数量": 1}
+    by_name = _run(service.get_shared_entity_by_name("宗门", "青云宗"))
+    listed = _run(service.list_shared_entities("宗门"))
+    assert by_name is not None and by_name.value == entity.value
+    assert listed == (entity,)
+
+
+def test_shared_entity_domain_identity_is_stored_once(tmp_path) -> None:
+    path = tmp_path / "game.db"
+    service = DatabaseService(path)
+    service.initialize()
+    _run(
+        service.commit(
+            _command(
+                request_id="domain-identity-once",
+                operations=(
+                    SharedEntityMutation(
+                        "托管计划",
+                        "host-1",
+                        {
+                            "名称": "host-1",
+                            "托管编号": "host-1",
+                            "活动顺序": ["闭关"],
+                        },
+                        0,
+                    ),
+                ),
+            )
+        )
+    )
+
+    with sqlite3.connect(path) as connection:
+        raw = connection.execute(
+            "SELECT value_json FROM shared_entity WHERE entity_id = ?",
+            ("host-1",),
+        ).fetchone()[0]
+
+    assert raw == '{"活动顺序":["闭关"]}'
+    entity = _run(service.get_shared_entity("托管计划", "host-1"))
+    assert entity is not None
+    assert entity.value["托管编号"] == "host-1"
+
+
+def test_unknown_shared_entity_fields_are_not_guessed_as_identity(tmp_path) -> None:
+    path = tmp_path / "game.db"
+    service = DatabaseService(path)
+    service.initialize()
+    _run(
+        service.commit(
+            _command(
+                request_id="unknown-entity-fields",
+                operations=(
+                    SharedEntityMutation(
+                        "未来实体",
+                        "future-1",
+                        {"名称": "未定实体", "编号": "业务正文编号"},
+                        0,
+                    ),
+                ),
+            )
+        )
+    )
+
+    with sqlite3.connect(path) as connection:
+        raw = connection.execute(
+            "SELECT value_json FROM shared_entity WHERE entity_id = ?",
+            ("future-1",),
+        ).fetchone()[0]
+
+    assert raw == '{"编号":"业务正文编号"}'
+    entity = _run(service.get_shared_entity("未来实体", "future-1"))
+    assert entity is not None
+    assert dict(entity.value) == {"名称": "未定实体", "编号": "业务正文编号"}
+
+
+def test_shared_entity_name_remains_part_of_idempotency_fingerprint(tmp_path) -> None:
+    service = DatabaseService(tmp_path / "game.db")
+    service.initialize()
+    first = _command(
+        request_id="shared-name-fingerprint",
+        operations=(
+            SharedEntityMutation(
+                "宗门",
+                "sect-1",
+                {"编号": "sect-1", "名称": "青云宗", "成员数量": 1},
+                0,
+            ),
+        ),
+    )
+    _run(service.commit(first))
+
+    changed_name = _command(
+        request_id="shared-name-fingerprint",
+        operations=(
+            SharedEntityMutation(
+                "宗门",
+                "sect-1",
+                {"编号": "sect-1", "名称": "太玄门", "成员数量": 1},
+                0,
+            ),
+        ),
+    )
+    with pytest.raises(IdempotencyConflictError):
+        _run(service.commit(changed_name))
+
+
+def test_storage_rejects_json_key_collisions_instead_of_overwriting(tmp_path) -> None:
+    service = DatabaseService(tmp_path / "game.db")
+    service.initialize()
+
+    with pytest.raises(ValueError, match="JSON 对象键必须是非空字符串"):
+        _run(
+            service.commit(
+                _command(
+                    request_id="invalid-json-key",
+                    operations=(
+                        StateMutation(
+                            "10001",
+                            "character",
+                            "main",
+                            {1: "数字键"},  # type: ignore[dict-item]
+                            0,
+                        ),
+                    ),
+                )
+            )
+        )
+
+
+def test_shared_entity_rejects_non_string_json_keys(tmp_path) -> None:
+    service = DatabaseService(tmp_path / "game.db")
+    service.initialize()
+
+    with pytest.raises(ValueError, match="JSON 对象键必须是非空字符串"):
+        _run(
+            service.commit(
+                _command(
+                    request_id="invalid-shared-json-key",
+                    operations=(
+                        SharedEntityMutation(
+                            "宗门",
+                            "sect-1",
+                            {"编号": "sect-1", "名称": "青云宗", 1: "数字键"},
+                            0,
+                        ),
+                    ),
+                )
+            )
+        )
 
 
 def test_commit_writes_multiple_states_atomically(tmp_path) -> None:

@@ -196,6 +196,8 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
         stack.quantity - remaining.get(stack.stack_key, 0) for stack in medicines_before
     )
     session = _run(database.list_for_user("qq-1", state_type="exploration_session"))[0]
+    assert "探险编号" not in session.value
+    assert all(battle.value["探险编号"] == started.session_id for battle in battles)
     recorded = sum(row["数量"] for row in session.value["用户结果"]["qq-1"]["消耗"])
     assert deducted == recorded
 
@@ -214,6 +216,13 @@ def test_exploration_precomputes_unlocks_and_settles_once(tmp_path: Path) -> Non
     assert complete.unlocked_battles == started.battle_count
     assert complete.ended is True
     settlement = _run(exploration.settle("qq-1", "settle-1", now=started.ends_at))
+    stored_settlement = _run(
+        database.get(
+            StateAddress("qq-1", "exploration_settlement", started.session_id)
+        )
+    )
+    assert stored_settlement is not None
+    assert "探险编号" not in stored_settlement.value
     assert len(settlement.users) == 1
     assert settlement.users[0].character_name == "林远"
     assert len(settlement.users[0].characters) == 1

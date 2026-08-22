@@ -11,7 +11,12 @@ from game.core.asset import AssetService
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
-from game.core.database import DatabaseService, StateMutation, TransactionCommand
+from game.core.database import (
+    DatabaseService,
+    StateAddress,
+    StateMutation,
+    TransactionCommand,
+)
 from game.core.forging import ForgingService
 from game.core.gathering import (
     GatheringConflictError,
@@ -137,6 +142,11 @@ def test_herb_gathering_unlocks_full_rounds_and_settles_inventory(
     )
 
     assert started.maximum_ends_at == started_at + timedelta(minutes=30)
+    session = _run(
+        database.get(StateAddress("qq-1", "gathering_session", started.session_id))
+    )
+    assert session is not None
+    assert "采集编号" not in session.value
     assert started.gathering_unit_count == 1
     before_round = _run(
         gathering.progress("采药", "qq-1", now=started_at + timedelta(seconds=299))
@@ -172,6 +182,11 @@ def test_herb_gathering_unlocks_full_rounds_and_settles_inventory(
         )
     )
     assert settlement.completed_rounds == 3
+    stored_settlement = _run(
+        database.get(StateAddress("qq-1", "gathering_settlement", started.session_id))
+    )
+    assert stored_settlement is not None
+    assert "采集编号" not in stored_settlement.value
     assert settlement.total_quantity == 3
     assert sum(item.quantity for item in settlement.users[0].items) == 3
     for item in settlement.users[0].items:

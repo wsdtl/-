@@ -289,7 +289,6 @@ class RetreatService:
             user_results[user_id] = result
 
         session_value = {
-            "闭关编号": session_id,
             "开始请求": command.request_id,
             "发起者": owner,
             "参与用户": list(participants),
@@ -431,7 +430,7 @@ class RetreatService:
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
         if existing is not None:
-            return self._settlement(existing.value, replayed=True)
+            return self._settlement(session_id, existing.value, replayed=True)
         if normalized_user_id != owner:
             raise RetreatLeaderRequiredError("本次闭关由领队统一带领出关")
         settled_at = _utc(now)
@@ -569,7 +568,6 @@ class RetreatService:
                 }
             )
         settlement_value = {
-            "闭关编号": session_id,
             "地点": session["地点"],
             "完成轮数": completed,
             "最多轮数": self.status().maximum_rounds,
@@ -596,7 +594,9 @@ class RetreatService:
             )
         except StateConflictError as exc:
             raise RetreatConflictError(str(exc)) from exc
-        return self._settlement(settlement_value, replayed=receipt.replayed)
+        return self._settlement(
+            session_id, settlement_value, replayed=receipt.replayed
+        )
 
     def _precompute_insights(
         self, source: random.Random, attempts_per_round: int = 1
@@ -672,14 +672,18 @@ class RetreatService:
         return owner, session_id, session.value
 
     def _settlement(
-        self, value: Mapping[str, object], *, replayed: bool
+        self,
+        session_id: str,
+        value: Mapping[str, object],
+        *,
+        replayed: bool,
     ) -> RetreatSettlement:
         users = tuple(
             _user_summary(_mapping(raw, "闭关结算.用户结果[]"))
             for raw in _sequence(value.get("用户结果"), "闭关结算.用户结果")
         )
         return RetreatSettlement(
-            _text(value.get("闭关编号"), "闭关结算.闭关编号"),
+            session_id,
             _text(value.get("地点"), "闭关结算.地点"),
             _nonnegative_int(value.get("完成轮数"), "闭关结算.完成轮数"),
             _positive_int(value.get("最多轮数"), "闭关结算.最多轮数"),

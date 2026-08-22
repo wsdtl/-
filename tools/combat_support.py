@@ -12,6 +12,7 @@ from game.core.combat import CombatService
 from game.core.data import JsonDataService
 from game.core.database import DatabaseService
 from game.core.formation import FormationService
+from game.core.innate_treasure import InnateTreasureService
 from game.core.location import LocationService
 from game.core.world import WorldService
 
@@ -30,7 +31,16 @@ def isolated_combat_service(data: JsonDataService) -> Iterator[CombatService]:
             location.initialize()
             asset = AssetService(data, database)
             asset.initialize()
-            formation = FormationService(data, database, asset, world, location)
+            innate_treasure = InnateTreasureService(data, database)
+            innate_treasure.initialize()
+            formation = FormationService(
+                data,
+                database,
+                asset,
+                world,
+                location,
+                innate_treasure,
+            )
             formation.initialize()
             combat = CombatService(data, formation)
             combat.initialize()

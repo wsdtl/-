@@ -95,6 +95,7 @@ def overview(result: CharacterOverviewResult):
             for category, equipped, total in result.cultivation_usage
         )
     )
+    builder.field("先天灵宝", f"{result.innate_treasure_usage[0]}/{result.innate_treasure_usage[1]}")
     for content in character.equipped_content:
         builder.field(
             f"{content.category}{content.slot}", f"{content.name} · {content.grade}"

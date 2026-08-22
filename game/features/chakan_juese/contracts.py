@@ -28,6 +28,7 @@ class CharacterOverviewResult:
     cultivation_usage: tuple[tuple[str, int, int], ...]
     injuries: tuple[tuple[str, int], ...]
     innate_treasure: InnateTreasure | None
+    innate_treasure_usage: tuple[int, int]
 
 
 __all__ = [

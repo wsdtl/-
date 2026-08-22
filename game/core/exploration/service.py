@@ -530,7 +530,6 @@ class ExplorationService:
             for user_id in participants
         }
         session_value = {
-            "探险编号": session_id,
             "开始请求": command.request_id,
             "发起者": owner,
             "参与用户": list(participants),
@@ -695,7 +694,7 @@ class ExplorationService:
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
         if existing is not None:
-            return self._settlement(existing.value, replayed=True)
+            return self._settlement(session_id, existing.value, replayed=True)
         if _user_id(user_id) != owner:
             raise ExplorationLeaderRequiredError("本次探险由领队统一结算")
         settled_at = _utc(now)
@@ -790,7 +789,6 @@ class ExplorationService:
             )
             summaries.append(materialize(value))
         settlement_value = {
-            "探险编号": session_id,
             "地点": session["地点"],
             "场数": session["场数"],
             "战败敌人": session["战败敌人"],
@@ -817,7 +815,9 @@ class ExplorationService:
             )
         except StateConflictError as exc:
             raise ExplorationConflictError(str(exc)) from exc
-        return self._settlement(settlement_value, replayed=receipt.replayed)
+        return self._settlement(
+            session_id, settlement_value, replayed=receipt.replayed
+        )
 
     async def latest_settlement(self, user_id: str) -> ExplorationSettlement | None:
         owner, session_id = await self._latest(user_id)
@@ -827,7 +827,7 @@ class ExplorationService:
         return (
             None
             if snapshot is None
-            else self._settlement(snapshot.value, replayed=True)
+            else self._settlement(session_id, snapshot.value, replayed=True)
         )
 
     async def _start_replay(
@@ -892,14 +892,18 @@ class ExplorationService:
         return tuple(snapshot.value for snapshot in snapshots)
 
     def _settlement(
-        self, value: Mapping[str, object], *, replayed: bool
+        self,
+        session_id: str,
+        value: Mapping[str, object],
+        *,
+        replayed: bool,
     ) -> ExplorationSettlement:
         users = tuple(
             _user_summary(_mapping(raw, "结算.用户结果[]"))
             for raw in _sequence(value.get("用户结果"), "结算.用户结果")
         )
         return ExplorationSettlement(
-            _text(value.get("探险编号"), "结算.探险编号"),
+            session_id,
             _text(value.get("地点"), "结算.地点"),
             _nonnegative_int(value.get("场数"), "结算.场数"),
             _nonnegative_int(value.get("战败敌人"), "结算.战败敌人"),

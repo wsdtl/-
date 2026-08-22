@@ -12,7 +12,7 @@ from game.core.asset import AssetService, CultivationAcquisition
 from game.core.character import CharacterService
 from game.core.companion import CompanionService
 from game.core.data import JsonDataService
-from game.core.database import DatabaseService, TransactionCommand
+from game.core.database import DatabaseService, StateAddress, TransactionCommand
 from game.core.forging import ForgingService
 from game.core.growth import GrowthService
 from game.core.injury import InjuryService
@@ -138,6 +138,11 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
     )
 
     assert started.maximum_ends_at == started_at + timedelta(minutes=30)
+    session = _run(
+        database.get(StateAddress("qq-1", "retreat_session", started.session_id))
+    )
+    assert session is not None
+    assert "闭关编号" not in session.value
     before_round = _run(
         retreat.progress("qq-1", now=started_at + timedelta(seconds=299))
     )
@@ -154,6 +159,11 @@ def test_retreat_unlocks_full_rounds_and_settles_early(tmp_path: Path) -> None:
         )
     )
     assert settlement.completed_rounds == 3
+    stored_settlement = _run(
+        database.get(StateAddress("qq-1", "retreat_settlement", started.session_id))
+    )
+    assert stored_settlement is not None
+    assert "闭关编号" not in stored_settlement.value
     assert settlement.users[0].characters[0].experience_gained == 516
     assert settlement.users[0].characters[0].health > 0
     assert settlement.users[0].characters[0].spirit > 0

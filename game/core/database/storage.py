@@ -35,6 +35,17 @@ from .contracts import (
     TransactionReceipt,
 )
 
+_SHARED_ENTITY_ID_FIELDS = {
+    "宗门": "编号",
+    "宗门同行": "宗门编号",
+    "宗门灵藏": "宗门编号",
+    "宗门万珍殿": "宗门编号",
+    "宗门灵脉": "宗门编号",
+    "宗门灵田": "宗门编号",
+    "托管计划": "托管编号",
+    "宗门战": "宗门战编号",
+}
+
 
 class SQLiteStateStore:
     """玩家状态、位置与幂等事务的 SQLite 仓储。"""
@@ -169,7 +180,7 @@ class SQLiteStateStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT value_json, version, updated_at
+                SELECT entity_name, value_json, version, updated_at
                 FROM shared_entity
                 WHERE entity_type = ? AND entity_id = ?
                 """,
@@ -177,15 +188,16 @@ class SQLiteStateStore:
             ).fetchone()
         if row is None:
             return None
-        value = json.loads(str(row[0]))
+        value = json.loads(str(row[1]))
         if not isinstance(value, dict):
             raise DatabaseError("共享实体 JSON 根值必须是对象")
+        value = _shared_entity_view(value, entity_type, entity_id, str(row[0]))
         return SharedEntityRecord(
             entity_type,
             entity_id,
             _freeze_json(value),
-            int(row[1]),
-            str(row[2]),
+            int(row[2]),
+            str(row[3]),
         )
 
     def get_shared_entity_by_name(
@@ -197,7 +209,7 @@ class SQLiteStateStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT entity_id, value_json, version, updated_at
+                SELECT entity_id, entity_name, value_json, version, updated_at
                 FROM shared_entity
                 WHERE entity_type = ? AND entity_name = ?
                 """,
@@ -205,15 +217,18 @@ class SQLiteStateStore:
             ).fetchone()
         if row is None:
             return None
-        value = json.loads(str(row[1]))
+        value = json.loads(str(row[2]))
         if not isinstance(value, dict):
             raise DatabaseError("共享实体 JSON 根值必须是对象")
+        value = _shared_entity_view(
+            value, entity_type, str(row[0]), str(row[1])
+        )
         return SharedEntityRecord(
             entity_type,
             str(row[0]),
             _freeze_json(value),
-            int(row[2]),
-            str(row[3]),
+            int(row[3]),
+            str(row[4]),
         )
 
     def list_shared_entities(
@@ -224,7 +239,7 @@ class SQLiteStateStore:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT entity_id, value_json, version, updated_at
+                SELECT entity_id, entity_name, value_json, version, updated_at
                 FROM shared_entity
                 WHERE entity_type = ?
                 ORDER BY entity_id
@@ -233,12 +248,15 @@ class SQLiteStateStore:
             ).fetchall()
         result = []
         for row in rows:
-            value = json.loads(str(row[1]))
+            value = json.loads(str(row[2]))
             if not isinstance(value, dict):
                 raise DatabaseError("共享实体 JSON 根值必须是对象")
+            value = _shared_entity_view(
+                value, entity_type, str(row[0]), str(row[1])
+            )
             result.append(
                 SharedEntityRecord(
-                    entity_type, str(row[0]), _freeze_json(value), int(row[2]), str(row[3])
+                    entity_type, str(row[0]), _freeze_json(value), int(row[3]), str(row[4])
                 )
             )
         return tuple(result)
@@ -901,7 +919,9 @@ def _apply_shared_entity_mutation(
     name = str(mutation.value.get("名称") or "").strip()
     if not name:
         raise ValueError("共享实体必须包含非空名称")
-    encoded = _encode(mutation.value)
+    encoded = _encode(
+        _shared_entity_storage(mutation.entity_type, mutation.entity_id, mutation.value)
+    )
     next_version = current_version + 1
     try:
         if row is None:
@@ -1288,7 +1308,18 @@ def _operation_json(
             "kind": "shared_entity",
             "entity_type": operation.entity_type,
             "entity_id": operation.entity_id,
-            "value": _json_value(operation.value),
+            "entity_name": (
+                None
+                if operation.value is None
+                else str(operation.value.get("名称") or "").strip()
+            ),
+            "value": (
+                None
+                if operation.value is None
+                else _shared_entity_storage(
+                    operation.entity_type, operation.entity_id, operation.value
+                )
+            ),
             "expected_version": operation.expected_version,
         }
     if isinstance(operation, SharedMemberMutation):
@@ -1322,7 +1353,14 @@ def _validate_xy(value: object) -> tuple[int, int]:
 
 def _json_value(value: object) -> object:
     if isinstance(value, Mapping):
-        return {str(key): _json_value(raw) for key, raw in value.items()}
+        result: dict[str, object] = {}
+        for key, raw in value.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError("JSON 对象键必须是非空字符串")
+            if key in result:
+                raise ValueError(f"JSON 对象存在重复键：{key}")
+            result[key] = _json_value(raw)
+        return result
     if isinstance(value, (list, tuple)):
         return [_json_value(item) for item in value]
     return value
@@ -1346,8 +1384,45 @@ def _encode(value: object) -> str:
             separators=(",", ":"),
             sort_keys=True,
         )
-    except (TypeError, ValueError) as exc:
+    except TypeError as exc:
         raise ValueError("状态数据必须是可序列化 JSON") from exc
+
+
+def _shared_entity_storage(
+    entity_type: str, entity_id: str, value: Mapping[str, object]
+) -> dict[str, object]:
+    """共享实体只保存可变正文；身份字段由实体列唯一承载。"""
+
+    identity_fields = {"名称"}
+    identity_field = _SHARED_ENTITY_ID_FIELDS.get(entity_type)
+    if identity_field is not None:
+        declared_id = str(value.get(identity_field) or "").strip()
+        if declared_id and declared_id != entity_id:
+            raise ValueError(f"共享实体{identity_field}必须与实体地址一致")
+        identity_fields.add(identity_field)
+    return _json_value(
+        {
+            key: raw
+            for key, raw in value.items()
+            if key not in identity_fields
+        }
+    )
+
+
+def _shared_entity_view(
+    value: Mapping[str, object],
+    entity_type: str,
+    entity_id: str,
+    entity_name: str,
+) -> dict[str, object]:
+    """读取时补回公共契约需要的身份字段，但不重复落盘。"""
+
+    result = dict(value)
+    result["名称"] = entity_name
+    identity_field = _SHARED_ENTITY_ID_FIELDS.get(entity_type)
+    if identity_field is not None:
+        result[identity_field] = entity_id
+    return result
 
 
 def _now() -> str:

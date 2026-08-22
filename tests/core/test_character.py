@@ -168,6 +168,7 @@ def test_character_overview_combines_owned_service_results(
         ("真意", 0, 6),
         ("气机", 0, 6),
     )
+    assert result.innate_treasure_usage == (0, 1)
     assert character.equipped_content == ()
     assert character.weapon.stage == "凡器"
     assert character.weapon.attack == 10
@@ -203,6 +204,7 @@ def test_character_overview_combines_owned_service_results(
     assert "灵动" in content
     assert "溪隐台" in content
     assert "功法: 0/6" in content
+    assert "先天灵宝: 0/1" in content
     assert "无名器胚" in content
     assert "攻击: 10" in content
     assert "宗门贡献: 0" in content

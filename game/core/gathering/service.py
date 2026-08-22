@@ -236,7 +236,6 @@ class GatheringService:
 
         place_name = location.location_name or f"{location.region}·{location.terrain}"
         session_value = {
-            "采集编号": session_id,
             "玩法": mode.kind,
             "开始请求": request_id,
             "发起者": owner,
@@ -372,7 +371,7 @@ class GatheringService:
             StateAddress(owner, SETTLEMENT_STATE, session_id)
         )
         if existing is not None:
-            return self._settlement(existing.value, replayed=True)
+            return self._settlement(session_id, existing.value, replayed=True)
         if normalized_user_id != owner:
             raise GatheringLeaderRequiredError(f"本次{mode.kind}由领队统一结束")
         settled_at = _utc(now)
@@ -420,7 +419,6 @@ class GatheringService:
                 }
             )
         settlement_value = {
-            "采集编号": session_id,
             "玩法": mode.kind,
             "地点": session["地点"],
             "地形": session["地形"],
@@ -445,7 +443,9 @@ class GatheringService:
             )
         except StateConflictError as exc:
             raise GatheringConflictError(str(exc)) from exc
-        return self._settlement(settlement_value, replayed=receipt.replayed)
+        return self._settlement(
+            session_id, settlement_value, replayed=receipt.replayed
+        )
 
     async def _assisting_companion_name(self, user_id: str) -> str:
         active = await self._companion.active(user_id)
@@ -562,7 +562,11 @@ class GatheringService:
         return owner, session_id, session.value
 
     def _settlement(
-        self, value: Mapping[str, object], *, replayed: bool
+        self,
+        session_id: str,
+        value: Mapping[str, object],
+        *,
+        replayed: bool,
     ) -> GatheringSettlement:
         users = tuple(
             _user_summary(_mapping(raw, "采集结算.用户结果[]"))
@@ -570,7 +574,7 @@ class GatheringService:
         )
         return GatheringSettlement(
             _text(value.get("玩法"), "采集结算.玩法"),
-            _text(value.get("采集编号"), "采集结算.采集编号"),
+            session_id,
             _text(value.get("地点"), "采集结算.地点"),
             _text(value.get("地形"), "采集结算.地形"),
             _nonnegative_int(value.get("完成轮数"), "采集结算.完成轮数"),
